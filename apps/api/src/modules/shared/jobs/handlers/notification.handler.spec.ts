@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationJobHandler } from './notification.handler';
 import { NotificationService } from '../../notification/notification.service';
+import { PrismaService } from '@common/prisma/prisma.service';
 import { Job } from '../job-handler.interface';
 
 describe('NotificationJobHandler', () => {
@@ -9,6 +10,12 @@ describe('NotificationJobHandler', () => {
   const mockNotificationService = {
     send: jest.fn().mockResolvedValue(undefined),
     buildFromEvent: jest.fn(),
+  };
+
+  const mockPrisma = {
+    user: {
+      findFirst: jest.fn(),
+    },
   };
 
   const baseJob: Job = {
@@ -29,6 +36,7 @@ describe('NotificationJobHandler', () => {
       providers: [
         NotificationJobHandler,
         { provide: NotificationService, useValue: mockNotificationService },
+        { provide: PrismaService, useValue: mockPrisma },
       ],
     }).compile();
 
@@ -75,5 +83,43 @@ describe('NotificationJobHandler', () => {
     await handler.handle(job);
 
     expect(mockNotificationService.send).not.toHaveBeenCalled();
+  });
+
+  it('resolves userId via employeeId (FK-safe) instead of writing the Employee UUID', async () => {
+    const job = {
+      ...baseJob,
+      name: 'expense.claim.approved',
+      payload: { ...baseJob.payload, employeeId: 'emp-uuid-123', claimId: 'c1', amount: 500, category: 'TRAVEL' },
+    };
+    mockNotificationService.buildFromEvent.mockReturnValue({ title: 'Expense Claim Approved', body: 'Claim approved.' });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-resolved-1' });
+
+    await handler.handle(job);
+
+    expect(mockPrisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { employeeId: 'emp-uuid-123' } }),
+    );
+    expect(mockNotificationService.send).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-resolved-1', employeeId: 'emp-uuid-123' }),
+    );
+    // Must NOT write the Employee UUID straight into userId (the old FK-violating behavior)
+    const sent = mockNotificationService.send.mock.calls[0][0];
+    expect(sent.userId).not.toBe('emp-uuid-123');
+  });
+
+  it('skips in-app Notification when no user resolves but still sends ESS payload', async () => {
+    const job = {
+      ...baseJob,
+      name: 'attendance.period.closed',
+      payload: { ...baseJob.payload, employeeId: 'emp-orphan' },
+    };
+    mockNotificationService.buildFromEvent.mockReturnValue({ title: 'Attendance Period Closed', body: 'Period closed.' });
+    mockPrisma.user.findFirst.mockResolvedValue(null);
+
+    await handler.handle(job);
+
+    expect(mockNotificationService.send).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: undefined, employeeId: 'emp-orphan' }),
+    );
   });
 });

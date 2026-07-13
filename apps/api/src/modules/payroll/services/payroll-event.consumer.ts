@@ -6,6 +6,7 @@ import { DomainEventType } from '@modules/shared/events/event-registry';
 import { PayrollAdjustmentService } from './payroll-adjustment.service';
 
 const HANDLED_EVENTS = new Set<string>([
+  DomainEventType.ATTENDANCE_PERIOD_CLOSED,
   DomainEventType.EXPENSE_CLAIM_APPROVED,
   DomainEventType.LOAN_INSTALLMENT_DUE,
   DomainEventType.EMPLOYEE_BENEFIT_CHANGED,
@@ -54,6 +55,9 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
           break;
         case DomainEventType.PERFORMANCE_SCORE_FINALIZED:
           await this.handlePerformanceFinalized(tenantId, payload);
+          break;
+        case DomainEventType.ATTENDANCE_PERIOD_CLOSED:
+          await this.handleAttendancePeriodClosed(tenantId, payload);
           break;
       }
     } catch (error: any) {
@@ -148,6 +152,61 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
         amount: bonus,
         description: `Performance bonus (rating ${rating})`,
       });
+    }
+  }
+
+  /**
+   * FR-11/BR-06: fold attendance period results into payroll.
+   * Overtime minutes become an EARNING; late arrivals become a DEDUCTION.
+   * Hourly rate is derived from the active employment grade's base salary
+   * (same base-salary derivation used by the payroll run), so adjustments
+   * are consistent with the payslip calculation.
+   */
+  private async handleAttendancePeriodClosed(tenantId: string, payload: any) {
+    const employeeId = payload.employeeId;
+    const period = payload.period;
+    if (!employeeId) return;
+
+    const employment = await this.prisma.employment.findFirst({
+      where: { employeeId, isActive: true },
+      include: { grade: true },
+      orderBy: { startDate: 'desc' },
+    });
+
+    const baseSalary = Number(employment?.grade?.level || 0) * 1_000_000 || 0;
+    const hourlyRate = baseSalary > 0 ? baseSalary / 173 : 0;
+    const referenceId = `${period}:${employeeId}`;
+
+    const overtimeMinutes = Number(payload.overtimeMinutes || 0);
+    if (overtimeMinutes > 0 && hourlyRate > 0) {
+      const overtimeAmount = Math.round((overtimeMinutes / 60) * hourlyRate);
+      if (overtimeAmount > 0) {
+        await this.adjustments.create({
+          tenantId,
+          employeeId,
+          sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+          referenceId,
+          type: 'EARNING',
+          amount: overtimeAmount,
+          description: `Overtime (${overtimeMinutes} min) — period ${period}`,
+        });
+      }
+    }
+
+    const lateCount = Number(payload.lateCount || 0);
+    if (lateCount > 0 && hourlyRate > 0) {
+      const lateAmount = Math.round(lateCount * hourlyRate);
+      if (lateAmount > 0) {
+        await this.adjustments.create({
+          tenantId,
+          employeeId,
+          sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+          referenceId,
+          type: 'DEDUCTION',
+          amount: lateAmount,
+          description: `Late arrival penalty (${lateCount}x) — period ${period}`,
+        });
+      }
     }
   }
 }

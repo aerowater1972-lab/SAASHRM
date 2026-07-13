@@ -102,4 +102,31 @@ describe('PayrollEventConsumer', () => {
       expect.objectContaining({ type: 'EARNING', amount: 800_000 }),
     );
   });
+
+  it('creates EARNING (overtime) + DEDUCTION (late) for attendance.period.closed', async () => {
+    makeConsumer();
+    await consumer.handle({
+      name: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+      payload: { tenantId: 't1', employeeId: 'e1', period: '2026-06', overtimeMinutes: 120, lateCount: 3 },
+    } as any);
+
+    // base = 4_000_000; hourlyRate = 4_000_000 / 173 ≈ 23121.387
+    // overtime(120m) = 2h * 23121.387 = 46243; late(3x) = 3 * 23121.387 = 69364
+    expect(adjustments.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'EARNING',
+        amount: 46243,
+        sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+        referenceId: '2026-06:e1',
+      }),
+    );
+    expect(adjustments.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'DEDUCTION',
+        amount: 69364,
+        sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+        referenceId: '2026-06:e1',
+      }),
+    );
+  });
 });

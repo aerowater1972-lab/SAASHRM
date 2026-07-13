@@ -4,7 +4,7 @@ import { DomainEventType } from '../events/event-registry';
 
 export interface NotificationPayload {
   tenantId: string;
-  userId: string;
+  userId?: string;
   employeeId?: string;
   channel?: 'IN_APP' | 'EMAIL' | 'PUSH' | 'SMS';
   templateKey: string;
@@ -22,17 +22,24 @@ export class NotificationService {
   async send(data: NotificationPayload): Promise<void> {
     const { tenantId, userId, employeeId, channel, templateKey, title, body, payload } = data;
 
-    await this.prisma.notification.create({
-      data: {
-        tenantId,
-        userId,
-        channel: channel ?? 'IN_APP',
-        templateKey,
-        title,
-        body,
-        payload: payload ?? {},
-      },
-    });
+    // Only create the in-app Notification row when a real User id is known.
+    // Some events (e.g. expense.claim.approved, attendance.period.closed) carry
+    // an employeeId but no userId; resolving to a User is required because
+    // Notification.userId is a FK to User (not Employee). When unresolvable we
+    // still surface the message as an ESS notification scoped to the employee.
+    if (userId) {
+      await this.prisma.notification.create({
+        data: {
+          tenantId,
+          userId,
+          channel: channel ?? 'IN_APP',
+          templateKey,
+          title,
+          body,
+          payload: payload ?? {},
+        },
+      });
+    }
 
     if (employeeId) {
       await this.prisma.essNotification.create({
