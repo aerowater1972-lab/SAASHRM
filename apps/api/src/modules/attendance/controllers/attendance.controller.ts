@@ -102,4 +102,26 @@ export class AttendanceController {
   ) {
     return this.attendanceService.closePeriod(tenantId, id, employeeId);
   }
+
+  @Post('corrections/:id/approve')
+  @Permissions('attendance:correction:approve')
+  @ApiOperation({ summary: 'Approve an attendance correction (FR-06)' })
+  approveCorrection(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') approverId: string,
+  ) {
+    return this.attendanceService.approveCorrection(tenantId, id, approverId, true);
+  }
+
+  @Post('corrections/:id/reject')
+  @Permissions('attendance:correction:approve')
+  @ApiOperation({ summary: 'Reject an attendance correction (FR-06)' })
+  rejectCorrection(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') approverId: string,
+  ) {
+    return this.attendanceService.approveCorrection(tenantId, id, approverId, false);
+  }
 }

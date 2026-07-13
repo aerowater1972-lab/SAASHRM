@@ -15,6 +15,7 @@ import { AttendanceCorrectionDto } from '../dto/attendance-correction.dto';
 import {
   AttendanceStatus,
   PayrollPeriodStatus,
+  RequestStatus,
   Prisma,
   AttendanceRecord,
 } from '@prisma/client';
@@ -45,7 +46,7 @@ export class AttendanceService {
       throw new BadRequestException('Already clocked in today');
     }
 
-    await this.validateGeofence(tenantId, dto.latitude, dto.longitude);
+    await this.validateGeofence(tenantId, employeeId, dto.method, dto.latitude, dto.longitude);
 
     const shift = await this.findAssignedShift(tenantId, employeeId, today);
 
@@ -102,7 +103,7 @@ export class AttendanceService {
       throw new BadRequestException('Already clocked out today');
     }
 
-    await this.validateGeofence(tenantId, dto.latitude, dto.longitude);
+    await this.validateGeofence(tenantId, employeeId, dto.method, dto.latitude, dto.longitude);
 
     const clockOutTime = new Date();
     const shift = record.shiftId
@@ -241,17 +242,66 @@ export class AttendanceService {
     await this.assertPayrollPeriodOpen(tenantId, record.date);
 
     if (record.employeeId !== employeeId) {
-      throw new ForbiddenException('You can only correct your own records');
+      throw new ForbiddenException('You can only request corrections for your own records');
     }
 
-    return this.prisma.attendanceRecord.update({
-      where: { id },
+    return this.prisma.attendanceCorrection.create({
       data: {
-        clockIn: dto.clockIn ? new Date(dto.clockIn) : undefined,
-        clockOut: dto.clockOut ? new Date(dto.clockOut) : undefined,
-        notes: dto.notes,
-        isApproved: false,
+        attendanceId: record.id,
+        requestedBy: employeeId,
+        reason: dto.reason,
+        proposedClockIn: dto.clockIn ? new Date(dto.clockIn) : null,
+        proposedClockOut: dto.clockOut ? new Date(dto.clockOut) : null,
+        status: RequestStatus.PENDING,
       },
+    });
+  }
+
+  async approveCorrection(
+    tenantId: string,
+    correctionId: string,
+    approverId: string,
+    approve: boolean,
+  ) {
+    const correction = await this.prisma.attendanceCorrection.findUnique({
+      where: { id: correctionId },
+      include: { attendance: true },
+    });
+
+    if (!correction) {
+      throw new NotFoundException('Attendance correction not found');
+    }
+
+    if (correction.attendance.tenantId !== tenantId) {
+      throw new ForbiddenException('Correction does not belong to this tenant');
+    }
+
+    if (correction.status !== RequestStatus.PENDING) {
+      throw new BadRequestException(`Correction is already ${correction.status}`);
+    }
+
+    if (!approve) {
+      return this.prisma.attendanceCorrection.update({
+        where: { id: correctionId },
+        data: { status: RequestStatus.REJECTED, approvedBy: approverId },
+      });
+    }
+
+    await this.assertPayrollPeriodOpen(tenantId, correction.attendance.date);
+
+    await this.prisma.attendanceRecord.update({
+      where: { id: correction.attendanceId },
+      data: {
+        clockIn: correction.proposedClockIn ?? undefined,
+        clockOut: correction.proposedClockOut ?? undefined,
+        isApproved: true,
+        approvedBy: approverId,
+      },
+    });
+
+    return this.prisma.attendanceCorrection.update({
+      where: { id: correctionId },
+      data: { status: RequestStatus.APPROVED, approvedBy: approverId },
     });
   }
 
@@ -395,20 +445,42 @@ export class AttendanceService {
     return created;
   }
 
-  private async validateGeofence(tenantId: string, lat?: number, lng?: number) {
+  private async validateGeofence(
+    tenantId: string,
+    employeeId: string,
+    method: ClockInMethod,
+    lat?: number,
+    lng?: number,
+  ) {
+    // Geofencing applies to GPS-based attendance (BR-01); QR/Face/Fingerprint
+    // carry their own validation, and MANUAL bypasses location checks.
+    if (method !== ClockInMethod.GPS) return;
     if (!lat || !lng) return;
 
-    const config = await this.prisma.tenantEntity.findFirst({
-      where: { tenantId },
-      select: { id: true },
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { workLocationId: true },
     });
 
-    const hasOfficeLocation = false;
-    if (hasOfficeLocation) {
-      const distance = this.haversineDistance(lat, lng, -6.2088, 106.8456);
-      if (distance > this.geofenceRadius) {
-        throw new BadRequestException(`Location is outside the allowed geofence (${this.geofenceRadius}m radius)`);
-      }
+    if (!employee?.workLocationId) return;
+
+    const location = await this.prisma.workLocation.findUnique({
+      where: { id: employee.workLocationId },
+    });
+
+    if (!location || location.isFlexible) return;
+
+    const distance = this.haversineDistance(
+      lat,
+      lng,
+      Number(location.latitude),
+      Number(location.longitude),
+    );
+
+    if (distance > location.radiusMeters) {
+      throw new BadRequestException(
+        `Location is outside the allowed geofence (${location.radiusMeters}m radius from ${location.name})`,
+      );
     }
   }
 

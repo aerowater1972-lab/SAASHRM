@@ -49,7 +49,7 @@ async function main() {
     'admin:tenant:create', 'admin:tenant:read', 'admin:tenant:update',
     'admin:user:assign', 'admin:user:create', 'admin:user:read', 'admin:user:update', 'admin:user:reset-password',
     'admin:workflow:create', 'admin:workflow:read', 'admin:workflow:update',
-    'attendance:create', 'attendance:period:close',
+    'attendance:create', 'attendance:period:close', 'attendance:correction:approve',
     'employee:movement:create', 'employee:movement:read', 'employee:movement:approve',
     'employee:medical:read', 'employee:medical:update',
     'expense-claims:approve', 'expense-claims:pay',
@@ -184,12 +184,29 @@ async function main() {
 
   // ── 5. EMPLOYEES ──
   console.log('5/9  Employees...');
+
+  // Default HQ work location for geofence (BR-01)
+  const workLocation = await prisma.workLocation.upsert({
+    where: { id: 'wl-hq' },
+    update: {},
+    create: {
+      id: 'wl-hq',
+      tenantId: entityId,
+      name: 'Flexy HQ (Jakarta)',
+      latitude: -6.2088,
+      longitude: 106.8456,
+      radiusMeters: 200,
+      isFlexible: false,
+    },
+  });
+  const workLocationId = workLocation.id;
+
   const empData = [
     { empId: 'EMP-001', fullName: 'Budi Santoso',    email: 'budi@flexy.local',   dept: 'DEPT-HR',  pos: 'POS-HR-MGR',  grade: 'GRD-4', type: 'PERMANENT' },
     { empId: 'EMP-002', fullName: 'Siti Rahmawati',  email: 'siti@flexy.local',   dept: 'DEPT-HR',  pos: 'POS-HR-STF',  grade: 'GRD-1', type: 'PERMANENT' },
     { empId: 'EMP-003', fullName: 'Ahmad Hidayat',   email: 'ahmad@flexy.local',  dept: 'DEPT-FIN', pos: 'POS-FIN-MGR', grade: 'GRD-4', type: 'PERMANENT' },
-    { empId: 'EMP-004', fullName: 'Dewi Lestari',    email: 'dewi@flexy.local',   dept: 'DEPT-IT',  pos: 'POS-IT-DEV',  grade: 'GRD-2', type: 'CONTRACT' },
-    { empId: 'EMP-005', fullName: 'Rudi Hermawan',   email: 'rudi@flexy.local',   dept: 'DEPT-MKT', pos: 'POS-MKT-SPV', grade: 'GRD-3', type: 'PERMANENT' },
+    { empId: 'EMP-004', fullName: 'Dewi Lestari',    email: 'dewi@flexy.local',  dept: 'DEPT-IT',  pos: 'POS-IT-DEV',  grade: 'GRD-2', type: 'CONTRACT' },
+    { empId: 'EMP-005', fullName: 'Rudi Hermawan',   email: 'rudi@flexy.local',  dept: 'DEPT-MKT', pos: 'POS-MKT-SPV', grade: 'GRD-3', type: 'PERMANENT' },
   ];
 
   for (const e of empData) {
@@ -203,6 +220,7 @@ async function main() {
         email: e.email,
         status: 'ACTIVE',
         startDate: new Date('2024-01-01'),
+        workLocationId,
       },
     });
 
@@ -260,6 +278,7 @@ async function main() {
       email: 'admin@flexy.local',
       status: 'ACTIVE',
       startDate: new Date('2024-01-01'),
+      workLocationId,
     },
   });
   const adminUser = await prisma.user.findUnique({ where: { id: 'user-1' } });

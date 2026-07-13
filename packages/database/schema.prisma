@@ -54,6 +54,7 @@ model TenantEntity {
   employees Employee[]
   departments Department[]
   holidayCalendars HolidayCalendar[]
+  workLocations WorkLocation[]
 
   @@unique([tenantId, code])
 }
@@ -356,10 +357,13 @@ model Employee {
   salaryComponents               SalaryComponent[]
   payrollRunItems                PayrollRunItem[]
   jobRequisitionsApproved        JobRequisition[] @relation("requisition_approver")
+  workLocationId                 String?
+  workLocation                   WorkLocation?    @relation(fields: [workLocationId], references: [id])
 
   @@unique([tenantId, employeeId])
   @@unique([tenantId, email])
   @@index([tenantId, status])
+  @@index([workLocationId])
 }
 
 model Employment {
@@ -635,6 +639,8 @@ model AttendanceCorrection {
   attendanceId  String
   requestedBy   String
   reason        String
+  proposedClockIn  DateTime?
+  proposedClockOut DateTime?
   status        RequestStatus @default(PENDING)
   approvedBy    String?
   createdAt     DateTime     @default(now())
@@ -644,6 +650,22 @@ model AttendanceCorrection {
   approver   Employee?        @relation("correction_approver", fields: [approvedBy], references: [id])
 
   @@index([attendanceId])
+}
+
+model WorkLocation {
+  id           String       @id @default(uuid())
+  tenantId     String
+  name         String
+  latitude     Decimal      @db.Decimal(10, 8)
+  longitude    Decimal      @db.Decimal(11, 8)
+  radiusMeters Int          @default(100)
+  isFlexible   Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  employees    Employee[]
+  tenant       TenantEntity @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model OvertimeRequest {

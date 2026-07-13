@@ -39,8 +39,17 @@ describe('AttendanceService', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
     },
+    attendanceCorrection: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
     employee: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    workLocation: {
+      findUnique: jest.fn(),
     },
   };
 
@@ -101,6 +110,81 @@ describe('AttendanceService', () => {
 
       await expect(
         service.clockIn('default', 'emp-1', { method: 'GPS' } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('clockIn geofence (BR-01)', () => {
+    const wl = {
+      id: 'wl-1',
+      name: 'HQ',
+      latitude: -6.2088,
+      longitude: 106.8456,
+      radiusMeters: 200,
+      isFlexible: false,
+    };
+
+    beforeEach(() => {
+      mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+      mockPrisma.rosterEntry.findUnique.mockResolvedValue(null);
+      mockPrisma.tenantEntity.findFirst.mockResolvedValue({ id: 'ent-1' });
+      mockPrisma.employee.findUnique.mockResolvedValue({ workLocationId: 'wl-1' });
+      mockPrisma.workLocation.findUnique.mockResolvedValue(wl);
+    });
+
+    it('should reject GPS clock-in outside the geofence', async () => {
+      const dto = { method: 'GPS' as any, latitude: 1.3521, longitude: 103.8198 };
+      await expect(service.clockIn('default', 'emp-1', dto as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should accept GPS clock-in inside the geofence', async () => {
+      mockPrisma.attendanceRecord.upsert.mockResolvedValue({ ...baseRecord });
+      const dto = { method: 'GPS' as any, latitude: -6.2088, longitude: 106.8456 };
+      const result = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result).toBeDefined();
+    });
+
+    it('should accept non-GPS methods without geofence checks', async () => {
+      mockPrisma.attendanceRecord.upsert.mockResolvedValue({ ...baseRecord });
+      const dto = { method: 'QR' as any, latitude: 1.3521, longitude: 103.8198 };
+      const result = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('approveCorrection (FR-06)', () => {
+    const correction = {
+      id: 'corr-1',
+      status: 'PENDING' as any,
+      attendance: { tenantId: 'default', date: new Date() },
+    };
+
+    it('should apply the correction and mark APPROVED', async () => {
+      mockPrisma.attendanceCorrection.findUnique.mockResolvedValue(correction);
+      mockPrisma.payrollPeriod.findFirst.mockResolvedValue(null);
+      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, isApproved: true });
+      mockPrisma.attendanceCorrection.update.mockResolvedValue({ ...correction, status: 'APPROVED' });
+
+      const result = await service.approveCorrection('default', 'corr-1', 'approver-1', true);
+      expect(result.status).toBe('APPROVED');
+      expect(mockPrisma.attendanceRecord.update).toHaveBeenCalled();
+    });
+
+    it('should reject and mark REJECTED without mutating the record', async () => {
+      mockPrisma.attendanceCorrection.findUnique.mockResolvedValue(correction);
+      mockPrisma.attendanceCorrection.update.mockResolvedValue({ ...correction, status: 'REJECTED' });
+
+      const result = await service.approveCorrection('default', 'corr-1', 'approver-1', false);
+      expect(result.status).toBe('REJECTED');
+      expect(mockPrisma.attendanceRecord.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw if the correction is not PENDING', async () => {
+      mockPrisma.attendanceCorrection.findUnique.mockResolvedValue({ ...correction, status: 'APPROVED' });
+      await expect(
+        service.approveCorrection('default', 'corr-1', 'approver-1', true),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -169,23 +253,28 @@ describe('AttendanceService', () => {
     });
   });
 
-  describe('correct', () => {
+  describe('correct (FR-06)', () => {
     it('should throw ForbiddenException for another employees record', async () => {
       mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ ...baseRecord, employeeId: 'other-emp' });
       mockPrisma.payrollPeriod.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.correct('default', 'att-1', 'emp-1', { notes: 'fix' } as any),
+        service.correct('default', 'att-1', 'emp-1', { reason: 'fix' } as any),
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should update record for own correction', async () => {
+    it('should create a PENDING correction request for own record', async () => {
       mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ ...baseRecord, employeeId: 'emp-1' });
       mockPrisma.payrollPeriod.findFirst.mockResolvedValue(null);
-      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, notes: 'fix' });
+      mockPrisma.attendanceCorrection.create.mockResolvedValue({
+        id: 'corr-1',
+        status: 'PENDING',
+        reason: 'fix',
+      });
 
-      const result = await service.correct('default', 'att-1', 'emp-1', { notes: 'fix' } as any);
-      expect(result.notes).toBe('fix');
+      const result = await service.correct('default', 'att-1', 'emp-1', { reason: 'fix' } as any);
+      expect(result.status).toBe('PENDING');
+      expect(mockPrisma.attendanceCorrection.create).toHaveBeenCalled();
     });
   });
 
