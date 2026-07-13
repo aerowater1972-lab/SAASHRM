@@ -326,6 +326,7 @@ model Employee {
   user         User?
   employments  Employment[]
   documents    EmployeeDocument[]
+  onboardingTasks OnboardingTask[]
   attendanceRecords AttendanceRecord[]
   rosterEntries     RosterEntry[]
   overtimeRequests  OvertimeRequest[]
@@ -1108,6 +1109,42 @@ model OnboardingDocument {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
+}
+
+// Onboarding checklist tasks span cross-functional teams (HR, IT, Finance).
+// BR-06: a task may only be marked complete by its assigned owner team/employee,
+// not unilaterally by HR Admin.
+model OnboardingTask {
+  id          String   @id @default(uuid())
+  tenantId    String
+  employeeId  String // the new hire the task belongs to
+  applicationId String?
+  title       String
+  description String?
+  ownerTeam   OnboardingOwnerTeam // HR, IT, FINANCE
+  ownerEmployeeId String? // specific assignee (Employee id); if null, any member of ownerTeam may complete
+  status      OnboardingTaskStatus @default(PENDING)
+  completedBy String? // employeeId of the completer (must belong to ownerTeam)
+  completedAt DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+}
+
+enum OnboardingOwnerTeam {
+  HR
+  IT
+  FINANCE
+}
+
+enum OnboardingTaskStatus {
+  PENDING
+  DONE
 }
 
 // =======================================================================

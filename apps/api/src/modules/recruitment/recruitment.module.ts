@@ -9,7 +9,9 @@ import { JobPostingService } from './services/job-posting.service';
 import { CandidateService } from './services/candidate.service';
 import { ApplicationService } from './services/application.service';
 import { OnboardingDocumentController } from './controllers/onboarding-document.controller';
+import { OnboardingTaskController } from './controllers/onboarding-task.controller';
 import { OnboardingService } from './services/onboarding.service';
+import { OnboardingTaskService } from './services/onboarding-task.service';
 
 @Module({
   imports: [EmployeeModule],
@@ -20,18 +22,21 @@ import { OnboardingService } from './services/onboarding.service';
     RequisitionController,
     InterviewScorecardController,
     OnboardingDocumentController,
+    OnboardingTaskController,
   ],
   providers: [
     JobPostingService,
     CandidateService,
     ApplicationService,
     OnboardingService,
+    OnboardingTaskService,
   ],
   exports: [
     JobPostingService,
     CandidateService,
     ApplicationService,
     OnboardingService,
+    OnboardingTaskService,
   ],
 })
 export class RecruitmentModule {}

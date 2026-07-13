@@ -4,6 +4,7 @@ import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
+import { OnboardingTaskService } from './onboarding-task.service';
 import { ConvertEmployeeDto } from '../dto/convert-employee.dto';
 import { ApplicationStatus, OfferStatus, EmployeeStatus } from '@prisma/client';
 
@@ -14,6 +15,7 @@ export class OnboardingService {
     private readonly eventBus: EventBusService,
     private readonly employeeService: EmployeeService,
     private readonly workflow: WorkflowEngineService,
+    private readonly onboardingTasks: OnboardingTaskService,
   ) {}
 
   async convertToEmployee(
@@ -91,6 +93,10 @@ export class OnboardingService {
         data: { status: 'HIRED' as any },
       }),
     ]);
+
+    // FR-12: auto-generate the default cross-team onboarding checklist for the
+    // newly converted employee (completed per-team per BR-06).
+    await this.onboardingTasks.bulkCreateForEmployee(tenantId, empId, applicationId);
 
     await this.eventBus.publishTyped(DomainEventType.CANDIDATE_CONVERTED, {
       applicationId,
