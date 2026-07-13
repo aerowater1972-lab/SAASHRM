@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { AttendanceStatus } from '@prisma/client';
 
 describe('AttendanceService', () => {
@@ -29,14 +30,26 @@ describe('AttendanceService', () => {
     },
     payrollPeriod: {
       findFirst: jest.fn(),
+      update: jest.fn(),
     },
     tenantEntity: {
       findFirst: jest.fn(),
+    },
+    overtimeRequest: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    employee: {
+      findMany: jest.fn(),
     },
   };
 
   const mockConfig = {
     get: jest.fn((key: string, defaultValue?: any) => defaultValue),
+  };
+
+  const mockEventBus = {
+    publish: jest.fn(),
   };
 
   const baseRecord = {
@@ -57,6 +70,7 @@ describe('AttendanceService', () => {
         AttendanceService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfig },
+        { provide: EventBusService, useValue: mockEventBus },
       ],
     }).compile();
 
@@ -196,6 +210,97 @@ describe('AttendanceService', () => {
 
       expect(result).toHaveLength(1);
       expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('clockOut overtime auto-generation (FR-11/BR-06)', () => {
+    it('should create a pending OvertimeRequest when overtime exceeds the threshold', async () => {
+      const shift = {
+        id: 'shift-1',
+        startTime: '08:00',
+        endTime: '17:00',
+        overtimeBeforeMinutes: 0,
+        overtimeAfterMinutes: 0,
+      };
+      const clockIn = new Date();
+      clockIn.setHours(8, 0, 0, 0);
+      const clockOut = new Date();
+      clockOut.setHours(19, 0, 0, 0);
+
+      mockPrisma.attendanceRecord.findUnique.mockResolvedValue({
+        ...baseRecord,
+        clockIn,
+        clockOut: null,
+        shiftId: 'shift-1',
+      });
+      mockPrisma.shift.findUnique.mockResolvedValue(shift);
+      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, clockOut });
+      mockPrisma.overtimeRequest.findFirst.mockResolvedValue(null);
+      mockPrisma.overtimeRequest.create.mockResolvedValue({ id: 'ot-1' });
+
+      await service.clockOut('default', 'emp-1', { method: 'GPS' } as any);
+
+      expect(mockPrisma.overtimeRequest.create).toHaveBeenCalledTimes(1);
+      const created = mockPrisma.overtimeRequest.create.mock.calls[0][0].data;
+      expect(created.totalMinutes).toBeGreaterThanOrEqual(30);
+      expect(created.reason).toContain('Auto-generated');
+    });
+
+    it('should not create an OvertimeRequest when none is accrued', async () => {
+      mockPrisma.attendanceRecord.findUnique.mockResolvedValue({
+        ...baseRecord,
+        clockIn: new Date(),
+        clockOut: null,
+        shiftId: null,
+      });
+      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, clockOut: new Date() });
+
+      await service.clockOut('default', 'emp-1', { method: 'GPS' } as any);
+
+      expect(mockPrisma.overtimeRequest.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('closePeriod (attendance.period.closed event)', () => {
+    const openPeriod = {
+      id: 'period-1',
+      tenantId: 'default',
+      status: 'OPEN' as any,
+      startDate: new Date('2026-01-01'),
+      endDate: new Date('2026-01-31'),
+    };
+
+    it('should mark the period CLOSED and publish attendance.period.closed', async () => {
+      mockPrisma.payrollPeriod.findFirst.mockResolvedValue(openPeriod);
+      mockPrisma.employee.findMany.mockResolvedValue([{ id: 'emp-1' }, { id: 'emp-2' }]);
+      mockPrisma.attendanceRecord.findMany.mockResolvedValue([]);
+      mockPrisma.payrollPeriod.update.mockResolvedValue({ ...openPeriod, status: 'CLOSED' });
+
+      const result = await service.closePeriod('default', 'period-1', 'closer-1');
+
+      expect(result.period.status).toBe('CLOSED');
+      expect(result.summary).toHaveLength(2);
+      expect(mockEventBus.publish).toHaveBeenCalledTimes(2);
+      const event = mockEventBus.publish.mock.calls[0][0];
+      expect(event.name).toBe('attendance.period.closed');
+      expect(event.payload.employeeId).toBe('emp-1');
+      expect(event.payload.workedDays).toBeDefined();
+    });
+
+    it('should throw BadRequestException if the period is not OPEN', async () => {
+      mockPrisma.payrollPeriod.findFirst.mockResolvedValue({ ...openPeriod, status: 'CLOSED' });
+
+      await expect(service.closePeriod('default', 'period-1', 'closer-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException if the period does not exist', async () => {
+      mockPrisma.payrollPeriod.findFirst.mockResolvedValue(null);
+
+      await expect(service.closePeriod('default', 'missing', 'closer-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

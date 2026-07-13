@@ -18,6 +18,7 @@ import { LeaveService } from '../services/leave.service';
 import { CreateLeaveTypeDto } from '../dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from '../dto/create-leave-request.dto';
 import { LeaveFilterDto } from '../dto/leave-filter.dto';
+import { ApplyCarryForwardDto } from '../dto/apply-carry-forward.dto';
 
 @ApiTags('Leave Management')
 @ApiBearerAuth()
@@ -64,6 +65,13 @@ export class LeaveController {
       employeeId!,
       year ? parseInt(year, 10) : undefined,
     );
+  }
+
+  @Post('balances/apply-carry-forward')
+  @Permissions('leave-balances:update')
+  @ApiOperation({ summary: 'Apply leave balance carry forward from one year to the next (FR-13/BR-03)' })
+  applyCarryForward(@TenantId() tenantId: string, @Body() dto: ApplyCarryForwardDto) {
+    return this.leaveService.applyCarryForward(tenantId, dto.fromYear, dto.toYear);
   }
 
   @Post('leave-requests')

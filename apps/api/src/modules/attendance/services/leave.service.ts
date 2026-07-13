@@ -92,6 +92,70 @@ export class LeaveService {
     return result;
   }
 
+  async applyCarryForward(tenantId: string, fromYear: number, toYear: number) {
+    const balances = await this.prisma.leaveBalance.findMany({
+      where: { tenantId, year: fromYear },
+      include: { leaveType: true },
+    });
+
+    const results: Array<{ employeeId: string; leaveTypeId: string; year: number; carryForward: number }> = [];
+
+    for (const balance of balances) {
+      const remaining =
+        Number(balance.totalEntitled) +
+        Number(balance.carryForward) -
+        Number(balance.totalUsed) -
+        Number(balance.totalPending);
+
+      const limit = balance.leaveType?.carryForwardLimit ?? 0;
+      const carried = Math.max(0, Math.min(remaining, limit));
+
+      const existing = await this.prisma.leaveBalance.findUnique({
+        where: {
+          employeeId_leaveTypeId_year: {
+            employeeId: balance.employeeId,
+            leaveTypeId: balance.leaveTypeId,
+            year: toYear,
+          },
+        },
+      });
+
+      if (existing) {
+        const updated = await this.prisma.leaveBalance.update({
+          where: { id: existing.id },
+          data: { carryForward: carried },
+        });
+        results.push({
+          employeeId: updated.employeeId,
+          leaveTypeId: updated.leaveTypeId,
+          year: updated.year,
+          carryForward: Number(updated.carryForward),
+        });
+      } else {
+        const created = await this.prisma.leaveBalance.create({
+          data: {
+            tenantId,
+            employeeId: balance.employeeId,
+            leaveTypeId: balance.leaveTypeId,
+            year: toYear,
+            totalEntitled: 0,
+            carryForward: carried,
+            totalUsed: 0,
+            totalPending: 0,
+          },
+        });
+        results.push({
+          employeeId: created.employeeId,
+          leaveTypeId: created.leaveTypeId,
+          year: created.year,
+          carryForward: Number(created.carryForward),
+        });
+      }
+    }
+
+    return results;
+  }
+
   async createLeaveRequest(tenantId: string, employeeId: string, dto: CreateLeaveRequestDto) {
     const leaveType = await this.prisma.leaveType.findFirst({
       where: { id: dto.leaveTypeId, tenantId, isActive: true },

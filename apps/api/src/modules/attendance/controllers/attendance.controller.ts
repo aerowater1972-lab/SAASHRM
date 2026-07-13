@@ -91,4 +91,15 @@ export class AttendanceController {
   ) {
     return this.attendanceService.bulkCreate(tenantId, records);
   }
+
+  @Post('periods/:id/close')
+  @Permissions('attendance:period:close')
+  @ApiOperation({ summary: 'Close attendance period and emit attendance.period.closed event to Payroll' })
+  closePeriod(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') employeeId: string,
+  ) {
+    return this.attendanceService.closePeriod(tenantId, id, employeeId);
+  }
 }

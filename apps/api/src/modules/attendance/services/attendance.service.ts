@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '@common/prisma/prisma.service';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
 import { ConfigService } from '@nestjs/config';
+import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { ClockInDto, ClockInMethod } from '../dto/clock-in.dto';
 import { ClockOutDto } from '../dto/clock-out.dto';
 import { AttendanceFilterDto } from '../dto/attendance-filter.dto';
@@ -26,6 +27,7 @@ export class AttendanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly eventBus: EventBusService,
   ) {
     this.geofenceRadius = this.config.get<number>('GEOFENCE_RADIUS_METERS', 100);
     this.overtimeMinMinutes = this.config.get<number>('OVERTIME_MIN_MINUTES', 30);
@@ -120,6 +122,9 @@ export class AttendanceService {
       status = AttendanceStatus.EARLY_LEAVE;
     }
 
+    const eligibleOvertime =
+      overtimeMinutes >= this.overtimeMinMinutes ? overtimeMinutes : 0;
+
     const updated = await this.prisma.attendanceRecord.update({
       where: { id: record.id },
       data: {
@@ -130,13 +135,46 @@ export class AttendanceService {
         clockOutPhoto: dto.photo,
         status,
         earlyLeaveMinutes,
-        overtimeMinutes: overtimeMinutes >= this.overtimeMinMinutes ? overtimeMinutes : 0,
+        overtimeMinutes: eligibleOvertime,
         notes: dto.notes ? `${record.notes || ''} ${dto.notes}`.trim() : record.notes,
       },
       include: { employee: true },
     });
 
+    if (eligibleOvertime > 0) {
+      await this.createAutoOvertime(tenantId, employeeId, today, record.clockIn || clockOutTime, clockOutTime, eligibleOvertime);
+    }
+
     return updated;
+  }
+
+  private async createAutoOvertime(
+    tenantId: string,
+    employeeId: string,
+    date: Date,
+    startTime: Date,
+    endTime: Date,
+    totalMinutes: number,
+  ) {
+    const existing = await this.prisma.overtimeRequest.findFirst({
+      where: { tenantId, employeeId, date },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return this.prisma.overtimeRequest.create({
+      data: {
+        tenantId,
+        employeeId,
+        date,
+        startTime,
+        endTime,
+        totalMinutes,
+        reason: 'Auto-generated from clock-out',
+      },
+    });
   }
 
   async findAll(tenantId: string, filters: AttendanceFilterDto): Promise<AttendanceRecord[] | Paginated<AttendanceRecord>> {
@@ -215,6 +253,91 @@ export class AttendanceService {
         isApproved: false,
       },
     });
+  }
+
+  async closePeriod(tenantId: string, periodId: string, closedBy: string) {
+    const period = await this.prisma.payrollPeriod.findFirst({
+      where: { id: periodId, tenantId },
+    });
+
+    if (!period) {
+      throw new NotFoundException('Payroll period not found');
+    }
+
+    if (period.status !== PayrollPeriodStatus.OPEN) {
+      throw new BadRequestException(`Payroll period is already ${period.status}`);
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+
+    const summary: Array<{
+      employeeId: string;
+      presentDays: number;
+      lateDays: number;
+      leaveDays: number;
+      absentDays: number;
+      overtimeMinutes: number;
+    }> = [];
+
+    for (const emp of employees) {
+      const records = await this.prisma.attendanceRecord.findMany({
+        where: {
+          tenantId,
+          employeeId: emp.id,
+          date: { gte: period.startDate, lte: period.endDate },
+        },
+      });
+
+      const presentDays = records.filter((r) => r.clockIn).length;
+      const lateDays = records.filter((r) => r.status === AttendanceStatus.LATE).length;
+      const leaveDays = records.filter((r) => r.status === AttendanceStatus.LEAVE).length;
+      const absentDays = records.filter(
+        (r) => !r.clockIn && r.status !== AttendanceStatus.LEAVE,
+      ).length;
+      const overtimeMinutes = records.reduce(
+        (sum, r) => sum + (r.overtimeMinutes || 0),
+        0,
+      );
+
+      summary.push({
+        employeeId: emp.id,
+        presentDays,
+        lateDays,
+        leaveDays,
+        absentDays,
+        overtimeMinutes,
+      });
+
+      await this.eventBus.publish({
+        name: 'attendance.period.closed',
+        aggregateId: `${periodId}:${emp.id}`,
+        aggregateType: 'attendance',
+        payload: {
+          employeeId: emp.id,
+          period: periodId,
+          workedDays: presentDays,
+          lateCount: lateDays,
+          overtimeMinutes,
+          leaveDays,
+          tenantId,
+        },
+        tenantId,
+      });
+    }
+
+    const updated = await this.prisma.payrollPeriod.update({
+      where: { id: periodId },
+      data: {
+        status: PayrollPeriodStatus.CLOSED,
+        closedBy,
+        closedAt: new Date(),
+      },
+    });
+
+    return { period: updated, summary };
   }
 
   async getToday(tenantId: string, employeeId: string) {
