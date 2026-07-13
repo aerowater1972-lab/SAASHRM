@@ -24,10 +24,13 @@ async function main() {
   });
 
   // ── 1.b. TENANT ENTITY ──
+  // Align TenantEntity.id with the Tenant id so that Employee.tenantId (FK → TenantEntity)
+  // matches the tenant id carried by users/auth. For single-entity tenants this keeps
+  // User and Employee in the same tenant scope.
   const entity = await prisma.tenantEntity.upsert({
     where: { tenantId_code: { tenantId, code: 'HQ' } },
     update: {},
-    create: { tenantId, name: 'Head Office', code: 'HQ', timezone: 'Asia/Jakarta' },
+    create: { id: tenantId, tenantId, name: 'Head Office', code: 'HQ', timezone: 'Asia/Jakarta' },
   });
   const entityId = entity.id;
 

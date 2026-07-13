@@ -11,9 +11,10 @@ export enum MaritalStatus {
   WIDOWED = 'WIDOWED',
 }
 export class CreateEmployeeDto {
-  @ApiProperty({ description: 'Employee ID (configurable format per tenant)' })
+  @ApiPropertyOptional({ description: 'Employee ID (auto-generated if omitted, per BR-01 immutable once set)' })
+  @IsOptional()
   @IsString()
-  employeeId!: string;
+  employeeId?: string;
   @ApiProperty()
   @IsString()
   fullName!: string;

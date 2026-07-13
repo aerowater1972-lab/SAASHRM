@@ -16,8 +16,10 @@ export class EmployeeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
+    const employeeId = dto.employeeId ?? (await this.generateEmployeeId(tenantId));
+
     const existing = await this.prisma.employee.findUnique({
-      where: { tenantId_employeeId: { tenantId, employeeId: dto.employeeId } },
+      where: { tenantId_employeeId: { tenantId, employeeId } },
     });
     if (existing) {
       throw new ConflictException('Employee ID already exists');
@@ -33,7 +35,7 @@ export class EmployeeService {
     return this.prisma.employee.create({
       data: {
         tenantId,
-        employeeId: dto.employeeId,
+        employeeId,
         fullName: dto.fullName,
         email: dto.email,
         phone: dto.phone,
@@ -228,6 +230,7 @@ export class EmployeeService {
       where: { id },
       data: {
         ...dto,
+        employeeId: undefined,
         birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         gender: dto.gender as any,
@@ -240,6 +243,22 @@ export class EmployeeService {
         documents: true,
       },
     });
+  }
+
+  /**
+   * FR-03 / BR-01: generate a tenant-unique, immutable Employee ID.
+   * Format: EMP##### (zero-padded sequence within the tenant).
+   */
+  private async generateEmployeeId(tenantId: string): Promise<string> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const count = await this.prisma.employee.count({ where: { tenantId } });
+      const candidate = `EMP${String(count + 1).padStart(5, '0')}`;
+      const exists = await this.prisma.employee.findUnique({
+        where: { tenantId_employeeId: { tenantId, employeeId: candidate } },
+      });
+      if (!exists) return candidate;
+    }
+    return `EMP${Date.now().toString().slice(-8)}`;
   }
 
   async remove(tenantId: string, id: string) {

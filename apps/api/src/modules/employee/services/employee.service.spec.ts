@@ -116,6 +116,22 @@ describe('EmployeeService', () => {
 
       await expect(service.create('default', dto as any)).rejects.toThrow(ConflictException);
     });
+
+    it('should auto-generate employeeId when not provided (FR-03)', async () => {
+      mockPrisma.employee.count.mockResolvedValue(0);
+      mockPrisma.employee.findUnique.mockResolvedValue(null);
+      mockPrisma.employee.create.mockResolvedValue({ ...mockEmployee, employeeId: 'EMP00001' });
+
+      const dto = { fullName: 'Auto Gen', email: 'auto@example.com' };
+      const result = await service.create('default', dto as any);
+
+      expect(result.employeeId).toBe('EMP00001');
+      expect(mockPrisma.employee.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ employeeId: 'EMP00001' }),
+        }),
+      );
+    });
   });
 
   describe('findAll', () => {
@@ -211,6 +227,20 @@ describe('EmployeeService', () => {
       await expect(
         service.update('default', 'emp-1', { email: 'taken@example.com' }),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('should not change employeeId on update (BR-01 immutability)', async () => {
+      mockPrisma.employee.findFirst.mockResolvedValue(mockEmployee);
+      let captured: any;
+      mockPrisma.employee.update.mockImplementation((args) => {
+        captured = args;
+        return Promise.resolve({ ...mockEmployee, ...args.data });
+      });
+
+      await service.update('default', 'emp-1', { employeeId: 'HACK', fullName: 'X' } as any);
+
+      expect(captured.data.employeeId).toBeUndefined();
+      expect(captured.data.fullName).toBe('X');
     });
   });
 
