@@ -87,4 +87,27 @@ export class LeaveEssController {
   ) {
     return this.leaveService.getTeamCalendar(tenantId, managerId, startDate, endDate);
   }
+
+  // US-06 / BR-03: manager approval on-the-go — same source logic as web.
+  @Post('approvals/leave/:id/approve')
+  @ApiOperation({ summary: 'Approve a team leave request (mobile)' })
+  approveLeave(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') approverId: string,
+    @Body() dto: { notes?: string },
+  ) {
+    return this.leaveService.approveRequest(tenantId, id, approverId, dto?.notes);
+  }
+
+  @Post('approvals/leave/:id/reject')
+  @ApiOperation({ summary: 'Reject a team leave request (mobile)' })
+  rejectLeave(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') approverId: string,
+    @Body() dto: { reason: string },
+  ) {
+    return this.leaveService.rejectRequest(tenantId, id, approverId, dto.reason);
+  }
 }

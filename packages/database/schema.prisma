@@ -355,6 +355,7 @@ model Employee {
   essNotifications               EssNotification[]
   essOnboardingProgress          EssOnboardingProgress?
   essPreference                  EssPreference?
+  essProfileChangeRequests       EssProfileChangeRequest[]
   salaryComponents               SalaryComponent[]
   payrollRunItems                PayrollRunItem[]
   jobRequisitionsApproved        JobRequisition[] @relation("requisition_approver")
@@ -1574,6 +1575,7 @@ model EssNotification {
   type       String
   message    String
   readStatus Boolean  @default(false)
+  archivedAt DateTime? // BR-05: archived after retention window, hidden from default list
   createdAt  DateTime @default(now())
 
   employee Employee @relation(fields: [employeeId], references: [id])
@@ -1600,6 +1602,24 @@ model EssPreference {
   updatedAt            DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+// BR-02: sensitive profile changes (NPWP, BPJS) require HR Admin approval
+// before taking effect; basic contact data is applied directly via updateProfile.
+model EssProfileChangeRequest {
+  id         String   @id @default(uuid())
+  tenantId   String
+  employeeId String
+  fields     Json // sensitive fields requested (taxIdNumber, socialSecurityNumber)
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  note       String?
+  requestedAt DateTime @default(now())
+  reviewedBy  String?
+  reviewedAt  DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, status])
 }
 
 // =======================================================================

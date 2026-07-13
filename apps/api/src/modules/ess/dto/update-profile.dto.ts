@@ -76,4 +76,21 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   emergencyPhone?: string;
+
+  // BR-02: sensitive fields — require HR Admin approval, not applied directly.
+  @ApiPropertyOptional({ description: 'NPWP — sensitive, requires HR approval (BR-02)' })
+  @IsOptional()
+  @IsString()
+  taxIdNumber?: string;
+
+  @ApiPropertyOptional({ description: 'BPJS / social security number — sensitive, requires HR approval (BR-02)' })
+  @IsOptional()
+  @IsString()
+  socialSecurityNumber?: string;
+
+  // Convenience alias some clients use for NPWP
+  @ApiPropertyOptional({ description: 'Alias for taxIdNumber (NPWP)' })
+  @IsOptional()
+  @IsString()
+  npwp?: string;
 }

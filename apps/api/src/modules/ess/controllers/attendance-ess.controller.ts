@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Param,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -70,5 +71,17 @@ export class AttendanceEssController {
     @Body() dto: AttendanceCorrectionDto,
   ) {
     return this.attendanceService.correct(tenantId, '', employeeId, dto);
+  }
+
+  // US-06 / BR-03: manager approval on-the-go — same source logic as web.
+  @Post('approvals/correction/:id')
+  @ApiOperation({ summary: 'Approve/reject a team attendance correction (mobile)' })
+  reviewCorrection(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') approverId: string,
+    @Body() dto: { approve: boolean },
+  ) {
+    return this.attendanceService.approveCorrection(tenantId, id, approverId, dto.approve);
   }
 }

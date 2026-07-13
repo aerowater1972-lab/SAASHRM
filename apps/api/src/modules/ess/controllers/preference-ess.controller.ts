@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -18,7 +18,7 @@ export class PreferenceEssController {
     return pref || {};
   }
 
-  @Post()
+  @Put()
   @ApiOperation({ summary: 'Upsert my preferences' })
   async upsert(@CurrentUser('employeeId') employeeId: string, @Body() dto: any) {
     return this.prisma.essPreference.upsert({

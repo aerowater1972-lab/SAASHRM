@@ -1,52 +1,44 @@
-import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiQuery } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
-import { PrismaService } from '@common/prisma/prisma.service';
+import { EssNotificationService } from '../services/notification.service';
 
 @ApiTags('ESS - Notifications')
 @UseGuards(AuthGuard, PermissionGuard)
 @Controller('ess/notifications')
 export class NotificationEssController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly notificationService: EssNotificationService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get my notifications' })
-  async findAll(@TenantId() tenantId: string, @CurrentUser('employeeId') employeeId: string) {
-    return this.prisma.essNotification.findMany({
-      where: { employeeId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+  @ApiQuery({ name: 'includeArchived', required: false, type: Boolean })
+  @ApiOperation({ summary: 'Get my notifications (BR-05: archived excluded by default)' })
+  findAll(
+    @CurrentUser('employeeId') employeeId: string,
+    @Query('includeArchived') includeArchived?: string,
+  ) {
+    return this.notificationService.list(employeeId, includeArchived === 'true');
   }
 
   @Get('unread-count')
   @ApiOperation({ summary: 'Get unread notification count' })
-  async unreadCount(@TenantId() tenantId: string, @CurrentUser('employeeId') employeeId: string) {
-    const count = await this.prisma.essNotification.count({
-      where: { employeeId, readStatus: false },
-    });
+  async unreadCount(@CurrentUser('employeeId') employeeId: string) {
+    const count = await this.notificationService.unreadCount(employeeId);
     return { count };
   }
 
   @Post(':id/read')
   @ApiOperation({ summary: 'Mark notification as read' })
-  async markRead(@Param('id') id: string, @CurrentUser('employeeId') employeeId: string) {
-    return this.prisma.essNotification.updateMany({
-      where: { id, employeeId },
-      data: { readStatus: true },
-    });
+  markRead(@Param('id') id: string, @CurrentUser('employeeId') employeeId: string) {
+    return this.notificationService.markRead(id, employeeId);
   }
 
   @Post('read-all')
   @ApiOperation({ summary: 'Mark all notifications as read' })
-  async markAllRead(@CurrentUser('employeeId') employeeId: string) {
-    await this.prisma.essNotification.updateMany({
-      where: { employeeId, readStatus: false },
-      data: { readStatus: true },
-    });
-    return { success: true };
+  markAllRead(@CurrentUser('employeeId') employeeId: string) {
+    return this.notificationService.markAllRead(employeeId);
   }
 }
