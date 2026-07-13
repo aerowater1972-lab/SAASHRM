@@ -5,7 +5,7 @@ import { DomainEventType } from '@modules/shared/events/event-registry';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { ConvertEmployeeDto } from '../dto/convert-employee.dto';
-import { ApplicationStatus, OfferStatus } from '@prisma/client';
+import { ApplicationStatus, OfferStatus, EmployeeStatus } from '@prisma/client';
 
 @Injectable()
 export class OnboardingService {
@@ -76,6 +76,7 @@ export class OnboardingService {
       emergencyPhone: dto.emergencyPhone,
       startDate: acceptedOffer.joinDate,
       notes: dto.notes,
+      status: EmployeeStatus.PENDING_ACTIVATION,
     } as any);
 
     const empId = (employee as any).id;

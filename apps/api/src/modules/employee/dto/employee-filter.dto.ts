@@ -14,6 +14,10 @@ export class EmployeeFilterDto extends PaginationQueryDto {
   @IsEnum(EmployeeStatus)
   status?: EmployeeStatus;
 
+  @ApiPropertyOptional({ description: 'Include PENDING_ACTIVATION (converted candidates not yet onboarded)' })
+  @IsOptional()
+  includePending?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

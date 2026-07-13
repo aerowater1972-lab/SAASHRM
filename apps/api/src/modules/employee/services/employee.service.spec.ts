@@ -150,7 +150,7 @@ describe('EmployeeService', () => {
       });
       expect(mockPrisma.employee.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: 'default', deletedAt: null },
+          where: { tenantId: 'default', deletedAt: null, status: { not: 'PENDING_ACTIVATION' } },
           orderBy: { createdAt: 'desc' },
           skip: 0,
           take: 10,
@@ -166,7 +166,7 @@ describe('EmployeeService', () => {
       expect(result).toEqual([mockEmployee]);
       expect(mockPrisma.employee.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: 'default', deletedAt: null },
+          where: { tenantId: 'default', deletedAt: null, status: { not: 'PENDING_ACTIVATION' } },
           orderBy: { createdAt: 'desc' },
         }),
       );
@@ -186,6 +186,27 @@ describe('EmployeeService', () => {
           }),
         }),
       );
+    });
+
+    it('excludes PENDING_ACTIVATION by default (BR-04)', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([mockEmployee]);
+      await service.findAll('default', {} as any);
+      const call = mockPrisma.employee.findMany.mock.calls[0][0];
+      expect(call.where.status).toEqual({ not: 'PENDING_ACTIVATION' });
+    });
+
+    it('includes PENDING_ACTIVATION when includePending is set (BR-04)', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([mockEmployee]);
+      await service.findAll('default', { includePending: true } as any);
+      const call = mockPrisma.employee.findMany.mock.calls[0][0];
+      expect(call.where.status).toBeUndefined();
+    });
+
+    it('honours an explicit status filter over the BR-04 default', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([mockEmployee]);
+      await service.findAll('default', { status: 'PENDING_ACTIVATION' as any } as any);
+      const call = mockPrisma.employee.findMany.mock.calls[0][0];
+      expect(call.where.status).toBe('PENDING_ACTIVATION');
     });
   });
 

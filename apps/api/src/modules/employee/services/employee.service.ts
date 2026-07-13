@@ -59,6 +59,7 @@ export class EmployeeService {
         profilePicture: dto.profilePicture,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         notes: dto.notes,
+        status: (dto as any).status ?? EmployeeStatus.ACTIVE,
       },
       include: {
         employments: true,
@@ -78,6 +79,11 @@ export class EmployeeService {
 
     if (filters.status) {
       where.status = filters.status;
+    } else if (!filters.includePending) {
+      // BR-04: converted candidates start as PENDING_ACTIVATION and must not
+      // surface in the active Employee Management view until they are activated
+      // (onboarding complete / start date reached).
+      where.status = { not: EmployeeStatus.PENDING_ACTIVATION };
     }
 
     const term = filters.q ?? filters.search;
