@@ -1,0 +1,31 @@
+{
+  "name": "flexy-hrms",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w apps/api",
+    "dev": "npm run dev -w apps/api",
+    "start:prod": "npm run start:prod -w apps/api",
+    "lint": "npm run lint -w apps/api",
+    "test": "npm run test -w apps/api",
+    "test:e2e": "npm run test:e2e -w apps/api",
+    "db:generate": "prisma generate --schema=packages/database/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=packages/database/schema.prisma",
+    "db:push": "prisma db push --schema=packages/database/schema.prisma",
+    "db:seed": "node scripts/seed.js",
+    "db:studio": "prisma studio --schema=packages/database/schema.prisma",
+    "postinstall": "npm run db:generate"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@prisma/client": "^6.6.0",
+    "prisma": "^6.6.0",
+    "typescript": "^5.9.3"
+  }
+}

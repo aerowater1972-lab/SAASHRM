@@ -1,0 +1,47 @@
+version: "3.9"
+
+# Flexy HRMS — Local Development Stack
+# Sesuai Technical Architecture Document: PostgreSQL (multi-tenant, RLS)
+# + Redis (cache Authz + BullMQ queue Audit Log).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flexy
+      POSTGRES_PASSWORD: flexy_dev_password
+      POSTGRES_DB: flexy_hrms
+    ports:
+      - "5432:5432"
+    volumes:
+      - flexy_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flexy -d flexy_hrms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Opsional: Bull Board untuk memonitor queue Audit Log (dead-letter jobs).
+  # Aktifkan setelah menambahkan dependency @bull-board/express pada increment berikutnya.
+  # bull-board:
+  #   build: .
+  #   command: node dist/bull-board.js
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     - redis
+
+volumes:
+  flexy_pg_data:

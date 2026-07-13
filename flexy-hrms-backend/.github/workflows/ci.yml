@@ -1,0 +1,75 @@
+name: CI — Flexy HRMS Backend
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: flexy
+          POSTGRES_PASSWORD: flexy_test_password
+          POSTGRES_DB: flexy_hrms_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U flexy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://flexy:flexy_test_password@localhost:5432/flexy_hrms_test?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci-test-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit & Integration Tests
+        run: npm run test:cov
+
+      - name: Build
+        run: npm run build
+
+  # Blue-Green Deployment step (placeholder — lihat Technical Architecture
+  # Document Bagian 4.3). Diaktifkan setelah environment staging/production
+  # dan container registry final ditentukan.
+  # deploy:
+  #   needs: test
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - run: echo "TODO: build & push Docker image, deploy ke staging"

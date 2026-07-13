@@ -1,0 +1,340 @@
+// ============================================================================
+// Flexy HRMS — Prisma Schema
+// Diterjemahkan dari paket Database DDL (00-14_*.sql).
+// Konvensi mengikuti 00_extensions_and_conventions.sql:
+//   - id: UUID (gen_random_uuid() di level DB via @default(dbgenerated))
+//   - multi-tenant: tenantId wajib di seluruh tabel transaksional
+//   - uang: Decimal(18,2), TIDAK PERNAH Float
+//   - effective-dated: effectiveDate + endDate (NULL = versi aktif)
+//   - TIDAK ADA model AuditLog di modul manapun kecuali SystemAdministration
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 01 — SYSTEM ADMINISTRATION (Shared Service / Foundation)
+// ============================================================================
+
+model Tenant {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  domain         String   @unique
+  licensePackage String   @default("standard") @map("license_package")
+  status         String   @default("active") // active | suspended | churned
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  entities   TenantEntity[]
+  roles      Role[]
+  workflows  WorkflowDefinition[]
+  auditLogs  AuditLog[]
+  integrations IntegrationConfig[]
+  featureFlags FeatureFlag[]
+
+  @@map("tenants")
+}
+
+model TenantEntity {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  name           String
+  type           String   @default("branch") // holding | subsidiary | branch | site
+  parentEntityId String?  @map("parent_entity_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_entities")
+}
+
+model Role {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  isCustom  Boolean  @default(false) @map("is_custom")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module      String  // e.g. 'employee', 'payroll'
+  action      String  // create | read | update | delete | approve
+  description String?
+
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+  dataScope    String @default("own") @map("data_scope") // own | team | department | tenant
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  roleId     String   @map("role_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_roles")
+}
+
+model WorkflowDefinition {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  processType  String   @map("process_type")
+  version      Int      @default(1)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  steps  WorkflowStep[]
+
+  @@unique([tenantId, processType, version])
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id                   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowDefinitionId String  @map("workflow_definition_id") @db.Uuid
+  stepOrder            Int     @map("step_order")
+  approverRole         String  @map("approver_role")
+  condition            Json?
+  slaHours             Int     @default(24) @map("sla_hours")
+
+  workflowDefinition WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowDefinitionId, stepOrder])
+  @@map("workflow_steps")
+}
+
+/// SATU-SATUNYA tabel audit trail di seluruh platform (append-only).
+/// Diisi melalui POST /admin/audit-logs/ingest (lihat System Administration v1.1 Addendum).
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  module    String
+  entity    String
+  entityId  String   @map("entity_id") @db.Uuid
+  action    String   // create | update | delete | approve | reject
+  changedBy String   @map("changed_by") @db.Uuid
+  changedAt DateTime @default(now()) @map("changed_at")
+  diff      Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, module, changedAt])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+model IntegrationConfig {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  provider              String
+  credentialsEncrypted  String    @map("credentials_encrypted")
+  status                String    @default("active") // active | failed | disconnected
+  lastCheckedAt         DateTime? @map("last_checked_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("integration_configs")
+}
+
+model FeatureFlag {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  module   String
+  enabled  Boolean @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, module])
+  @@map("feature_flags")
+}
+
+// ============================================================================
+// 02 — EMPLOYEE & ORGANIZATION MANAGEMENT (v1.1)
+// (Model tambahan lain -- Attendance, Payroll, dst -- menyusul secara
+//  bertahap sesuai urutan Epic pada Release Planning & Sprint Backlog.
+//  Lihat prisma/schema-extensions/ untuk draft modul berikutnya.)
+// ============================================================================
+
+model Employee {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  employeeNo     String   @map("employee_no")
+  fullName       String   @map("full_name")
+  personalEmail  String   @map("personal_email")
+  status         String   @default("pending_activation") // pending_activation | active | inactive
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  contact    EmployeeContact?
+  documents  EmployeeDocument[]
+  medical    EmployeeMedical?
+  employments Employment[]
+  headOfDepartments Department[] @relation("DepartmentHead")
+
+  @@unique([tenantId, employeeNo])
+  @@unique([tenantId, personalEmail])
+  @@index([tenantId, status])
+  @@map("employees")
+}
+
+model EmployeeContact {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId              String   @unique @map("employee_id") @db.Uuid
+  phone                   String?
+  address                 String?
+  emergencyContactName    String?  @map("emergency_contact_name")
+  emergencyContactPhone   String?  @map("emergency_contact_phone")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_contacts")
+}
+
+model EmployeeDocument {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  docType    String   @map("doc_type")
+  fileUrl    String   @map("file_url")
+  version    Int      @default(1)
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_documents")
+}
+
+/// Field sensitif (allergies, notes) dienkripsi di application layer,
+/// BUKAN di kolom database langsung — lihat Technical Architecture Document.
+model EmployeeMedical {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @unique @map("employee_id") @db.Uuid
+  bloodType  String?  @map("blood_type")
+  allergies  String?
+  notes      String?
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_medical")
+}
+
+model Organization {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  name           String
+  parentOrgId    String?   @map("parent_org_id") @db.Uuid
+  effectiveDate  DateTime  @map("effective_date") @db.Date
+  endDate        DateTime? @map("end_date") @db.Date
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  departments Department[]
+
+  @@index([tenantId])
+  @@map("organizations")
+}
+
+model Department {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  orgId          String   @map("org_id") @db.Uuid
+  name           String
+  headEmployeeId String?  @map("head_employee_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  headEmployee Employee?    @relation("DepartmentHead", fields: [headEmployeeId], references: [id])
+  positions    Position[]
+  employments  Employment[]
+
+  @@index([orgId])
+  @@map("departments")
+}
+
+model Grade {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name     String
+  level    Int
+  rank     Int
+
+  positions   Position[]
+  employments Employment[]
+
+  @@unique([tenantId, name])
+  @@map("grades")
+}
+
+model Position {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  title        String
+  departmentId String   @map("department_id") @db.Uuid
+  gradeId      String   @map("grade_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  department  Department   @relation(fields: [departmentId], references: [id])
+  grade       Grade        @relation(fields: [gradeId], references: [id])
+  employments Employment[]
+
+  @@index([departmentId])
+  @@map("positions")
+}
+
+/// Riwayat employment, effective-dated. Hanya 1 baris aktif (endDate NULL)
+/// per employee — ditegakkan via partial unique index di level DB (lihat DDL).
+model Employment {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId    String    @map("employee_id") @db.Uuid
+  positionId    String    @map("position_id") @db.Uuid
+  departmentId  String    @map("department_id") @db.Uuid
+  gradeId       String    @map("grade_id") @db.Uuid
+  startDate     DateTime  @map("start_date") @db.Date
+  endDate       DateTime? @map("end_date") @db.Date
+  contractType  String    @default("permanent") @map("contract_type")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  position   Position   @relation(fields: [positionId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+  grade      Grade      @relation(fields: [gradeId], references: [id])
+
+  @@index([employeeId])
+  @@map("employments")
+}

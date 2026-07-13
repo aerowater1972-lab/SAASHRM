@@ -1,0 +1,94 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { TenantId } from '@common/decorators/tenant.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { Permissions } from '@common/decorators/permissions.decorator';
+import { AuthGuard } from '@common/guards/auth.guard';
+import { PermissionGuard } from '@common/guards/permission.guard';
+import { AttendanceService } from '../services/attendance.service';
+import { ClockInDto } from '../dto/clock-in.dto';
+import { ClockOutDto } from '../dto/clock-out.dto';
+import { AttendanceFilterDto } from '../dto/attendance-filter.dto';
+import { AttendanceCorrectionDto } from '../dto/attendance-correction.dto';
+
+@ApiTags('Attendance')
+@ApiBearerAuth()
+@UseGuards(AuthGuard, PermissionGuard)
+@Controller('attendance')
+export class AttendanceController {
+  constructor(private readonly attendanceService: AttendanceService) {}
+
+  @Post('clock-in')
+  @ApiOperation({ summary: 'Clock in with GPS location and method' })
+  clockIn(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') employeeId: string,
+    @Body() dto: ClockInDto,
+  ) {
+    return this.attendanceService.clockIn(tenantId, employeeId, dto);
+  }
+
+  @Post('clock-out')
+  @ApiOperation({ summary: 'Clock out with GPS location and method' })
+  clockOut(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') employeeId: string,
+    @Body() dto: ClockOutDto,
+  ) {
+    return this.attendanceService.clockOut(tenantId, employeeId, dto);
+  }
+
+  @Get('records')
+  @ApiOperation({ summary: 'Get attendance records with filters' })
+  findAll(
+    @TenantId() tenantId: string,
+    @Query() filters: AttendanceFilterDto,
+  ) {
+    return this.attendanceService.findAll(tenantId, filters);
+  }
+
+  @Get('records/:id')
+  @ApiOperation({ summary: 'Get attendance record by ID' })
+  findOne(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.attendanceService.findOne(tenantId, id);
+  }
+
+  @Put('records/:id')
+  @ApiOperation({ summary: 'Correct attendance record (requires approval)' })
+  correct(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') employeeId: string,
+    @Body() dto: AttendanceCorrectionDto,
+  ) {
+    return this.attendanceService.correct(tenantId, id, employeeId, dto);
+  }
+
+  @Get('today')
+  @ApiOperation({ summary: 'Get current day attendance status' })
+  getToday(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') employeeId: string,
+  ) {
+    return this.attendanceService.getToday(tenantId, employeeId);
+  }
+
+  @Post('bulk')
+  @Permissions('attendance:create')
+  @ApiOperation({ summary: 'Bulk create attendance records (HR admin)' })
+  bulkCreate(
+    @TenantId() tenantId: string,
+    @Body() records: { employeeId: string; date: string; clockIn?: string; clockOut?: string; notes?: string }[],
+  ) {
+    return this.attendanceService.bulkCreate(tenantId, records);
+  }
+}

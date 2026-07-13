@@ -1,0 +1,74 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  Param,
+  Query,
+  UseGuards} from '@nestjs/common';
+import { AuthGuard } from '@common/guards/auth.guard';
+import { PermissionGuard } from '@common/guards/permission.guard';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { TenantId } from '@common/decorators/tenant.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { GoalService } from '../services/goal.service';
+import { CreateGoalDto } from '../dto/create-goal.dto';
+import { GoalProgressDto } from '../dto/goal-progress.dto';
+import { GoalListQueryDto } from '../dto/goal-list-query.dto';
+import { GoalStatus } from '@prisma/client';
+
+@ApiTags('Performance - Goals')
+@ApiBearerAuth()
+@UseGuards(AuthGuard, PermissionGuard)
+@Controller('performance/goals')
+export class GoalController {
+  constructor(private readonly goalService: GoalService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Create a new goal/OKR for an employee' })
+  create(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') employeeId: string,
+    @Body() dto: CreateGoalDto,
+  ) {
+    return this.goalService.create(tenantId, employeeId, dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all goals with filters' })
+  @ApiQuery({ name: 'employeeId', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, enum: GoalStatus })
+  findAll(
+    @TenantId() tenantId: string,
+    @Query() filters: GoalListQueryDto,
+  ) {
+    return this.goalService.findAll(tenantId, filters);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get goal by ID' })
+  findOne(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.goalService.findOne(tenantId, id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update goal details' })
+  update(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateGoalDto>,
+  ) {
+    return this.goalService.update(tenantId, id, dto);
+  }
+
+  @Put(':id/progress')
+  @ApiOperation({ summary: 'Update goal actual progress value' })
+  updateProgress(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: GoalProgressDto,
+  ) {
+    return this.goalService.updateProgress(tenantId, id, dto);
+  }
+}
