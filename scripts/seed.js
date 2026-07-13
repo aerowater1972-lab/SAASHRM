@@ -40,10 +40,13 @@ async function main() {
   const permissionStrings = [
     'admin:audit:export', 'admin:audit:read',
     'admin:entity:create', 'admin:entity:read',
+    'admin:feature-flag:read', 'admin:feature-flag:create', 'admin:feature-flag:update',
+    'admin:integration:read', 'admin:integration:create', 'admin:integration:update', 'admin:integration:delete',
     'admin:role:assign', 'admin:role:create', 'admin:role:delete', 'admin:role:read', 'admin:role:update',
     'admin:tenant:create', 'admin:tenant:read', 'admin:tenant:update',
     'admin:workflow:create', 'admin:workflow:read', 'admin:workflow:update',
     'attendance:create',
+    'employee:movement:create', 'employee:movement:read', 'employee:movement:approve',
     'expense-claims:approve', 'expense-claims:pay',
     'holidays:create',
     'learning:create', 'learning:update',

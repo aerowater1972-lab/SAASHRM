@@ -204,9 +204,9 @@ export class AnalyticsService {
         { totalPayroll: number; totalEmployees: bigint; avgSalary: number }[]
       >(`
         SELECT
-          COALESCE(SUM(p.net_pay), 0)::numeric AS "totalPayroll",
+          COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
           COUNT(DISTINCT p."employeeId")::int AS "totalEmployees",
-          COALESCE(AVG(p.net_pay), 0)::numeric AS "avgSalary"
+          COALESCE(AVG(p."netPay"), 0)::numeric AS "avgSalary"
         FROM "Payslip" p
         JOIN "PayrollRun" pr ON pr.id = p."runId"
         JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
@@ -220,9 +220,9 @@ export class AnalyticsService {
       >(`
         SELECT
           d.name AS department,
-          COALESCE(SUM(p.net_pay), 0)::numeric AS "totalPayroll",
+          COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
           COUNT(DISTINCT p."employeeId")::int AS "employeeCount",
-          COALESCE(AVG(p.net_pay), 0)::numeric AS "avgSalary"
+          COALESCE(AVG(p."netPay"), 0)::numeric AS "avgSalary"
         FROM "Payslip" p
         JOIN "PayrollRun" pr ON pr.id = p."runId"
         JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
@@ -500,8 +500,8 @@ export class AnalyticsService {
         `),
         this.prisma.$queryRawUnsafe<{ totalPayroll: number; avgSalary: number }[]>(`
           SELECT
-            COALESCE(SUM(p.net_pay), 0)::numeric AS "totalPayroll",
-            COALESCE(AVG(p.net_pay), 0)::numeric AS "avgSalary"
+            COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
+            COALESCE(AVG(p."netPay"), 0)::numeric AS "avgSalary"
           FROM "Payslip" p
           JOIN "PayrollRun" pr ON pr.id = p."runId"
           JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
