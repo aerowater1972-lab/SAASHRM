@@ -136,10 +136,15 @@ export class ApplicationService {
     const next = dto.status;
 
     const allowed = VALID_TRANSITIONS[current];
-    if (!allowed || !allowed.includes(next)) {
-      throw new BadRequestException(
-        `Invalid status transition from ${current} to ${next}. Allowed: ${(allowed || []).join(', ') || 'none'}`,
-      );
+    const isLinearForward = !!allowed && allowed.includes(next);
+    if (!isLinearForward) {
+      // BR-02: non-linear transitions are only permitted as a manual override
+      // by the Recruiter, and must carry a justification.
+      if (!dto.justification || !dto.justification.trim()) {
+        throw new BadRequestException(
+          `Non-linear transition from ${current} to ${next} requires a justification (BR-02). Allowed linear: ${(allowed || []).join(', ') || 'none'}`,
+        );
+      }
     }
 
     const updated = await this.prisma.application.update({
@@ -155,7 +160,13 @@ export class ApplicationService {
       name: 'application.status.updated',
       aggregateId: id,
       aggregateType: 'Application',
-      payload: { previousStatus: current, newStatus: next, application: updated },
+      payload: {
+        previousStatus: current,
+        newStatus: next,
+        override: !isLinearForward,
+        justification: dto.justification,
+        application: updated,
+      },
       tenantId,
     });
 
