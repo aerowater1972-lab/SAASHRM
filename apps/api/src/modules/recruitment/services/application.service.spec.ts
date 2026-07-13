@@ -11,6 +11,10 @@ describe('ApplicationService.updateStatus (BR-02)', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    offer: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
   };
   const mockEventBus: any = { publish: jest.fn() };
 
@@ -56,5 +60,33 @@ describe('ApplicationService.updateStatus (BR-02)', () => {
         payload: expect.objectContaining({ override: true, justification: expect.any(String) }),
       }),
     );
+  });
+
+  it('issues a new offer version for revisions (BR-03)', async () => {
+    mockPrisma.application.findFirst.mockResolvedValue(appAt('OFFER'));
+    mockPrisma.offer.findFirst.mockResolvedValue({ version: 2 });
+    mockPrisma.offer.create.mockResolvedValue({ id: 'o-3', version: 3 });
+    const result = await service.addOffer('default', 'app-1', {
+      baseSalary: 100,
+      joinDate: '2026-01-01',
+    } as any);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ version: 3 }) }),
+    );
+    expect(result.version).toBe(3);
+  });
+
+  it('starts at version 1 when no prior offer exists (BR-03)', async () => {
+    mockPrisma.application.findFirst.mockResolvedValue(appAt('OFFER'));
+    mockPrisma.offer.findFirst.mockResolvedValue(null);
+    mockPrisma.offer.create.mockResolvedValue({ id: 'o-1', version: 1 });
+    const result = await service.addOffer('default', 'app-1', {
+      baseSalary: 100,
+      joinDate: '2026-01-01',
+    } as any);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ version: 1 }) }),
+    );
+    expect(result.version).toBe(1);
   });
 });

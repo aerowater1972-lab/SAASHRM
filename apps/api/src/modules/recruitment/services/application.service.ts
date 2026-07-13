@@ -221,9 +221,21 @@ export class ApplicationService {
 
   async addOffer(tenantId: string, applicationId: string, dto: CreateOfferDto) {
     await this.findOne(tenantId, applicationId);
+
+    // BR-03: a signed (accepted) offer is immutable; any change must be issued
+    // as a new version. Increment the version so revisions don't collide on the
+    // unique (applicationId, version) constraint and must be re-sent/re-accepted.
+    const latest = await this.prisma.offer.findFirst({
+      where: { applicationId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    const version = (latest?.version ?? 0) + 1;
+
     return this.prisma.offer.create({
       data: {
         applicationId,
+        version,
         baseSalary: dto.baseSalary,
         allowance: dto.allowance,
         benefitDescription: dto.benefitDescription,
