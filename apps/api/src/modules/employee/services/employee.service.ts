@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
+import { encrypt } from '@common/util/encryption.util';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { UpdateEmployeeDto } from '../dto/update-employee.dto';
 import { EmployeeFilterDto } from '../dto/employee-filter.dto';
@@ -32,7 +33,7 @@ export class EmployeeService {
       throw new ConflictException('Email already exists');
     }
 
-    return this.prisma.employee.create({
+    const created = await this.prisma.employee.create({
       data: {
         tenantId,
         employeeId,
@@ -49,8 +50,6 @@ export class EmployeeService {
         taxIdNumber: dto.taxIdNumber,
         socialSecurityNumber: dto.socialSecurityNumber,
         bloodType: dto.bloodType,
-        allergies: dto.allergies,
-        medicalNotes: dto.medicalNotes,
         address: dto.address,
         city: dto.city,
         province: dto.province,
@@ -66,6 +65,9 @@ export class EmployeeService {
         documents: true,
       },
     });
+
+    await this.syncMedical(created.id, dto);
+    return created;
   }
 
   async findAll(
@@ -226,11 +228,13 @@ export class EmployeeService {
       }
     }
 
-    return this.prisma.employee.update({
+    const updated = await this.prisma.employee.update({
       where: { id },
       data: {
         ...dto,
         employeeId: undefined,
+        allergies: undefined,
+        medicalNotes: undefined,
         birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         gender: dto.gender as any,
@@ -241,6 +245,31 @@ export class EmployeeService {
           include: { department: true, position: true, grade: true },
         },
         documents: true,
+      },
+    });
+
+    await this.syncMedical(id, dto);
+    return updated;
+  }
+
+  /**
+   * FR-05: persist sensitive medical data (allergies, notes) encrypted in EmployeeMedical.
+   */
+  private async syncMedical(
+    employeeId: string,
+    dto: { allergies?: string; medicalNotes?: string },
+  ) {
+    if (dto.allergies === undefined && dto.medicalNotes === undefined) return;
+    await this.prisma.employeeMedical.upsert({
+      where: { employeeId },
+      update: {
+        allergies: dto.allergies !== undefined ? encrypt(dto.allergies) : undefined,
+        notes: dto.medicalNotes !== undefined ? encrypt(dto.medicalNotes) : undefined,
+      },
+      create: {
+        employeeId,
+        allergies: dto.allergies ? encrypt(dto.allergies) : null,
+        notes: dto.medicalNotes ? encrypt(dto.medicalNotes) : null,
       },
     });
   }

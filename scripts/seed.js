@@ -51,6 +51,7 @@ async function main() {
     'admin:workflow:create', 'admin:workflow:read', 'admin:workflow:update',
     'attendance:create',
     'employee:movement:create', 'employee:movement:read', 'employee:movement:approve',
+    'employee:medical:read', 'employee:medical:update',
     'expense-claims:approve', 'expense-claims:pay',
     'holidays:create',
     'learning:create', 'learning:update',
