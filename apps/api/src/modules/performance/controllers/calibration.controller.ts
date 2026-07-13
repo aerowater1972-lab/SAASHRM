@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -29,7 +29,7 @@ export class CalibrationController {
   @ApiOperation({ summary: 'List calibration sessions' })
   async findAll(@TenantId() tenantId: string, @Query('reviewCycleId') reviewCycleId?: string) {
     return this.prisma.calibrationSession.findMany({
-      where: { ...(reviewCycleId && { reviewCycleId }) },
+      where: { ...(reviewCycleId && { reviewCycleId }), cycle: { tenantId } } as any,
       include: { cycle: true, department: true, facilitator: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -38,15 +38,19 @@ export class CalibrationController {
   @Get(':id')
   @ApiOperation({ summary: 'Get calibration session by ID' })
   async findOne(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.prisma.calibrationSession.findUnique({
-      where: { id },
+    return this.prisma.calibrationSession.findFirst({
+      where: { id, cycle: { tenantId } } as any,
       include: { cycle: true, department: true, facilitator: true },
     });
   }
 
   @Post(':id/finalize')
   @ApiOperation({ summary: 'Finalize calibration session' })
-  async finalize(@Param('id') id: string) {
+  async finalize(@TenantId() tenantId: string, @Param('id') id: string) {
+    const session = await this.prisma.calibrationSession.findFirst({
+      where: { id, cycle: { tenantId } } as any,
+    });
+    if (!session) throw new NotFoundException('Calibration session not found');
     return this.prisma.calibrationSession.update({
       where: { id },
       data: { status: 'finalized' },

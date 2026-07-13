@@ -13,12 +13,13 @@ export class DashboardService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [attendance, balances, schedule, payslips, pendingCount] = await Promise.all([
+    const [attendance, balances, schedule, payslips, pendingCount, notifications] = await Promise.all([
       this.getTodayAttendance(tenantId, employeeId, today),
       this.getLeaveBalances(tenantId, employeeId),
       this.getUpcomingSchedule(tenantId, employeeId, today),
       this.getRecentPayslips(tenantId, employeeId),
       this.getPendingApprovalsCount(tenantId, employeeId),
+      this.getRecentNotifications(tenantId, employeeId),
     ]);
 
     return {
@@ -27,6 +28,7 @@ export class DashboardService {
       upcomingSchedule: schedule,
       recentPayslips: payslips,
       pendingApprovals: pendingCount,
+      notifications,
     };
   }
 
@@ -99,12 +101,20 @@ export class DashboardService {
 
   private async getRecentPayslips(tenantId: string, employeeId: string) {
     return this.prisma.payslip.findMany({
-      where: { tenantId, employeeId },
+      where: { tenantId, employeeId, run: { status: 'APPROVED' as any } },
       include: {
         run: { include: { period: { select: { id: true, name: true } } } },
       } as any,
       orderBy: { createdAt: 'desc' },
       take: 5,
+    });
+  }
+
+  private async getRecentNotifications(tenantId: string, employeeId: string) {
+    return this.prisma.essNotification.findMany({
+      where: { employeeId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
     });
   }
 

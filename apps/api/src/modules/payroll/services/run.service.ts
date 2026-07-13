@@ -9,6 +9,7 @@ import { CreateRunDto } from '../dto/create-run.dto';
 import { PayrollRunListQueryDto } from '../dto/run-list-query.dto';
 import { BpjsService } from './bpjs.service';
 import { TaxService } from './tax.service';
+import { PayrollAdjustmentService } from './payroll-adjustment.service';
 import { PayrollRun } from '@prisma/client';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class RunService {
     private readonly employeeService: EmployeeService,
     private readonly workflow: WorkflowEngineService,
     private readonly eventBus: EventBusService,
+    private readonly adjustments: PayrollAdjustmentService,
   ) {}
 
   async create(tenantId: string, dto: CreateRunDto, userId?: string) {
@@ -98,9 +100,11 @@ export class RunService {
         orderBy: { createdAt: 'asc' },
       });
 
+      const appliedAdjustmentIds: string[] = [];
+
       for (const employee of employees) {
         const payslipData = await this.calculateEmployeePayroll(
-          tenantId, employee, period, components, id,
+          tenantId, employee, period, components, id, appliedAdjustmentIds,
         );
 
         const existingPayslip = await this.prisma.payslip.findFirst({
@@ -122,6 +126,10 @@ export class RunService {
             } as any,
           });
         }
+      }
+
+      if (appliedAdjustmentIds.length > 0) {
+        await this.adjustments.markApplied(appliedAdjustmentIds, id);
       }
 
       const summary = await this.getRunSummary(tenantId, id);
@@ -162,6 +170,7 @@ export class RunService {
     period: any,
     components: any[],
     runId: string,
+    appliedAdjustmentIds?: string[],
   ) {
     const employment = employee.employments?.[0];
     const baseSalary = Number(employment?.grade?.level || 0) * 1000000 || 0;
@@ -229,9 +238,25 @@ export class RunService {
       totalDeductions += taxResult.monthlyPph21;
     }
 
-    const totalLoanDeductions = await this.calculateLoanDeductions(employee);
-    if (totalLoanDeductions > 0) {
-      totalDeductions += totalLoanDeductions;
+    // Fold in event-sourced payroll adjustments (expense reimbursement, benefit
+    // allowance, performance bonus, loan installment) published by other modules.
+    if (appliedAdjustmentIds) {
+      const adjustments = await this.adjustments.getActiveForEmployee(
+        tenantId,
+        employee.id,
+        period.startDate,
+        period.endDate,
+      );
+
+      for (const adj of adjustments) {
+        const amount = Number(adj.amount || 0);
+        if (adj.type === 'DEDUCTION') {
+          totalDeductions += amount;
+        } else if (adj.type === 'EARNING') {
+          totalEarnings += amount;
+        }
+        appliedAdjustmentIds.push(adj.id);
+      }
     }
 
     const netPay = totalEarnings - totalDeductions;
@@ -242,19 +267,6 @@ export class RunService {
       totalDeductions,
       netPay,
     };
-  }
-
-  private async calculateLoanDeductions(employee: any): Promise<number> {
-    if (!employee.loans || employee.loans.length === 0) return 0;
-    let total = 0;
-    for (const loan of employee.loans) {
-      const remaining = Number(loan.remainingBalance || 0);
-      if (remaining > 0) {
-        const installment = Math.min(Number(loan.installmentAmount || 0), remaining);
-        total += installment;
-      }
-    }
-    return total;
   }
 
   private async evaluateFormula(formula: string | null | undefined, baseSalary: number): Promise<number> {

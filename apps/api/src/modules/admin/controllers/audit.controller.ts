@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { Response } from 'express';
 import { AuditService } from '../services/audit.service';
 import { AuditFilterDto } from '../dto/audit-filter.dto';
+import { IngestAuditDto } from '../dto/ingest-audit.dto';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { Permissions } from '@common/decorators/permissions.decorator';
@@ -26,20 +27,10 @@ export class AuditController {
 
   @Post('ingest')
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Internal endpoint to ingest audit log entries' })
+  @ApiOperation({ summary: 'Internal endpoint to ingest audit log entries (FR-09a v1.1)' })
   ingest(
     @TenantId() tenantId: string,
-    @Body() data: {
-      module: string;
-      entity: string;
-      entityId: string;
-      action: string;
-      changedBy: string;
-      oldValue?: Record<string, any>;
-      newValue?: Record<string, any>;
-      ipAddress?: string;
-      userAgent?: string;
-    },
+    @Body() data: IngestAuditDto,
   ) {
     return this.auditService.ingest({ ...data, tenantId });
   }

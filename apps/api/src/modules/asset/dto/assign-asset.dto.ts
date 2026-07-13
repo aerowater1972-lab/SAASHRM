@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 export class AssignAssetDto {
   @ApiProperty({ description: 'Employee ID to assign the asset to' })
   @IsString()
@@ -9,6 +9,12 @@ export class AssignAssetDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+export class AssignAssetCanonicalDto extends AssignAssetDto {
+  @ApiProperty({ description: 'Asset ID to assign' })
+  @IsUUID()
+  assetId!: string;
 }
 export class ReturnAssetDto {
   @ApiPropertyOptional()

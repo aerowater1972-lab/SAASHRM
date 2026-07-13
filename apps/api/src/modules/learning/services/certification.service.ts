@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { DomainEventType } from '@modules/shared/events/event-registry';
 import { Prisma } from '@prisma/client';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
 import {
@@ -10,10 +12,13 @@ import {
 
 @Injectable()
 export class CertificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventBus: EventBusService,
+  ) {}
 
   async create(tenantId: string, dto: CreateCertificationDto) {
-    return this.prisma.certification.create({
+    const certification = await this.prisma.certification.create({
       data: {
         tenantId,
         employeeId: dto.employeeId,
@@ -27,6 +32,16 @@ export class CertificationService {
         employee: { select: { id: true, employeeId: true, fullName: true } },
       },
     });
+
+    await this.eventBus.publishTyped(DomainEventType.CERTIFICATION_ISSUED, {
+      certificationId: certification.id,
+      employeeId: dto.employeeId,
+      name: dto.name,
+      expiryDate: certification.expiryDate ? certification.expiryDate.toISOString() : '',
+      tenantId,
+    }, { aggregateId: certification.id, tenantId });
+
+    return certification;
   }
 
   async findAll(tenantId: string, filters: CertificationFilterDto) {

@@ -4,6 +4,7 @@ import { ResignationService } from './resignation.service';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { DomainEventType } from '@modules/shared/events/event-registry';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { RequestStatus } from '@prisma/client';
 
@@ -11,7 +12,10 @@ describe('ResignationService', () => {
   let service: ResignationService;
   let prisma: any;
 
-  const mockEventBus = { publish: jest.fn().mockResolvedValue(undefined) };
+  const mockEventBus = {
+    publish: jest.fn().mockResolvedValue(undefined),
+    publishTyped: jest.fn().mockResolvedValue(undefined),
+  };
 
   const mockEmployeeService = {
     findById: jest.fn().mockResolvedValue({ id: 'emp-1', status: 'ACTIVE' as any }),
@@ -58,6 +62,7 @@ describe('ResignationService', () => {
     tenantId: 'default',
     employeeId: 'emp-1',
     status: RequestStatus.PENDING,
+    effectiveDate: new Date('2026-08-01T00:00:00.000Z'),
   };
 
   beforeEach(async () => {
@@ -123,6 +128,52 @@ describe('ResignationService', () => {
       mockPrisma.resignationRequest.update.mockResolvedValue({ ...mockResignation, status: RequestStatus.REJECTED });
       const result = await service.reject('default', 'res-1', 'not a fit');
       expect(result.status).toBe(RequestStatus.REJECTED);
+    });
+  });
+
+  describe('completeTaskById', () => {
+    it('should throw NotFoundException if task missing', async () => {
+      mockPrisma.offboardingTask.findFirst.mockResolvedValue(null);
+      await expect(service.completeTaskById('default', 'missing')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should complete a task by its own id', async () => {
+      mockPrisma.offboardingTask.findFirst
+        .mockResolvedValueOnce({ id: 'task-1', resignationId: 'res-1', status: 'PENDING' as any })
+        .mockResolvedValueOnce({ id: 'task-1', resignationId: 'res-1', status: 'PENDING' as any });
+      mockPrisma.resignationRequest.findFirst.mockResolvedValue({ ...mockResignation, status: RequestStatus.APPROVED });
+      mockPrisma.offboardingTask.update.mockResolvedValue({ id: 'task-1', status: 'COMPLETED' as any });
+
+      const result = await service.completeTaskById('default', 'task-1');
+      expect(result.status).toBe('COMPLETED');
+    });
+  });
+
+  describe('offboard', () => {
+    it('should publish RESIGNATION_EFFECTIVE and OFFBOARDING_COMPLETED', async () => {
+      mockPrisma.resignationRequest.findFirst.mockResolvedValue({ ...mockResignation, status: RequestStatus.APPROVED });
+      mockPrisma.offboardingTask.findMany.mockResolvedValue([]);
+      mockPrisma.resignationRequest.update.mockResolvedValue({ ...mockResignation, status: RequestStatus.CANCELLED });
+
+      await service.offboard('default', 'res-1');
+
+      expect(mockEventBus.publishTyped).toHaveBeenCalledWith(
+        DomainEventType.RESIGNATION_EFFECTIVE,
+        expect.objectContaining({ employeeId: 'emp-1' }),
+        expect.objectContaining({ aggregateId: 'res-1' }),
+      );
+      expect(mockEventBus.publishTyped).toHaveBeenCalledWith(
+        DomainEventType.OFFBOARDING_COMPLETED,
+        expect.objectContaining({ resignationId: 'res-1', employeeId: 'emp-1' }),
+        expect.objectContaining({ aggregateId: 'res-1' }),
+      );
+    });
+
+    it('should block offboarding while tasks are pending', async () => {
+      mockPrisma.resignationRequest.findFirst.mockResolvedValue({ ...mockResignation, status: RequestStatus.APPROVED });
+      mockPrisma.offboardingTask.findMany.mockResolvedValue([{ id: 'task-1', status: 'PENDING' as any }]);
+
+      await expect(service.offboard('default', 'res-1')).rejects.toThrow(BadRequestException);
     });
   });
 });

@@ -5,6 +5,7 @@ import { PgJobQueueService } from './events/pg-job-queue.service';
 import { OutboxService } from './events/outbox.service';
 import { JobHandlerRegistry, JobWorkerService, LoggingJobHandler, NotificationJobHandler } from './jobs';
 import { NotificationService } from './notification/notification.service';
+import { AuditEventConsumer } from './events/audit-event.consumer';
 
 @Global()
 @Module({
@@ -18,6 +19,7 @@ import { NotificationService } from './notification/notification.service';
     LoggingJobHandler,
     NotificationJobHandler,
     NotificationService,
+    AuditEventConsumer,
   ],
   exports: [
     EventBusService,

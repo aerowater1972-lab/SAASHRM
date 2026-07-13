@@ -115,4 +115,13 @@ export class TrainingController {
   ) {
     return this.trainingService.cancel(tenantId, id);
   }
+
+  @Get('employees/:employeeId/history')
+  @ApiOperation({ summary: 'Get employee learning history (trainings + certifications)' })
+  getLearningHistory(
+    @TenantId() tenantId: string,
+    @Param('employeeId') employeeId: string,
+  ) {
+    return this.trainingService.getLearningHistory(tenantId, employeeId);
+  }
 }

@@ -118,6 +118,12 @@ export class CycleService {
       }, { aggregateId: review.id, tenantId });
     }
 
+    await this.eventBus.publishTyped(DomainEventType.REVIEW_CYCLE_FINALIZED, {
+      cycleId: id,
+      finalScoresCount: reviews.length,
+      tenantId,
+    }, { aggregateId: id, tenantId });
+
     return updated;
   }
 }

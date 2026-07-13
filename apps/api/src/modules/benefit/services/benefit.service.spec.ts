@@ -5,6 +5,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { DomainEventType } from '@modules/shared/events/event-registry';
 import { BenefitStatus } from '@prisma/client';
 
 describe('BenefitService', () => {
@@ -104,6 +105,11 @@ describe('BenefitService', () => {
       mockPrisma.employeeBenefit.create.mockResolvedValue({ id: 'enr-1', status: BenefitStatus.ACTIVE });
       const result = await service.enroll('default', { benefitId: 'benefit-1', employeeId: 'emp-1' } as any);
       expect(result.status).toBe(BenefitStatus.ACTIVE);
+      expect(mockEventBus.publishTyped).toHaveBeenCalledWith(
+        DomainEventType.BENEFIT_ENROLLED,
+        expect.objectContaining({ benefitId: 'benefit-1', employeeId: 'emp-1' }),
+        expect.any(Object),
+      );
     });
   });
 

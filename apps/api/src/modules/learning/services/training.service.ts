@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
+import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { DomainEventType } from '@modules/shared/events/event-registry';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
 import { Prisma, TrainingStatus, ParticipantStatus, Training } from '@prisma/client';
 import {
@@ -21,6 +23,7 @@ export class TrainingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly workflow: WorkflowEngineService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async create(tenantId: string, dto: CreateTrainingDto) {
@@ -153,7 +156,7 @@ export class TrainingService {
       throw new BadRequestException('Employee is already registered for this training');
     }
 
-    return this.prisma.trainingParticipant.create({
+    const participant = await this.prisma.trainingParticipant.create({
       data: {
         trainingId,
         employeeId: dto.employeeId,
@@ -162,6 +165,15 @@ export class TrainingService {
         employee: { select: { id: true, employeeId: true, fullName: true } },
       },
     });
+
+    await this.eventBus.publishTyped(DomainEventType.TRAINING_ENROLLMENT_CREATED, {
+      trainingId,
+      employeeId: dto.employeeId,
+      title: training.title,
+      tenantId,
+    }, { aggregateId: participant.id, tenantId });
+
+    return participant;
   }
 
   async bulkRegister(tenantId: string, trainingId: string, dto: BulkRegisterParticipantDto) {
@@ -200,12 +212,23 @@ export class TrainingService {
       skipDuplicates: true,
     });
 
-    return this.prisma.trainingParticipant.findMany({
+    const created = await this.prisma.trainingParticipant.findMany({
       where: { trainingId, employeeId: { in: newIds } },
       include: {
         employee: { select: { id: true, employeeId: true, fullName: true } },
       },
     });
+
+    for (const participant of created) {
+      await this.eventBus.publishTyped(DomainEventType.TRAINING_ENROLLMENT_CREATED, {
+        trainingId,
+        employeeId: participant.employeeId,
+        title: training.title,
+        tenantId,
+      }, { aggregateId: participant.id, tenantId });
+    }
+
+    return created;
   }
 
   async getParticipants(tenantId: string, trainingId: string) {
@@ -223,11 +246,14 @@ export class TrainingService {
   async updateParticipant(id: string, dto: UpdateParticipantDto) {
     const participant = await this.prisma.trainingParticipant.findUnique({
       where: { id },
+      include: { training: { select: { tenantId: true } } },
     });
 
     if (!participant) {
       throw new NotFoundException('Participant not found');
     }
+
+    const tenantId = (participant as any).training?.tenantId;
 
     const data: any = {};
     if (dto.status !== undefined) data.status = dto.status;
@@ -238,14 +264,26 @@ export class TrainingService {
       data.completedAt = new Date();
     }
 
-    return this.prisma.trainingParticipant.update({
+    const updated = await this.prisma.trainingParticipant.update({
       where: { id },
       data,
       include: {
-        training: { select: { id: true, title: true } },
+        training: { select: { id: true, title: true, tenantId: true } },
         employee: { select: { id: true, employeeId: true, fullName: true } },
       },
     });
+
+    if (dto.status === ParticipantStatus.COMPLETED && tenantId) {
+      await this.eventBus.publishTyped(DomainEventType.TRAINING_COMPLETED, {
+        trainingId: updated.trainingId,
+        employeeId: updated.employeeId,
+        title: (updated as any).training?.title || '',
+        score: Number(updated.score || 0),
+        tenantId,
+      }, { aggregateId: updated.id, tenantId });
+    }
+
+    return updated;
   }
 
   async cancel(tenantId: string, id: string) {
@@ -262,5 +300,41 @@ export class TrainingService {
         },
       },
     });
+  }
+
+  async getLearningHistory(tenantId: string, employeeId: string) {
+    const [trainings, certifications] = await Promise.all([
+      this.prisma.trainingParticipant.findMany({
+        where: { employeeId, training: { tenantId } },
+        include: {
+          training: { select: { id: true, title: true, type: true, startDate: true, endDate: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.certification.findMany({
+        where: { tenantId, employeeId },
+        orderBy: { issuedDate: 'desc' },
+      }),
+    ]);
+
+    return {
+      employeeId,
+      trainings: trainings.map((p) => ({
+        participantId: p.id,
+        trainingId: p.trainingId,
+        title: (p as any).training?.title || '',
+        type: (p as any).training?.type || '',
+        status: p.status,
+        score: p.score,
+        completedAt: p.completedAt,
+      })),
+      certifications: certifications.map((c) => ({
+        certificationId: c.id,
+        name: c.name,
+        issuer: c.issuer,
+        issuedDate: c.issuedDate,
+        expiryDate: c.expiryDate,
+      })),
+    };
   }
 }

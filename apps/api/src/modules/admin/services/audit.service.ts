@@ -25,8 +25,8 @@ export class AuditService {
     ipAddress?: string;
     userAgent?: string;
   }) {
-    const log = await this.prisma.auditLog.create({ data });
-
+    // Persistence is delegated to the Audit Log Service consumer of the
+    // *.data.changed event (per Consolidated Event Contract, Inkonsistensi #1).
     await this.eventBus.publishTyped(DomainEventType.DATA_CHANGED, {
       module: data.module,
       entity: data.entity,
@@ -35,11 +35,16 @@ export class AuditService {
       changedBy: data.changedBy,
       diff: { old: data.oldValue, new: data.newValue },
       tenantId: data.tenantId,
-    }, { aggregateId: data.entityId, tenantId: data.tenantId, userId: data.changedBy }).catch(err => {
-      this.logger.warn(`Failed to publish DATA_CHANGED event: ${err.message}`);
-    });
+    }, { aggregateId: data.entityId, tenantId: data.tenantId, userId: data.changedBy });
 
-    return log;
+    return {
+      accepted: true,
+      module: data.module,
+      entity: data.entity,
+      entityId: data.entityId,
+      action: data.action,
+      tenantId: data.tenantId,
+    };
   }
 
   async findAll(tenantId: string, filters: AuditFilterDto) {

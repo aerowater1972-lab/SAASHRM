@@ -190,10 +190,10 @@ export class LoanService {
   }
 
   private async generateInstallments(tenantId: string, loanId: string, count: number, baseAmount: number) {
-    const existing = await this.prisma.loanInstallment.findMany({ where: { loanId } });
+    const existing = await this.prisma.loanInstallment.findMany({ where: { loanId, loan: { tenantId } } });
     if (existing.length > 0) return;
 
-    const loan = await this.prisma.loan.findUnique({ where: { id: loanId } });
+    const loan = await this.prisma.loan.findUnique({ where: { id: loanId, tenantId } });
     if (!loan) return;
 
     const totalAmount = loan.amount.toNumber();

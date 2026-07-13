@@ -167,6 +167,13 @@ export class BenefitService {
       tenantId,
     }, { aggregateId: enrollment.id, tenantId });
 
+    await this.eventBus.publishTyped(DomainEventType.BENEFIT_ENROLLED, {
+      benefitId: dto.benefitId,
+      employeeId: dto.employeeId,
+      planId: enrollment.id,
+      tenantId,
+    }, { aggregateId: enrollment.id, tenantId, userId: dto.employeeId });
+
     return enrollment;
   }
 

@@ -96,6 +96,40 @@ export class ApplicationService {
     return application;
   }
 
+  async getPipeline(tenantId: string, jobPostingId?: string) {
+    const statuses = ['NEW', 'SCREENING', 'INTERVIEW', 'OFFER', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'];
+    const where: Prisma.ApplicationWhereInput = { tenantId };
+    if (jobPostingId) where.jobPostingId = jobPostingId;
+
+    const applications = await this.prisma.application.findMany({
+      where,
+      include: {
+        candidate: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        jobPosting: { select: { id: true, title: true } },
+      },
+      orderBy: { appliedAt: 'desc' },
+    });
+
+    const columns = statuses.map((status) => ({
+      status,
+      candidates: applications
+        .filter((app) => app.status === status)
+        .map((app) => ({
+          id: app.id,
+          candidateId: app.candidateId,
+          firstName: (app as any).candidate?.firstName || '',
+          lastName: (app as any).candidate?.lastName || '',
+          email: (app as any).candidate?.email || '',
+          jobPostingTitle: (app as any).jobPosting?.title || '',
+          appliedAt: app.appliedAt,
+          notes: app.notes,
+        })),
+    }));
+
+    const total = applications.length;
+    return { total, columns };
+  }
+
   async updateStatus(tenantId: string, id: string, dto: ApplicationStatusDto) {
     const application = await this.findOne(tenantId, id);
     const current = application.status as string;

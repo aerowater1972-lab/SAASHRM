@@ -130,6 +130,37 @@ export class NotificationService {
         return { title: 'Asset Return Required', body: 'Please return company assets.' };
       case 'account.deactivation.requested':
         return { title: 'Account Deactivation', body: 'System account deactivation has been requested.' };
+      case DomainEventType.ONBOARDING_DOCUMENT_UPLOADED:
+        return { title: 'Document Uploaded', body: `Onboarding document (${payload.docType}) uploaded for application ${payload.applicationId}.` };
+      case DomainEventType.ONBOARDING_TASK_CREATED:
+        return { title: 'New Onboarding Task', body: `Task "${payload.taskName}" assigned to ${payload.ownerTeam}, due ${payload.dueDate}.` };
+      case DomainEventType.ONBOARDING_TASK_COMPLETED:
+        return { title: 'Onboarding Task Completed', body: `Task completed by ${payload.completedBy}.` };
+      case DomainEventType.CANDIDATE_CONVERTED:
+        return { title: 'Candidate Converted', body: `Candidate converted to employee ${payload.employeeCode}, joining ${payload.joinDate}.` };
+      case DomainEventType.REVIEW_CYCLE_FINALIZED:
+        return { title: 'Review Cycle Finalized', body: `Review cycle ${payload.cycleId} finalized — ${payload.finalScoresCount} scores published.` };
+      // ——— Learning events ———
+      case DomainEventType.TRAINING_ENROLLMENT_CREATED:
+        return {
+          title: 'Training Assigned',
+          body: `You have been enrolled in "${payload.title}".`,
+        };
+      case DomainEventType.TRAINING_COMPLETED:
+        return {
+          title: 'Training Completed',
+          body: `Training "${payload.title}" completed with score ${payload.score}.`,
+        };
+      case DomainEventType.CERTIFICATION_ISSUED:
+        return {
+          title: 'Certification Issued',
+          body: `Certification "${payload.name}" has been recorded.`,
+        };
+      case DomainEventType.CERTIFICATION_EXPIRING:
+        return {
+          title: 'Certification Expiring',
+          body: `Certification "${payload.name}" expires on ${payload.expiryDate}. Renew soon.`,
+        };
       case 'application.status.updated':
         return { title: 'Application Status Updated', body: `Application status changed to ${payload.newStatus}.` };
       case 'candidate.converted':

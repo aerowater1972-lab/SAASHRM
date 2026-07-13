@@ -42,6 +42,16 @@ export class ApplicationController {
     return this.applicationService.findAll(tenantId, filters);
   }
 
+  @Get('pipeline')
+  @ApiOperation({ summary: 'Get candidate pipeline grouped by status (kanban view)' })
+  @ApiQuery({ name: 'jobPostingId', required: false, type: String })
+  getPipeline(
+    @TenantId() tenantId: string,
+    @Query('jobPostingId') jobPostingId?: string,
+  ) {
+    return this.applicationService.getPipeline(tenantId, jobPostingId);
+  }
+
   @Get('applications/:id')
   @ApiOperation({ summary: 'Get application by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {

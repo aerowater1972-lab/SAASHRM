@@ -19,8 +19,15 @@ export enum DomainEventType {
   LOAN_DISBURSED              = 'loan.disbursed',
   EXPENSE_APPROVED            = 'expense.approved',
   ONBOARDING_DOCUMENT_UPLOADED = 'onboarding.document.uploaded',
+  ONBOARDING_TASK_CREATED      = 'onboarding.task.created',
+  ONBOARDING_TASK_COMPLETED    = 'onboarding.task.completed',
+  CANDIDATE_CONVERTED          = 'candidate.converted',
   BENEFIT_ENROLLED            = 'benefit.enrolled',
   REVIEW_CYCLE_FINALIZED      = 'review_cycle.finalized',
+  TRAINING_ENROLLMENT_CREATED  = 'training.enrollment.created',
+  TRAINING_COMPLETED           = 'training.completed',
+  CERTIFICATION_ISSUED         = 'certification.issued',
+  CERTIFICATION_EXPIRING       = 'certification.expiring',
 }
 
 export interface EventDefinition {
@@ -131,7 +138,25 @@ export const EVENT_REGISTRY: Record<DomainEventType, EventDefinition> = {
     type: DomainEventType.ONBOARDING_DOCUMENT_UPLOADED,
     description: 'An onboarding document has been uploaded for a candidate',
     aggregateType: 'recruitment',
-    expectedPayload: { applicationId: 'string', docType: 'string', fileUrl: 'string' },
+    expectedPayload: { applicationId: 'string', docType: 'string', fileUrl: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.ONBOARDING_TASK_CREATED]: {
+    type: DomainEventType.ONBOARDING_TASK_CREATED,
+    description: 'An onboarding task has been assigned',
+    aggregateType: 'recruitment',
+    expectedPayload: { taskId: 'string', applicationId: 'string', taskName: 'string', ownerTeam: 'string', dueDate: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.ONBOARDING_TASK_COMPLETED]: {
+    type: DomainEventType.ONBOARDING_TASK_COMPLETED,
+    description: 'An onboarding task has been completed',
+    aggregateType: 'recruitment',
+    expectedPayload: { taskId: 'string', applicationId: 'string', completedBy: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.CANDIDATE_CONVERTED]: {
+    type: DomainEventType.CANDIDATE_CONVERTED,
+    description: 'Candidate has been converted to an employee record',
+    aggregateType: 'recruitment',
+    expectedPayload: { applicationId: 'string', candidateId: 'string', employeeId: 'string', employeeCode: 'string', joinDate: 'string', tenantId: 'string' },
   },
   [DomainEventType.BENEFIT_ENROLLED]: {
     type: DomainEventType.BENEFIT_ENROLLED,
@@ -144,5 +169,29 @@ export const EVENT_REGISTRY: Record<DomainEventType, EventDefinition> = {
     description: 'Performance review cycle has been finalized',
     aggregateType: 'performance',
     expectedPayload: { cycleId: 'string', finalScoresCount: 'number', tenantId: 'string' },
+  },
+  [DomainEventType.TRAINING_ENROLLMENT_CREATED]: {
+    type: DomainEventType.TRAINING_ENROLLMENT_CREATED,
+    description: 'Employee enrolled/assigned to a training program',
+    aggregateType: 'learning',
+    expectedPayload: { trainingId: 'string', employeeId: 'string', title: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.TRAINING_COMPLETED]: {
+    type: DomainEventType.TRAINING_COMPLETED,
+    description: 'Employee completed a training program',
+    aggregateType: 'learning',
+    expectedPayload: { trainingId: 'string', employeeId: 'string', title: 'string', score: 'number', tenantId: 'string' },
+  },
+  [DomainEventType.CERTIFICATION_ISSUED]: {
+    type: DomainEventType.CERTIFICATION_ISSUED,
+    description: 'A certification record has been issued to an employee',
+    aggregateType: 'learning',
+    expectedPayload: { certificationId: 'string', employeeId: 'string', name: 'string', expiryDate: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.CERTIFICATION_EXPIRING]: {
+    type: DomainEventType.CERTIFICATION_EXPIRING,
+    description: 'A certification is approaching its expiry date',
+    aggregateType: 'learning',
+    expectedPayload: { certificationId: 'string', employeeId: 'string', name: 'string', expiryDate: 'string', tenantId: 'string' },
   },
 };

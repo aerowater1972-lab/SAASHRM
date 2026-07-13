@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { AuditEventService } from './events/audit-event.service';
 import { EventBusService } from './events/event-bus.service';
+import { DomainEventType } from './events/event-registry';
 import { PaginationDto } from './dto/pagination.dto';
 import { PaginationMeta } from './dto/api-response.dto';
 
@@ -10,7 +10,6 @@ export class BaseService {
 
   constructor(
     protected readonly prisma: PrismaService,
-    protected readonly auditService?: AuditEventService,
     protected readonly eventBus?: EventBusService,
   ) {}
 
@@ -75,16 +74,7 @@ export class BaseService {
 
     const entity = await model.create({ data });
 
-    if (this.auditService) {
-      await this.auditService.log({
-        action: 'CREATE',
-        entity: entityName,
-        entityId: entity.id,
-        tenantId: tenantId || 'default',
-        userId: userId || 'system',
-        changes: data,
-      });
-    }
+    await this.publishAudit(entityName, entity.id, 'CREATE', userId, tenantId, { new: entity });
 
     return entity;
   }
@@ -105,16 +95,7 @@ export class BaseService {
 
     const entity = await model.update({ where, data: dto });
 
-    if (this.auditService) {
-      await this.auditService.log({
-        action: 'UPDATE',
-        entity: entityName,
-        entityId: id,
-        tenantId: tenantId || 'default',
-        userId: userId || 'system',
-        changes: { before: existing, after: entity },
-      });
-    }
+    await this.publishAudit(entityName, id, 'UPDATE', userId, tenantId, { old: existing, new: entity });
 
     return entity;
   }
@@ -134,15 +115,35 @@ export class BaseService {
 
     await model.delete({ where });
 
-    if (this.auditService) {
-      await this.auditService.log({
-        action: 'DELETE',
-        entity: entityName,
-        entityId: id,
+    await this.publishAudit(entityName, id, 'DELETE', userId, tenantId, { old: existing });
+  }
+
+  /**
+   * Emits a generic *.data.changed audit event (Consolidated Event Contract,
+   * Inkonsistensi #1) for the Audit Log Service to persist asynchronously.
+   */
+  private async publishAudit(
+    entity: string,
+    entityId: string,
+    action: string,
+    userId?: string,
+    tenantId?: string,
+    diff?: { old?: any; new?: any },
+  ): Promise<void> {
+    if (!this.eventBus) return;
+
+    await this.eventBus.publishTyped(
+      DomainEventType.DATA_CHANGED,
+      {
+        module: entity,
+        entity,
+        entityId,
+        action,
+        changedBy: userId || 'system',
+        diff,
         tenantId: tenantId || 'default',
-        userId: userId || 'system',
-        changes: existing,
-      });
-    }
+      },
+      { aggregateId: entityId, tenantId: tenantId || 'default', userId: userId || 'system' },
+    );
   }
 }

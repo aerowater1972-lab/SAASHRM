@@ -294,6 +294,18 @@ export class ResignationService {
     return updated;
   }
 
+  async completeTaskById(tenantId: string, taskId: string) {
+    const task = await this.prisma.offboardingTask.findFirst({
+      where: { id: taskId },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Offboarding task not found');
+    }
+
+    return this.completeTask(tenantId, task.resignationId, taskId);
+  }
+
   async offboard(tenantId: string, id: string) {
     const request = await this.findOne(tenantId, id);
 
@@ -321,6 +333,16 @@ export class ResignationService {
       effectiveDate: request.effectiveDate.toISOString(),
       tenantId,
     }, { aggregateId: id, tenantId });
+
+    await this.eventBus.publishTyped(
+      DomainEventType.OFFBOARDING_COMPLETED,
+      {
+        resignationId: id,
+        employeeId: request.employeeId,
+        tenantId,
+      },
+      { aggregateId: id, tenantId },
+    );
 
     await this.eventBus.publish({
       name: 'asset.return.requested',

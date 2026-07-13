@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { TenantId } from '@common/decorators/tenant.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
 
 @ApiTags('Benefits - Eligibility Rules')
@@ -12,14 +13,21 @@ export class EligibilityRuleController {
 
   @Post()
   @ApiOperation({ summary: 'Create eligibility rule' })
-  async create(@Body() dto: any) {
+  async create(@TenantId() tenantId: string, @Body() dto: any) {
+    const benefit = await this.prisma.benefit.findFirst({
+      where: { id: dto.benefitId, tenantId, deletedAt: null },
+    });
+    if (!benefit) {
+      throw new NotFoundException('Benefit not found');
+    }
     return this.prisma.benefitEligibilityRule.create({ data: dto });
   }
 
   @Get()
   @ApiOperation({ summary: 'List eligibility rules' })
-  async findAll() {
+  async findAll(@TenantId() tenantId: string) {
     return this.prisma.benefitEligibilityRule.findMany({
+      where: { benefit: { tenantId } },
       include: { benefit: true, grade: true, department: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -27,16 +35,26 @@ export class EligibilityRuleController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get rule by ID' })
-  async findOne(@Param('id') id: string) {
-    return this.prisma.benefitEligibilityRule.findUnique({
-      where: { id },
+  async findOne(@TenantId() tenantId: string, @Param('id') id: string) {
+    const rule = await this.prisma.benefitEligibilityRule.findFirst({
+      where: { id, benefit: { tenantId } },
       include: { benefit: true, grade: true, department: true },
     });
+    if (!rule) {
+      throw new NotFoundException('Eligibility rule not found');
+    }
+    return rule;
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete eligibility rule' })
-  async remove(@Param('id') id: string) {
+  async remove(@TenantId() tenantId: string, @Param('id') id: string) {
+    const rule = await this.prisma.benefitEligibilityRule.findFirst({
+      where: { id, benefit: { tenantId } },
+    });
+    if (!rule) {
+      throw new NotFoundException('Eligibility rule not found');
+    }
     return this.prisma.benefitEligibilityRule.delete({ where: { id } });
   }
 }

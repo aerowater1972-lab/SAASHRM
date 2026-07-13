@@ -347,6 +347,7 @@ model Employee {
   attendanceCorrectionsApproved AttendanceCorrection[] @relation("correction_approver")
   calibrationSessionsFacilitated CalibrationSession[] @relation("calibration_facilitator")
   finalScoresCalibrated          FinalScore[]          @relation("final_score_calibrator")
+  payrollAdjustments             PayrollAdjustment[]
   finalScores                    FinalScore[]
   movementRequests               MovementRequest[]
   essNotifications               EssNotification[]
@@ -752,6 +753,29 @@ model PayrollComponent {
 
   payrollItems        PayrollItem[]
   employeeBenefitComponents EmployeeBenefitComponent[]
+}
+
+model PayrollAdjustment {
+  id           String   @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  sourceEvent  String // canonical event name that produced this adjustment
+  referenceId  String? // claimId / loanId / benefitTypeId / reviewCycleId / grade ids
+  type         PayrollAdjustmentType // EARNING, DEDUCTION, SALARY_UPDATE
+  amount       Decimal? @db.Decimal(18, 2)
+  currency     String   @default("IDR")
+  description  String?
+  effectiveDate DateTime @default(now())
+  expiresAt    DateTime?
+  appliedRunId String? // set when consumed by a payroll run
+  status       PayrollAdjustmentStatus @default(PENDING) // PENDING, APPLIED, CANCELLED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
 }
 
 model PayrollPeriod {
@@ -1664,6 +1688,18 @@ enum PayrollRunStatus {
   PROCESSING
   COMPLETED
   APPROVED
+  CANCELLED
+}
+
+enum PayrollAdjustmentType {
+  EARNING
+  DEDUCTION
+  SALARY_UPDATE
+}
+
+enum PayrollAdjustmentStatus {
+  PENDING
+  APPLIED
   CANCELLED
 }
 

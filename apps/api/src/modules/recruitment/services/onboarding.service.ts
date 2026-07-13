@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { DomainEventType } from '@modules/shared/events/event-registry';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { ConvertEmployeeDto } from '../dto/convert-employee.dto';
@@ -90,19 +91,14 @@ export class OnboardingService {
       }),
     ]);
 
-    await this.eventBus.publish({
-      name: 'candidate.converted',
-      aggregateId: employee.id,
-      aggregateType: 'Employee',
-      payload: {
-        applicationId,
-        candidateId: candidate.id,
-        employeeId: employee.id,
-        employeeCode: dto.employeeId,
-        joinDate: acceptedOffer.joinDate,
-      },
+    await this.eventBus.publishTyped(DomainEventType.CANDIDATE_CONVERTED, {
+      applicationId,
+      candidateId: candidate.id,
+      employeeId: employee.id,
+      employeeCode: dto.employeeId,
+      joinDate: acceptedOffer.joinDate.toISOString(),
       tenantId,
-    });
+    }, { aggregateId: employee.id, tenantId });
 
     return employee;
   }

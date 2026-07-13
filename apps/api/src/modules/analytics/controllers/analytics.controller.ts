@@ -1,10 +1,12 @@
-import { Controller, Get, Param, Query , UseGuards} from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { AnalyticsService } from '../services/analytics.service';
 import { AnalyticsFilterDto } from '../dto/analytics-filter.dto';
+import { AnalyticsExportDto } from '../dto/analytics-export.dto';
 
 @ApiTags('Analytics')
 @ApiBearerAuth()
@@ -81,6 +83,22 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Turnover rate by period' })
   getTurnoverRate(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
     return this.analyticsService.getTurnoverRate(tenantId, filters);
+  }
+
+  @Get('workforce-cost')
+  @ApiOperation({ summary: 'Cost of workforce: salary, BPJS, benefit per period/department' })
+  getWorkforceCost(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getWorkforceCost(tenantId, filters);
+  }
+
+  @Post('export')
+  @ApiOperation({ summary: 'Export an analytics report as CSV/PDF' })
+  exportReport(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') userId: string,
+    @Body() dto: AnalyticsExportDto,
+  ) {
+    return this.analyticsService.exportReport(tenantId, userId, dto);
   }
 
   @Get('dashboard/summary')

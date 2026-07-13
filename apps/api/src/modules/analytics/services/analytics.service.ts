@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { AnalyticsFilterDto } from '../dto/analytics-filter.dto';
+import { AnalyticsExportDto } from '../dto/analytics-export.dto';
 
 @Injectable()
 export class AnalyticsService {
@@ -570,5 +571,84 @@ export class AnalyticsService {
         totalResigned: Number(turnover[0]?.resigned || 0),
       },
     };
+  }
+
+  async getWorkforceCost(tenantId: string, filters: AnalyticsFilterDto) {
+    const [payroll, components] = await Promise.all([
+      this.getPayrollSummary(tenantId, filters),
+      this.getPayrollByComponent(tenantId, filters),
+    ]);
+
+    return {
+      totalPayroll: payroll.totalPayroll,
+      totalEmployees: payroll.totalEmployees,
+      avgSalary: payroll.avgSalary,
+      byDepartment: payroll.byDepartment,
+      components: components.breakdown,
+    };
+  }
+
+  async exportReport(
+    tenantId: string,
+    userId: string | null,
+    dto: AnalyticsExportDto,
+  ) {
+    const format = dto.format || 'csv';
+    const filters = dto.filters || ({} as AnalyticsFilterDto);
+
+    let data: any;
+    switch (dto.report) {
+      case 'turnover':
+        data = await this.getTurnoverRate(tenantId, filters);
+        break;
+      case 'workforce-cost':
+        data = await this.getWorkforceCost(tenantId, filters);
+        break;
+      case 'headcount':
+      default:
+        data = await this.getHeadcount(tenantId, filters);
+        break;
+    }
+
+    const content = format === 'pdf' ? this.toPdf(dto.report, data) : this.toCsv(dto.report, data);
+    const extension = format === 'pdf' ? 'pdf' : 'csv';
+
+    return {
+      report: dto.report,
+      format,
+      filename: `analytics-${dto.report}-${new Date().toISOString().slice(0, 10)}.${extension}`,
+      exportedBy: userId,
+      content,
+    };
+  }
+
+  private toCsv(report: string, data: any): string {
+    if (report === 'headcount') {
+      const lines = ['section,key,count'];
+      for (const r of data.byDepartment ?? []) lines.push(`department,${r.department},${r.count}`);
+      for (const r of data.byStatus ?? []) lines.push(`status,${r.status},${r.count}`);
+      for (const r of data.byGrade ?? []) lines.push(`grade,${r.grade},${r.count}`);
+      return lines.join('\n');
+    }
+    if (report === 'turnover') {
+      const lines = ['period,hired,resigned,headcount,turnoverRate'];
+      for (const r of data.turnover ?? []) {
+        lines.push(`${r.period},${r.hired},${r.resigned},${r.headcount},${r.turnoverRate}`);
+      }
+      return lines.join('\n');
+    }
+    if (report === 'workforce-cost') {
+      const lines = ['department,totalPayroll,employeeCount,avgSalary'];
+      for (const r of data.byDepartment ?? []) {
+        lines.push(`${r.department},${r.totalPayroll},${r.employeeCount},${r.avgSalary}`);
+      }
+      return lines.join('\n');
+    }
+    return JSON.stringify(data);
+  }
+
+  private toPdf(report: string, data: any): string {
+    const csv = this.toCsv(report, data);
+    return `%PDF-1.4\nReport: ${report}\n${csv}\n%%EOF`;
   }
 }
