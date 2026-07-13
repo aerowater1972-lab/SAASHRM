@@ -4,7 +4,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
+import { ChangePasswordDto } from '../dto/create-user.dto';
 import { AuthGuard } from '@common/guards/auth.guard';
+import { PermissionGuard } from '@common/guards/permission.guard';
 import { Public } from '@common/decorators/public.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
@@ -17,9 +19,9 @@ export class AuthController {
   @Post('register')
   @Public()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new admin user' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  @ApiOperation({ summary: 'Register a new admin user (tenant-aware via x-tenant-id)' })
+  register(@TenantId() tenantId: string, @Body() dto: RegisterDto) {
+    return this.authService.register(tenantId ?? 'default', dto);
   }
 
   @Post('login')
@@ -46,5 +48,17 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout current user' })
   logout(@CurrentUser('sub') userId: string) {
     return this.authService.logout(userId);
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change the authenticated user password' })
+  changePassword(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(userId, dto.currentPassword, dto.newPassword);
   }
 }

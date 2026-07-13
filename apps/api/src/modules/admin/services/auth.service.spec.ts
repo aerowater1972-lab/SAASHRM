@@ -94,7 +94,7 @@ describe('AuthService', () => {
       mockPrisma.user.create.mockResolvedValue(mockUser);
 
       const dto = { email: 'test@example.com', password: 'password123', fullName: 'Test User' };
-      const result = await service.register(dto);
+      const result = await service.register('default', dto);
 
       expect(result.user).toEqual(sanitizedUser);
       expect(result.accessToken).toBe('mock-jwt-token');
@@ -107,7 +107,7 @@ describe('AuthService', () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
 
       const dto = { email: 'test@example.com', password: 'password123', fullName: 'Test User' };
-      await expect(service.register(dto)).rejects.toThrow(ConflictException);
+      await expect(service.register('default', dto)).rejects.toThrow(ConflictException);
       expect(mockPrisma.user.create).not.toHaveBeenCalled();
     });
   });

@@ -13,9 +13,12 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async register(dto: { email: string; password: string; fullName: string }) {
+  async register(
+    tenantId: string,
+    dto: { email: string; password: string; fullName: string },
+  ) {
     const existing = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: 'default', email: dto.email } },
+      where: { tenantId_email: { tenantId, email: dto.email } },
     });
     if (existing) {
       throw new ConflictException('User with this email already exists');
@@ -24,7 +27,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const user = await this.prisma.user.create({
       data: {
-        tenantId: 'default',
+        tenantId,
         email: dto.email,
         passwordHash,
         fullName: dto.fullName,
@@ -33,6 +36,27 @@ export class AuthService {
 
     const tokens = this.generateTokens(user, await this.loadPermissions(user.id));
     return { user: this.sanitizeUser(user), ...tokens };
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('User not found');
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, mfaSecret: null },
+    });
+    return { message: 'Password changed successfully' };
   }
 
   async login(tenantId: string, email: string, password: string) {

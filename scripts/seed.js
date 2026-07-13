@@ -44,6 +44,7 @@ async function main() {
     'admin:integration:read', 'admin:integration:create', 'admin:integration:update', 'admin:integration:delete',
     'admin:role:assign', 'admin:role:create', 'admin:role:delete', 'admin:role:read', 'admin:role:update',
     'admin:tenant:create', 'admin:tenant:read', 'admin:tenant:update',
+    'admin:user:assign', 'admin:user:create', 'admin:user:read', 'admin:user:update', 'admin:user:reset-password',
     'admin:workflow:create', 'admin:workflow:read', 'admin:workflow:update',
     'attendance:create',
     'employee:movement:create', 'employee:movement:read', 'employee:movement:approve',

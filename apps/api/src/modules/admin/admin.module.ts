@@ -10,6 +10,7 @@ import { AuthController } from './controllers/auth.controller';
 import { AuthzController } from './controllers/authz.controller';
 import { FeatureFlagController } from './controllers/feature-flag.controller';
 import { IntegrationController } from './controllers/integration.controller';
+import { UserManagementController } from './controllers/user-management.controller';
 
 import { TenantService } from './services/tenant.service';
 import { RoleService } from './services/role.service';
@@ -19,6 +20,7 @@ import { AuthService } from './services/auth.service';
 import { AuthzService } from './services/authz.service';
 import { FeatureFlagService } from './services/feature-flag.service';
 import { IntegrationService } from './services/integration.service';
+import { UserManagementService } from './services/user-management.service';
 
 @Module({
   imports: [ConfigModule],
@@ -33,6 +35,7 @@ import { IntegrationService } from './services/integration.service';
     AuthzController,
     FeatureFlagController,
     IntegrationController,
+    UserManagementController,
   ],
   providers: [
     TenantService,
@@ -43,6 +46,7 @@ import { IntegrationService } from './services/integration.service';
     AuthzService,
     FeatureFlagService,
     IntegrationService,
+    UserManagementService,
   ],
   exports: [
     TenantService,
