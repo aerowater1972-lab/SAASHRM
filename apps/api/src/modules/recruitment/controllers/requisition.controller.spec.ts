@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { RequisitionController } from './requisition.controller';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { AuthGuard } from '@common/guards/auth.guard';
@@ -65,13 +66,45 @@ describe('RequisitionController', () => {
     expect(result).toBe('one');
   });
 
-  it('updateStatus updates status by id', async () => {
+  it('updateStatus updates a non-approval status by id', async () => {
     mockPrisma.jobRequisition.update.mockResolvedValue('updated');
-    const result = await controller.updateStatus('id-1', { status: 'APPROVED' });
+    const result = await controller.updateStatus('id-1', { status: 'closed' });
     expect(mockPrisma.jobRequisition.update).toHaveBeenCalledWith({
       where: { id: 'id-1' },
-      data: { status: 'APPROVED' },
+      data: { status: 'closed' },
     });
     expect(result).toBe('updated');
+  });
+
+  it('updateStatus rejects direct approved/rejected transitions (BR-01)', async () => {
+    await expect(controller.updateStatus('id-1', { status: 'approved' })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(controller.updateStatus('id-1', { status: 'rejected' })).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(mockPrisma.jobRequisition.update).not.toHaveBeenCalled();
+  });
+
+  it('approve sets status approved and records approvedBy', async () => {
+    mockPrisma.jobRequisition.findFirst.mockResolvedValue({ id: 'id-1', status: 'pending_approval' });
+    mockPrisma.jobRequisition.update.mockResolvedValue('approved');
+    const result = await controller.approve('default', 'id-1', { employeeId: 'emp-approver' } as any);
+    expect(mockPrisma.jobRequisition.update).toHaveBeenCalledWith({
+      where: { id: 'id-1' },
+      data: { status: 'approved', approvedBy: 'emp-approver' },
+    });
+    expect(result).toBe('approved');
+  });
+
+  it('reject sets status rejected', async () => {
+    mockPrisma.jobRequisition.findFirst.mockResolvedValue({ id: 'id-1', status: 'pending_approval' });
+    mockPrisma.jobRequisition.update.mockResolvedValue('rejected');
+    const result = await controller.reject('default', 'id-1');
+    expect(mockPrisma.jobRequisition.update).toHaveBeenCalledWith({
+      where: { id: 'id-1' },
+      data: { status: 'rejected', approvedBy: null },
+    });
+    expect(result).toBe('rejected');
   });
 });

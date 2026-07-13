@@ -1,8 +1,11 @@
 import { Controller, Get, Post, Put, Body, Param, UseGuards } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { JwtUser } from '@common/decorators/current-user.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
 
 @ApiTags('Recruitment - Requisitions')
@@ -12,7 +15,7 @@ export class RequisitionController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create job requisition' })
+  @ApiOperation({ summary: 'Create job requisition (status defaults to pending_approval)' })
   async create(@TenantId() tenantId: string, @Body() dto: any) {
     return this.prisma.jobRequisition.create({ data: { ...dto, tenantId } });
   }
@@ -36,9 +39,43 @@ export class RequisitionController {
     });
   }
 
+  @Post(':id/approve')
+  @ApiOperation({ summary: 'Approve a requisition (BR-01: required before posting)' })
+  async approve(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    const requisition = await this.prisma.jobRequisition.findFirst({ where: { id, tenantId } });
+    if (!requisition) throw new BadRequestException('Requisition not found');
+    if (requisition.status === 'approved') return requisition;
+    return this.prisma.jobRequisition.update({
+      where: { id },
+      data: { status: 'approved', approvedBy: user?.employeeId ?? null },
+    });
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: 'Reject a requisition' })
+  async reject(@TenantId() tenantId: string, @Param('id') id: string) {
+    const requisition = await this.prisma.jobRequisition.findFirst({ where: { id, tenantId } });
+    if (!requisition) throw new BadRequestException('Requisition not found');
+    return this.prisma.jobRequisition.update({
+      where: { id },
+      data: { status: 'rejected', approvedBy: null },
+    });
+  }
+
   @Put(':id/status')
-  @ApiOperation({ summary: 'Update requisition status' })
+  @ApiOperation({ summary: 'Update non-approval requisition status (e.g. closed)' })
   async updateStatus(@Param('id') id: string, @Body() dto: { status: string }) {
+    // Approval/rejection must go through the dedicated endpoints so that
+    // approvedBy is recorded (BR-01).
+    if (dto.status === 'approved' || dto.status === 'rejected') {
+      throw new BadRequestException(
+        `Status '${dto.status}' is not allowed here; use the approve/reject endpoints`,
+      );
+    }
     return this.prisma.jobRequisition.update({
       where: { id },
       data: { status: dto.status },

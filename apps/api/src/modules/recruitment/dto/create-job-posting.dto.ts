@@ -45,6 +45,10 @@ export class CreateJobPostingDto {
   @IsOptional()
   @IsString()
   location?: string;
+  @ApiPropertyOptional({ description: 'Requisition this posting is published under (must be approved)' })
+  @IsOptional()
+  @IsString()
+  requisitionId?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

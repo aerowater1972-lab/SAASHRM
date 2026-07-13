@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { JobPostingService } from './job-posting.service';
 import { PrismaService } from '@common/prisma/prisma.service';
 
@@ -14,6 +14,9 @@ describe('JobPostingService', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+    },
+    jobRequisition: {
+      findFirst: jest.fn(),
     },
   };
 
@@ -88,6 +91,46 @@ describe('JobPostingService', () => {
       mockPrisma.jobPosting.update.mockResolvedValue({ ...mockPosting, status: 'CLOSED' as any });
       const result = await service.close('default', 'jp-1');
       expect(result.status).toBe('CLOSED');
+    });
+  });
+
+  describe('publish', () => {
+    const draftPosting = (overrides: any = {}) => ({
+      id: 'jp-1',
+      tenantId: 'default',
+      status: 'DRAFT',
+      ...overrides,
+    });
+
+    it('publishes a draft posting with no requisition', async () => {
+      mockPrisma.jobPosting.findFirst.mockResolvedValue(draftPosting());
+      mockPrisma.jobPosting.update.mockResolvedValue(draftPosting({ status: 'PUBLISHED' }));
+      const result = await service.publish('default', 'jp-1');
+      expect(result.status).toBe('PUBLISHED');
+    });
+
+    it('publishes a draft posting whose requisition is approved (BR-01)', async () => {
+      mockPrisma.jobPosting.findFirst.mockResolvedValue(draftPosting({ requisitionId: 'req-1' }));
+      mockPrisma.jobRequisition.findFirst.mockResolvedValue({ id: 'req-1', status: 'approved' });
+      mockPrisma.jobPosting.update.mockResolvedValue(draftPosting({ status: 'PUBLISHED' }));
+      const result = await service.publish('default', 'jp-1');
+      expect(mockPrisma.jobRequisition.findFirst).toHaveBeenCalledWith({
+        where: { id: 'req-1', tenantId: 'default' },
+        select: { id: true, status: true },
+      });
+      expect(result.status).toBe('PUBLISHED');
+    });
+
+    it('rejects publishing when the linked requisition is not approved (BR-01)', async () => {
+      mockPrisma.jobPosting.findFirst.mockResolvedValue(draftPosting({ requisitionId: 'req-1' }));
+      mockPrisma.jobRequisition.findFirst.mockResolvedValue({ id: 'req-1', status: 'pending_approval' });
+      await expect(service.publish('default', 'jp-1')).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.jobPosting.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects publishing a non-draft posting', async () => {
+      mockPrisma.jobPosting.findFirst.mockResolvedValue(draftPosting({ status: 'PUBLISHED' }));
+      await expect(service.publish('default', 'jp-1')).rejects.toThrow(BadRequestException);
     });
   });
 });

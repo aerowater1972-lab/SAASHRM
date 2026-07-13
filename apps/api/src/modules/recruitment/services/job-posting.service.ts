@@ -23,6 +23,7 @@ export class JobPostingService {
         employmentType: dto.employmentType,
         location: dto.location,
         slots: dto.slots ?? 1,
+        requisitionId: dto.requisitionId,
       },
     });
   }
@@ -100,6 +101,24 @@ export class JobPostingService {
     if (posting.status !== PostingStatus.DRAFT) {
       throw new BadRequestException('Only draft postings can be published');
     }
+
+    // BR-01: a posting tied to a job requisition may only be published once
+    // that requisition has been approved.
+    if (posting.requisitionId) {
+      const requisition = await this.prisma.jobRequisition.findFirst({
+        where: { id: posting.requisitionId, tenantId },
+        select: { id: true, status: true },
+      });
+      if (!requisition) {
+        throw new NotFoundException('Linked job requisition not found');
+      }
+      if (requisition.status !== 'approved') {
+        throw new BadRequestException(
+          `Cannot publish: job requisition is '${requisition.status}', expected 'approved'`,
+        );
+      }
+    }
+
     return this.prisma.jobPosting.update({
       where: { id },
       data: { status: PostingStatus.PUBLISHED, postedAt: new Date() },
