@@ -742,6 +742,8 @@ model LeaveRequest {
   approvedBy     String?
   approvedAt     DateTime?
   rejectedReason String?
+  isUrgent       Boolean @default(false)
+  escalated      Boolean @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

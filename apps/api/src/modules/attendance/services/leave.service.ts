@@ -192,6 +192,14 @@ export class LeaveService {
 
     const totalDays = dto.totalDays ?? this.calculateWorkingDays(startDate, endDate);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const startDay = new Date(startDate);
+    startDay.setHours(0, 0, 0, 0);
+    const isUrgent = startDay.getTime() <= tomorrow.getTime();
+
     await this.validateBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, leaveType.allowNegativeBalance);
 
     const overlapping = await this.prisma.leaveRequest.findFirst({
@@ -218,6 +226,7 @@ export class LeaveService {
         totalDays,
         reason: dto.reason,
         documentUrl: dto.documentUrl,
+        isUrgent,
       },
       include: {
         leaveType: true,
@@ -310,6 +319,12 @@ export class LeaveService {
   async approveRequest(tenantId: string, id: string, approverId: string, notes?: string) {
     const request = await this.findOneRequest(tenantId, id);
 
+    if (request.isUrgent && !request.escalated) {
+      throw new BadRequestException(
+        'Urgent leave (H-1/same-day) requires escalation before approval (BR-04)',
+      );
+    }
+
     const transition = this.workflow.transition('leave', request.status, 'APPROVE');
 
     const updated = await this.prisma.leaveRequest.update({
@@ -370,6 +385,19 @@ export class LeaveService {
     });
 
     return updated;
+  }
+
+  async escalateRequest(tenantId: string, id: string, escalatedBy: string) {
+    const request = await this.findOneRequest(tenantId, id);
+
+    if (request.status !== RequestStatus.PENDING) {
+      throw new BadRequestException(`Cannot escalate a ${request.status} leave request`);
+    }
+
+    return this.prisma.leaveRequest.update({
+      where: { id },
+      data: { escalated: true },
+    });
   }
 
   async rejectRequest(tenantId: string, id: string, approverId: string, reason: string) {

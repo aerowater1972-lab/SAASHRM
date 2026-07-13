@@ -122,6 +122,17 @@ export class LeaveController {
     return this.leaveService.approveRequest(tenantId, id, approverId, notes);
   }
 
+  @Post('leave-requests/:id/escalate')
+  @Permissions('leave-requests:approve')
+  @ApiOperation({ summary: 'Escalate an urgent (H-1/same-day) leave request for extra approval (BR-04)' })
+  escalateRequest(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('sub') escalatedBy: string,
+  ) {
+    return this.leaveService.escalateRequest(tenantId, id, escalatedBy);
+  }
+
   @Put('leave-requests/:id/reject')
   @Permissions('leave-requests:approve')
   @ApiOperation({ summary: 'Reject leave request with reason' })
