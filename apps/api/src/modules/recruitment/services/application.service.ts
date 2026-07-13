@@ -10,6 +10,7 @@ import { CreateOfferDto } from '../dto/create-offer.dto';
 import {
   Prisma, ApplicationStatus as PrismaAppStatus, InterviewStatus, OfferStatus, Application } from '@prisma/client';
 import { ApplicationListQueryDto } from '../dto/application-list-query.dto';
+import { CandidateService } from './candidate.service';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   NEW: ['SCREENING'],
@@ -23,6 +24,7 @@ export class ApplicationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
+    private readonly candidateService: CandidateService,
   ) {}
 
   async findAll(
@@ -169,6 +171,12 @@ export class ApplicationService {
       },
       tenantId,
     });
+
+    // BR-05: a candidate that did not pass the process (rejected) is scheduled
+    // for PII purge/anonymization after the configured retention window.
+    if (next === 'REJECTED') {
+      await this.candidateService.schedulePurge(tenantId, application.candidateId);
+    }
 
     return updated;
   }

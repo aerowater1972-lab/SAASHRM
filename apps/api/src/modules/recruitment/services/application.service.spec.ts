@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ApplicationService } from './application.service';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { CandidateService } from './candidate.service';
 
 describe('ApplicationService.updateStatus (BR-02)', () => {
   let service: ApplicationService;
@@ -17,8 +18,14 @@ describe('ApplicationService.updateStatus (BR-02)', () => {
     },
   };
   const mockEventBus: any = { publish: jest.fn() };
+  const mockCandidateService: any = { schedulePurge: jest.fn() };
 
-  const appAt = (status: string) => ({ id: 'app-1', tenantId: 'default', status });
+  const appAt = (status: string) => ({
+    id: 'app-1',
+    tenantId: 'default',
+    status,
+    candidateId: 'cand-1',
+  });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -26,6 +33,7 @@ describe('ApplicationService.updateStatus (BR-02)', () => {
         ApplicationService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EventBusService, useValue: mockEventBus },
+        { provide: CandidateService, useValue: mockCandidateService },
       ],
     }).compile();
     service = module.get(ApplicationService);
@@ -88,5 +96,19 @@ describe('ApplicationService.updateStatus (BR-02)', () => {
       expect.objectContaining({ data: expect.objectContaining({ version: 1 }) }),
     );
     expect(result.version).toBe(1);
+  });
+
+  it('schedules PII purge when an application is rejected (BR-05)', async () => {
+    mockPrisma.application.findFirst.mockResolvedValue(appAt('SCREENING'));
+    mockPrisma.application.update.mockResolvedValue(appAt('REJECTED'));
+    await service.updateStatus('default', 'app-1', { status: 'REJECTED' as any });
+    expect(mockCandidateService.schedulePurge).toHaveBeenCalledWith('default', 'cand-1');
+  });
+
+  it('does not schedule purge for non-rejected transitions (BR-05)', async () => {
+    mockPrisma.application.findFirst.mockResolvedValue(appAt('NEW'));
+    mockPrisma.application.update.mockResolvedValue(appAt('SCREENING'));
+    await service.updateStatus('default', 'app-1', { status: 'SCREENING' as any });
+    expect(mockCandidateService.schedulePurge).not.toHaveBeenCalled();
   });
 });

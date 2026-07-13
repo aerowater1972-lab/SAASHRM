@@ -69,4 +69,12 @@ export class CandidateController {
   ) {
     return this.candidateService.apply(tenantId, id, jobPostingId, expectedSalary);
   }
+
+  @Post('purge/expired')
+  @ApiOperation({
+    summary: 'BR-05: purge PII of rejected candidates whose retention window elapsed',
+  })
+  purgeExpired(@TenantId() _tenantId: string) {
+    return this.candidateService.purgeExpiredCandidates();
+  }
 }

@@ -150,4 +150,86 @@ export class CandidateService {
       },
     });
   }
+
+  /**
+   * BR-05: configurable retention period (in months) for candidate PII after
+   * a failed recruitment process. Defaults to 6 months; override via
+   * CANDIDATE_RETENTION_MONTHS env (PRD allows 6-12 months).
+   */
+  getRetentionMonths(): number {
+    const raw = process.env.CANDIDATE_RETENTION_MONTHS;
+    const n = raw ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 6;
+  }
+
+  computePurgeAfter(from: Date = new Date()): Date {
+    const d = new Date(from);
+    d.setMonth(d.getMonth() + this.getRetentionMonths());
+    return d;
+  }
+
+  /** Mark a rejected candidate for PII purge after the retention period. */
+  async schedulePurge(tenantId: string, candidateId: string, now: Date = new Date()) {
+    const candidate = await this.findOne(tenantId, candidateId);
+    if (candidate.anonymizedAt) {
+      return candidate;
+    }
+    return this.prisma.candidate.update({
+      where: { id: candidateId },
+      data: { purgeAfter: candidate.purgeAfter ?? this.computePurgeAfter(now) },
+    });
+  }
+
+  /** Anonymize a single candidate's PII and delete their private documents. */
+  async anonymizeCandidate(tenantId: string, candidateId: string, now: Date = new Date()) {
+    const appIds = (
+      await this.prisma.application.findMany({
+        where: { candidateId },
+        select: { id: true },
+      })
+    ).map((a) => a.id);
+
+    if (appIds.length) {
+      await this.prisma.onboardingDocument.deleteMany({
+        where: { applicationId: { in: appIds } },
+      });
+    }
+
+    await this.prisma.candidate.update({
+      where: { id: candidateId },
+      data: {
+        firstName: 'ANONYMIZED',
+        lastName: 'ANONYMIZED',
+        email: `anonymized_${candidateId}@purged.local`,
+        phone: null,
+        resumeUrl: null,
+        currentCompany: null,
+        currentPosition: null,
+        notes: null,
+        anonymizedAt: now,
+      },
+    });
+
+    return this.prisma.candidate.findUnique({ where: { id: candidateId } });
+  }
+
+  /**
+   * BR-05: purge every rejected candidate whose retention window has elapsed.
+   * Returns the number of candidates anonymized.
+   */
+  async purgeExpiredCandidates(now: Date = new Date()): Promise<number> {
+    const expired = await this.prisma.candidate.findMany({
+      where: {
+        purgeAfter: { not: null, lte: now },
+        anonymizedAt: null,
+      },
+      select: { id: true, tenantId: true },
+    });
+
+    for (const c of expired) {
+      await this.anonymizeCandidate(c.tenantId, c.id, now);
+    }
+
+    return expired.length;
+  }
 }

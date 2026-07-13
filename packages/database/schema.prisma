@@ -1022,6 +1022,9 @@ model Candidate {
   updatedAt     DateTime @updatedAt
   deletedAt     DateTime?
 
+  purgeAfter   DateTime? // retention: when to purge/anonymize PII after rejection
+  anonymizedAt DateTime? // set once PII has been anonymized/deleted
+
   applications Application[]
 }
 
