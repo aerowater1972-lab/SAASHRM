@@ -76,65 +76,69 @@ export class MovementService {
     const req = await this.findOne(tenantId, id);
     if (req.status !== 'pending') throw new BadRequestException('Request is not pending');
 
-    await this.prisma.movementRequest.update({
-      where: { id },
-      data: { status: 'approved' },
-    });
-
-    if (req.newPositionId || req.newDepartmentId) {
-      const current = await this.prisma.employment.findFirst({
-        where: { employeeId: req.employeeId, endDate: null },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.movementRequest.update({
+        where: { id },
+        data: { status: 'approved' },
       });
-      if (current) {
-        await this.prisma.employment.update({
-          where: { id: current.id },
-          data: { endDate: new Date() },
+
+      if (req.newPositionId || req.newDepartmentId) {
+        const current = await tx.employment.findFirst({
+          where: { employeeId: req.employeeId, endDate: null },
         });
-      }
-      const newEmployment = await this.prisma.employment.create({
-        data: {
-          employeeId: req.employeeId,
-          positionId: req.newPositionId || current?.positionId,
-          departmentId: req.newDepartmentId || current?.departmentId,
-          gradeId: current?.gradeId,
-          startDate: req.effectiveDate,
-          type: current?.type || 'PERMANENT',
-        } as any,
-      });
+        if (current) {
+          await tx.employment.update({
+            where: { id: current.id },
+            data: { endDate: new Date() },
+          });
+        }
+        const newEmployment = await tx.employment.create({
+          data: {
+            employeeId: req.employeeId,
+            positionId: req.newPositionId || current?.positionId,
+            departmentId: req.newDepartmentId || current?.departmentId,
+            gradeId: current?.gradeId,
+            startDate: req.effectiveDate,
+            type: current?.type || 'PERMANENT',
+          } as any,
+        });
 
-      // Publish employee.grade.changed when the new position has a different grade (promotion / FR-06 / contract).
-      if (req.newPositionId) {
-        const oldGradeId = current?.gradeId;
-        const newPos = await this.prisma.position.findUnique({ where: { id: req.newPositionId }, select: { gradeId: true } });
-        const newGradeId = newPos?.gradeId;
-        if (oldGradeId !== newGradeId) {
-          await this.eventBus.publishTyped(
-            DomainEventType.EMPLOYEE_GRADE_CHANGED,
-            {
-              employeeId: req.employeeId,
-              oldGradeId,
-              newGradeId,
-              effectiveDate: req.effectiveDate,
-            },
-            { aggregateId: newEmployment.id, tenantId },
-          );
+        // Publish employee.grade.changed when the new position has a different grade (promotion / FR-06 / contract).
+        if (req.newPositionId) {
+          const oldGradeId = current?.gradeId;
+          const newPos = await tx.position.findUnique({ where: { id: req.newPositionId }, select: { gradeId: true } });
+          const newGradeId = newPos?.gradeId;
+          if (oldGradeId !== newGradeId) {
+            await this.eventBus.publishTypedViaOutbox(
+              DomainEventType.EMPLOYEE_GRADE_CHANGED,
+              {
+                employeeId: req.employeeId,
+                oldGradeId,
+                newGradeId,
+                effectiveDate: req.effectiveDate,
+              },
+              { aggregateId: newEmployment.id, tenantId },
+              tx,
+            );
+          }
         }
       }
-    }
 
-    await this.eventBus.publishTyped(
-      DomainEventType.MOVEMENT_APPROVED,
-      {
-        movementId: req.id,
-        employeeId: req.employeeId,
-        type: req.type,
-        newPositionId: req.newPositionId,
-        newDepartmentId: req.newDepartmentId,
-      },
-      { aggregateId: req.id, tenantId },
-    );
+      await this.eventBus.publishTypedViaOutbox(
+        DomainEventType.MOVEMENT_APPROVED,
+        {
+          movementId: req.id,
+          employeeId: req.employeeId,
+          type: req.type,
+          newPositionId: req.newPositionId,
+          newDepartmentId: req.newDepartmentId,
+        },
+        { aggregateId: req.id, tenantId },
+        tx,
+      );
 
-    return this.findOne(tenantId, id);
+      return this.findOne(tenantId, id);
+    });
   }
 
   async reject(tenantId: string, id: string) {

@@ -7,6 +7,7 @@ import {
   UseGuards} from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { EmploymentService } from '../services/employment.service';
@@ -20,6 +21,7 @@ export class EmploymentController {
   constructor(private readonly employmentService: EmploymentService) {}
 
   @Post('employees/:employeeId/employments')
+  @Permissions('employee:employment:create')
   @ApiOperation({ summary: 'Create employment record for employee' })
   create(
     @TenantId() tenantId: string,
@@ -30,12 +32,14 @@ export class EmploymentController {
   }
 
   @Post('employments/:id/activate')
+  @Permissions('employee:employment:update')
   @ApiOperation({ summary: 'Activate employment (PENDING_ACTIVATION → ACTIVE)' })
   activate(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.employmentService.activate(tenantId, id);
   }
 
   @Post('employments/:id/deactivate')
+  @Permissions('employee:employment:update')
   @ApiOperation({ summary: 'Deactivate employment (ACTIVE → INACTIVE)' })
   deactivate(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.employmentService.deactivate(tenantId, id);

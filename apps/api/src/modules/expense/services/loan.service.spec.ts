@@ -19,6 +19,7 @@ describe('LoanService', () => {
   const mockEventBus = {
     publish: jest.fn().mockResolvedValue(undefined),
     publishTyped: jest.fn().mockResolvedValue(undefined),
+    publishTypedViaOutbox: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockWorkflow = {
@@ -31,7 +32,23 @@ describe('LoanService', () => {
     }),
   };
 
+  const mockTx = {
+    loan: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    loanInstallment: {
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+    },
+  };
+
   const mockPrisma = {
+    $transaction: jest.fn((cb: (tx: any) => any) => cb(mockTx)),
     loan: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -113,26 +130,26 @@ describe('LoanService', () => {
 
     it('should approve a pending loan and generate installments', async () => {
       mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
-      mockPrisma.loanInstallment.findMany.mockResolvedValue([]);
-      mockPrisma.loan.findUnique.mockResolvedValue(mockLoan);
-      mockPrisma.loan.update.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED });
+      mockTx.loan.findUnique.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED, installments: [] });
+      mockTx.loan.update.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED, installmentCount: 4 });
+      mockTx.loanInstallment.create.mockResolvedValue({});
 
-      const result = await service.approve('default', 'loan-1', 'approver-1');
+      const result = (await service.approve('default', 'loan-1', 'approver-1'))!;
       expect(result.status).toBe(RequestStatus.APPROVED);
-      expect(mockPrisma.loanInstallment.create).toHaveBeenCalledTimes(4);
+      expect(mockTx.loanInstallment.create).toHaveBeenCalledTimes(4);
     });
 
     it('should publish LOAN_DISBURSED event after approval', async () => {
       mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
-      mockPrisma.loanInstallment.findMany.mockResolvedValue([]);
-      mockPrisma.loan.findUnique.mockResolvedValue(mockLoan);
-      mockPrisma.loan.update.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED });
+      mockTx.loan.findUnique.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED, installments: [] });
+      mockTx.loan.update.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED, installmentCount: 4 });
 
       await service.approve('default', 'loan-1', 'approver-1');
-      expect(mockEventBus.publishTyped).toHaveBeenCalledWith(
+      expect(mockEventBus.publishTypedViaOutbox).toHaveBeenCalledWith(
         'loan.disbursed',
         expect.objectContaining({ loanId: 'loan-1', employeeId: 'emp-1' }),
         expect.objectContaining({ aggregateId: 'loan-1' }),
+        mockTx,
       );
     });
 

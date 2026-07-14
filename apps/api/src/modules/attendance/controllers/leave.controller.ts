@@ -35,6 +35,7 @@ export class LeaveController {
   }
 
   @Get('leave-types')
+  @Permissions('leave-types:read')
   @ApiOperation({ summary: 'Get all leave types' })
   findAllLeaveTypes(@TenantId() tenantId: string) {
     return this.leaveService.findAllLeaveTypes(tenantId);
@@ -52,6 +53,7 @@ export class LeaveController {
   }
 
   @Get('balances')
+  @Permissions('leave-balances:read')
   @ApiOperation({ summary: 'Get employee leave balances' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'year', required: false })
@@ -75,6 +77,7 @@ export class LeaveController {
   }
 
   @Post('leave-requests')
+  @Permissions('leave-requests:create')
   @ApiOperation({ summary: 'Create leave request' })
   createLeaveRequest(
     @TenantId() tenantId: string,
@@ -85,6 +88,7 @@ export class LeaveController {
   }
 
   @Get('leave-requests')
+  @Permissions('leave-requests:read')
   @ApiOperation({ summary: 'Get leave requests with filters' })
   findAllRequests(
     @TenantId() tenantId: string,
@@ -94,12 +98,14 @@ export class LeaveController {
   }
 
   @Get('leave-requests/:id')
+  @Permissions('leave-requests:read')
   @ApiOperation({ summary: 'Get leave request by ID' })
   findOneRequest(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.leaveService.findOneRequest(tenantId, id);
   }
 
   @Put('leave-requests/:id')
+  @Permissions('leave-requests:update')
   @ApiOperation({ summary: 'Cancel leave request' })
   cancelRequest(
     @TenantId() tenantId: string,
@@ -147,6 +153,7 @@ export class LeaveController {
   }
 
   @Get('leave-requests/pending-approval')
+  @Permissions('leave-requests:read')
   @ApiOperation({ summary: 'Get pending leave requests for approval (manager inbox)' })
   getPendingApprovals(
     @TenantId() tenantId: string,
@@ -156,6 +163,7 @@ export class LeaveController {
   }
 
   @Get('team-calendar')
+  @Permissions('leave-requests:read')
   @ApiOperation({ summary: 'Get team leave calendar' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })

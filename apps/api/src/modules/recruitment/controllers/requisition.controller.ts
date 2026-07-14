@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtUser } from '@common/decorators/current-user.decorator';
@@ -15,12 +16,14 @@ export class RequisitionController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Post()
+  @Permissions('recruitment:requisition:create')
   @ApiOperation({ summary: 'Create job requisition (status defaults to pending_approval)' })
   async create(@TenantId() tenantId: string, @Body() dto: any) {
     return this.prisma.jobRequisition.create({ data: { ...dto, tenantId } });
   }
 
   @Get()
+  @Permissions('recruitment:requisition:read')
   @ApiOperation({ summary: 'List job requisitions' })
   async findAll(@TenantId() tenantId: string) {
     return this.prisma.jobRequisition.findMany({
@@ -31,6 +34,7 @@ export class RequisitionController {
   }
 
   @Get(':id')
+  @Permissions('recruitment:requisition:read')
   @ApiOperation({ summary: 'Get requisition by ID' })
   async findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.prisma.jobRequisition.findFirst({
@@ -40,6 +44,7 @@ export class RequisitionController {
   }
 
   @Post(':id/approve')
+  @Permissions('recruitment:requisition:approve')
   @ApiOperation({ summary: 'Approve a requisition (BR-01: required before posting)' })
   async approve(
     @TenantId() tenantId: string,
@@ -56,6 +61,7 @@ export class RequisitionController {
   }
 
   @Post(':id/reject')
+  @Permissions('recruitment:requisition:approve')
   @ApiOperation({ summary: 'Reject a requisition' })
   async reject(@TenantId() tenantId: string, @Param('id') id: string) {
     const requisition = await this.prisma.jobRequisition.findFirst({ where: { id, tenantId } });
@@ -67,6 +73,7 @@ export class RequisitionController {
   }
 
   @Put(':id/status')
+  @Permissions('recruitment:requisition:update')
   @ApiOperation({ summary: 'Update non-approval requisition status (e.g. closed)' })
   async updateStatus(@Param('id') id: string, @Body() dto: { status: string }) {
     // Approval/rejection must go through the dedicated endpoints so that

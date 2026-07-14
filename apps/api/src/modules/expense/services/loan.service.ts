@@ -128,41 +128,51 @@ export class LoanService {
       }
     }
 
-    const updated = await this.prisma.loan.update({
-      where: { id },
-      data: {
-        status: transition.to as RequestStatus,
-        approvedBy: approverId,
-        approvedAt: new Date(),
-        notes: notes || loan.notes,
-      },
-      include: {
-        employee: { select: { id: true, employeeId: true, fullName: true } },
-        installments: { orderBy: { createdAt: 'asc' } },
-      },
-    });
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const upd = await tx.loan.update({
+        where: { id },
+        data: {
+          status: transition.to as RequestStatus,
+          approvedBy: approverId,
+          approvedAt: new Date(),
+          notes: notes || loan.notes,
+        },
+        include: {
+          employee: { select: { id: true, employeeId: true, fullName: true } },
+        },
+      });
 
-    await this.generateInstallments(tenantId, id, updated.installmentCount, updated.installmentAmount.toNumber());
+      await this.generateInstallments(tenantId, id, upd.installmentCount, upd.installmentAmount.toNumber());
 
-    // Publish LOAN_DISBURSED (contract event).
-    await this.eventBus.publishTyped(DomainEventType.LOAN_DISBURSED, {
-      loanId: id,
-      employeeId: loan.employeeId,
-      amount: loan.amount.toNumber(),
-      tenantId,
-    }, { aggregateId: id, tenantId, userId: approverId });
-
-    const installments = await this.prisma.loanInstallment.findMany({ where: { loanId: id }, orderBy: { periodName: 'asc' } });
-    for (const inst of installments) {
-      await this.eventBus.publishTyped(DomainEventType.LOAN_INSTALLMENT_DUE, {
-        employeeId: loan.employeeId,
+      // Publish LOAN_DISBURSED (contract event) — inside transaction via Outbox.
+      await this.eventBus.publishTypedViaOutbox(DomainEventType.LOAN_DISBURSED, {
         loanId: id,
-        period: inst.periodName,
-        installmentAmount: inst.amount.toNumber(),
-        remainingBalance: updated.remainingBalance.toNumber(),
+        employeeId: loan.employeeId,
+        amount: loan.amount.toNumber(),
         tenantId,
-      }, { aggregateId: inst.id, tenantId, userId: approverId });
-    }
+      }, { aggregateId: id, tenantId, userId: approverId }, tx);
+
+      const installments = await tx.loanInstallment.findMany({ where: { loanId: id }, orderBy: { periodName: 'asc' } });
+      for (const inst of installments) {
+        await this.eventBus.publishTypedViaOutbox(DomainEventType.LOAN_INSTALLMENT_DUE, {
+          employeeId: loan.employeeId,
+          loanId: id,
+          period: inst.periodName,
+          installmentAmount: inst.amount.toNumber(),
+          remainingBalance: upd.remainingBalance.toNumber(),
+          tenantId,
+        }, { aggregateId: inst.id, tenantId, userId: approverId }, tx);
+      }
+
+      // Re-fetch with installments for the return.
+      return tx.loan.findUnique({
+        where: { id },
+        include: {
+          employee: { select: { id: true, employeeId: true, fullName: true } },
+          installments: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+    });
 
     return updated;
   }

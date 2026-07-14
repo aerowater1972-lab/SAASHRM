@@ -11,6 +11,7 @@ import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { CandidateService } from '../services/candidate.service';
 import { CreateCandidateDto } from '../dto/create-candidate.dto';
 import { CandidateListQueryDto } from '../dto/candidate-list-query.dto';
@@ -24,12 +25,14 @@ export class CandidateController {
   constructor(private readonly candidateService: CandidateService) {}
 
   @Post()
+  @Permissions('recruitment:candidate:create')
   @ApiOperation({ summary: 'Create a new candidate' })
   create(@TenantId() tenantId: string, @Body() dto: CreateCandidateDto) {
     return this.candidateService.create(tenantId, dto);
   }
 
   @Get()
+  @Permissions('recruitment:candidate:read')
   @ApiOperation({ summary: 'Get all candidates with filters' })
   @ApiQuery({ name: 'status', required: false, enum: CandidateStatus })
   @ApiQuery({ name: 'source', required: false, type: String })
@@ -42,12 +45,14 @@ export class CandidateController {
   }
 
   @Get(':id')
+  @Permissions('recruitment:candidate:read')
   @ApiOperation({ summary: 'Get candidate by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.candidateService.findOne(tenantId, id);
   }
 
   @Put(':id')
+  @Permissions('recruitment:candidate:update')
   @ApiOperation({ summary: 'Update candidate' })
   update(
     @TenantId() tenantId: string,
@@ -58,6 +63,7 @@ export class CandidateController {
   }
 
   @Post(':id/apply')
+  @Permissions('recruitment:application:create')
   @ApiOperation({ summary: 'Apply candidate to a job posting' })
   @ApiQuery({ name: 'jobPostingId', required: true, type: String })
   @ApiQuery({ name: 'expectedSalary', required: false, type: Number })
@@ -71,6 +77,7 @@ export class CandidateController {
   }
 
   @Post('purge/expired')
+  @Permissions('recruitment:candidate:delete')
   @ApiOperation({
     summary: 'BR-05: purge PII of rejected candidates whose retention window elapsed',
   })

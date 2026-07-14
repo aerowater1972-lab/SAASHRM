@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query , UseGuards} fro
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { ComponentService } from '../services/component.service';
 import { CreateComponentDto } from '../dto/create-component.dto';
@@ -14,12 +15,14 @@ export class ComponentController {
   constructor(private readonly componentService: ComponentService) {}
 
   @Post()
+  @Permissions('payroll:component:create')
   @ApiOperation({ summary: 'Create a payroll component' })
   create(@TenantId() tenantId: string, @Body() dto: CreateComponentDto) {
     return this.componentService.create(tenantId, dto);
   }
 
   @Get()
+  @Permissions('payroll:component:read')
   @ApiOperation({ summary: 'Get all payroll components' })
   @ApiQuery({ name: 'type', required: false, enum: ['EARNING', 'DEDUCTION'] })
   @ApiQuery({ name: 'category', required: false })
@@ -32,12 +35,14 @@ export class ComponentController {
   }
 
   @Get(':id')
+  @Permissions('payroll:component:read')
   @ApiOperation({ summary: 'Get payroll component by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.componentService.findOne(tenantId, id);
   }
 
   @Put(':id')
+  @Permissions('payroll:component:update')
   @ApiOperation({ summary: 'Update payroll component' })
   update(
     @TenantId() tenantId: string,
@@ -48,6 +53,7 @@ export class ComponentController {
   }
 
   @Delete(':id')
+  @Permissions('payroll:component:delete')
   @ApiOperation({ summary: 'Delete payroll component' })
   remove(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.componentService.remove(tenantId, id);

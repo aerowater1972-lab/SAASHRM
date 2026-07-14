@@ -1,6 +1,8 @@
 import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
+import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { AuthzService, AuthzCheckDto, AuthzCheckResult } from '../services/authz.service';
 
@@ -11,7 +13,8 @@ export class AuthzController {
   constructor(private readonly authzService: AuthzService) {}
 
   @Post('check')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('admin:authz:check')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Check if user has a specific permission (shared service)' })
   async check(
@@ -22,7 +25,8 @@ export class AuthzController {
   }
 
   @Post('check-many')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('admin:authz:check')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Batch permission check' })
   async checkMany(

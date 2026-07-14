@@ -5,13 +5,41 @@ import { PrismaService } from '@common/prisma/prisma.service';
 export class PayslipService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(tenantId: string, employeeId?: string, runId?: string, periodId?: string) {
+  private maskForRole(data: any, role?: string): any {
+    if (role === 'role-hr' || role === 'role-sysadmin') return data;
+
+    const masked = { ...data };
+
+    if (role === 'role-manager') {
+      masked.items = masked.items?.map((item: any) => ({
+        ...item,
+        amount: '****',
+      }));
+      return masked;
+    }
+
+    if (role === 'role-employee') {
+      masked.baseSalary = '****';
+      masked.grossPay = '****';
+      masked.totalDeductions = '****';
+      masked.bankTransferCode = '****';
+      masked.items = masked.items?.map((item: any) => ({
+        ...item,
+        amount: '****',
+      }));
+      return masked;
+    }
+
+    return data;
+  }
+
+  async findAll(tenantId: string, role?: string, employeeId?: string, runId?: string, periodId?: string) {
     const where: any = { tenantId };
     if (employeeId) where.employeeId = employeeId;
     if (runId) where.runId = runId;
     if (periodId) where.run = { periodId };
 
-    return this.prisma.payslip.findMany({
+    const data = await this.prisma.payslip.findMany({
       where: where as any,
       include: {
         employee: {
@@ -22,9 +50,11 @@ export class PayslipService {
       } as any,
       orderBy: { createdAt: 'desc' },
     });
+
+    return data.map((p) => this.maskForRole(p, role));
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, role?: string) {
     const payslip = await this.prisma.payslip.findFirst({
       where: { id, tenantId },
       include: {
@@ -38,11 +68,11 @@ export class PayslipService {
       } as any,
     });
     if (!payslip) throw new NotFoundException(`Payslip ${id} not found`);
-    return payslip;
+    return this.maskForRole(payslip, role);
   }
 
-  async generatePdf(tenantId: string, id: string) {
-    const payslip = await this.findOne(tenantId, id);
+  async generatePdf(tenantId: string, id: string, role?: string) {
+    const payslip = await this.findOne(tenantId, id, role);
     const p = payslip as any;
     const header = {
       title: 'PAYSLIP',

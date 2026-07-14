@@ -2,6 +2,7 @@ import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
 
@@ -12,6 +13,7 @@ export class BankTransferController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
+  @Permissions('payroll:bank-transfer:read')
   @ApiOperation({ summary: 'List bank transfer batches' })
   async findAll(@TenantId() tenantId: string) {
     return this.prisma.bankTransferBatch.findMany({
@@ -22,6 +24,7 @@ export class BankTransferController {
   }
 
   @Get(':id')
+  @Permissions('payroll:bank-transfer:read')
   @ApiOperation({ summary: 'Get batch by ID' })
   async findOne(@Param('id') id: string) {
     return this.prisma.bankTransferBatch.findUnique({

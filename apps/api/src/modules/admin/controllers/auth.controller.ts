@@ -7,6 +7,7 @@ import { RegisterDto } from '../dto/register.dto';
 import { ChangePasswordDto } from '../dto/create-user.dto';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { Public } from '@common/decorators/public.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
@@ -44,6 +45,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
+  @Permissions('admin:auth:logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout current user' })
   logout(@CurrentUser('sub') userId: string) {
@@ -53,6 +55,7 @@ export class AuthController {
   @Post('change-password')
   @UseGuards(AuthGuard, PermissionGuard)
   @ApiBearerAuth()
+  @Permissions('admin:auth:change-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change the authenticated user password' })
   changePassword(

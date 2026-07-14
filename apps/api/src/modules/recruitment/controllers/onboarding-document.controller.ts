@@ -3,6 +3,7 @@ import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
@@ -17,6 +18,7 @@ export class OnboardingDocumentController {
   ) {}
 
   @Post()
+  @Permissions('recruitment:onboarding:create')
   @ApiOperation({ summary: 'Create onboarding document' })
   async create(@TenantId() tenantId: string, @Body() dto: any) {
     const doc = await this.prisma.onboardingDocument.create({
@@ -32,6 +34,7 @@ export class OnboardingDocumentController {
   }
 
   @Get()
+  @Permissions('recruitment:onboarding:read')
   @ApiOperation({ summary: 'List onboarding documents' })
   async findAll(@TenantId() tenantId: string) {
     return this.prisma.onboardingDocument.findMany({
@@ -42,6 +45,7 @@ export class OnboardingDocumentController {
   }
 
   @Get(':id')
+  @Permissions('recruitment:onboarding:read')
   @ApiOperation({ summary: 'Get document by ID' })
   async findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.prisma.onboardingDocument.findFirst({

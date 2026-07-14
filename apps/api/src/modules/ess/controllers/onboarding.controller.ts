@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { EssOnboardingService } from '../services/onboarding.service';
@@ -14,18 +15,21 @@ export class EssOnboardingController {
   constructor(private readonly onboardingService: EssOnboardingService) {}
 
   @Get()
+  @Permissions('ess:onboarding:read')
   @ApiOperation({ summary: 'Get my ESS onboarding progress (US-07)' })
   getStatus(@CurrentUser('employeeId') employeeId: string) {
     return this.onboardingService.getStatus(employeeId);
   }
 
   @Post('complete-tour')
+  @Permissions('ess:onboarding:complete')
   @ApiOperation({ summary: 'Mark guided tour as completed (US-07)' })
   completeTour(@TenantId() _tenantId: string, @CurrentUser('employeeId') employeeId: string) {
     return this.onboardingService.completeTour(employeeId);
   }
 
   @Patch('confirm-profile')
+  @Permissions('ess:onboarding:complete')
   @ApiOperation({ summary: 'Confirm profile data on first ESS session (US-07)' })
   confirmProfile(@TenantId() _tenantId: string, @CurrentUser('employeeId') employeeId: string) {
     return this.onboardingService.confirmProfile(employeeId);

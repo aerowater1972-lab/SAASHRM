@@ -27,6 +27,7 @@ export class AuditController {
 
   @Post('ingest')
   @UseGuards(AuthGuard)
+  @Permissions('admin:audit:create')
   @ApiOperation({ summary: 'Internal endpoint to ingest audit log entries (FR-09a v1.1)' })
   ingest(
     @TenantId() tenantId: string,

@@ -28,6 +28,7 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('clock-in')
+  @Permissions('attendance:create')
   @ApiOperation({ summary: 'Clock in with GPS location and method' })
   clockIn(
     @TenantId() tenantId: string,
@@ -38,6 +39,7 @@ export class AttendanceController {
   }
 
   @Post('clock-out')
+  @Permissions('attendance:create')
   @ApiOperation({ summary: 'Clock out with GPS location and method' })
   clockOut(
     @TenantId() tenantId: string,
@@ -48,6 +50,7 @@ export class AttendanceController {
   }
 
   @Get('records')
+  @Permissions('attendance:read')
   @ApiOperation({ summary: 'Get attendance records with filters' })
   findAll(
     @TenantId() tenantId: string,
@@ -57,12 +60,14 @@ export class AttendanceController {
   }
 
   @Get('records/:id')
+  @Permissions('attendance:read')
   @ApiOperation({ summary: 'Get attendance record by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.attendanceService.findOne(tenantId, id);
   }
 
   @Put('records/:id')
+  @Permissions('attendance:correction:create')
   @ApiOperation({ summary: 'Correct attendance record (requires approval)' })
   correct(
     @TenantId() tenantId: string,
@@ -74,6 +79,7 @@ export class AttendanceController {
   }
 
   @Get('today')
+  @Permissions('attendance:read')
   @ApiOperation({ summary: 'Get current day attendance status' })
   getToday(
     @TenantId() tenantId: string,

@@ -11,6 +11,7 @@ import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApplicationService } from '../services/application.service';
 import { OnboardingService } from '../services/onboarding.service';
 import { ApplicationListQueryDto } from '../dto/application-list-query.dto';
@@ -31,6 +32,7 @@ export class ApplicationController {
   ) {}
 
   @Get('applications')
+  @Permissions('recruitment:application:read')
   @ApiOperation({ summary: 'Get all applications with filters' })
   @ApiQuery({ name: 'jobPostingId', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, type: String })
@@ -43,6 +45,7 @@ export class ApplicationController {
   }
 
   @Get('pipeline')
+  @Permissions('recruitment:application:read')
   @ApiOperation({ summary: 'Get candidate pipeline grouped by status (kanban view)' })
   @ApiQuery({ name: 'jobPostingId', required: false, type: String })
   getPipeline(
@@ -53,12 +56,14 @@ export class ApplicationController {
   }
 
   @Get('applications/:id')
+  @Permissions('recruitment:application:read')
   @ApiOperation({ summary: 'Get application by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.applicationService.findOne(tenantId, id);
   }
 
   @Put('applications/:id/status')
+  @Permissions('recruitment:application:update')
   @ApiOperation({ summary: 'Update application status (stage advancement)' })
   updateStatus(
     @TenantId() tenantId: string,
@@ -69,6 +74,7 @@ export class ApplicationController {
   }
 
   @Post('applications/:id/interviews')
+  @Permissions('recruitment:interview:create')
   @ApiOperation({ summary: 'Schedule an interview for an application' })
   addInterview(
     @TenantId() tenantId: string,
@@ -79,12 +85,14 @@ export class ApplicationController {
   }
 
   @Get('applications/:id/interviews')
+  @Permissions('recruitment:interview:read')
   @ApiOperation({ summary: 'Get all interviews for an application' })
   getInterviews(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.applicationService.getInterviews(tenantId, id);
   }
 
   @Put('interviews/:id')
+  @Permissions('recruitment:interview:score')
   @ApiOperation({ summary: 'Update interview result (score & feedback)' })
   updateInterviewResult(
     @TenantId() tenantId: string,
@@ -95,6 +103,7 @@ export class ApplicationController {
   }
 
   @Post('applications/:id/offers')
+  @Permissions('recruitment:offer:create')
   @ApiOperation({ summary: 'Create an offer for an application' })
   addOffer(
     @TenantId() tenantId: string,
@@ -105,30 +114,35 @@ export class ApplicationController {
   }
 
   @Get('applications/:id/offers')
+  @Permissions('recruitment:offer:read')
   @ApiOperation({ summary: 'Get all offers for an application' })
   getOffers(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.applicationService.getOffers(tenantId, id);
   }
 
   @Put('offers/:id/send')
+  @Permissions('recruitment:offer:update')
   @ApiOperation({ summary: 'Send a draft offer' })
   sendOffer(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.applicationService.updateOfferStatus(tenantId, id, 'send');
   }
 
   @Put('offers/:id/accept')
+  @Permissions('recruitment:offer:approve')
   @ApiOperation({ summary: 'Accept an offer' })
   acceptOffer(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.applicationService.updateOfferStatus(tenantId, id, 'accept');
   }
 
   @Put('offers/:id/reject')
+  @Permissions('recruitment:offer:update')
   @ApiOperation({ summary: 'Reject an offer' })
   rejectOffer(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.applicationService.updateOfferStatus(tenantId, id, 'reject');
   }
 
   @Post('applications/:id/convert')
+  @Permissions('recruitment:onboarding:create')
   @ApiOperation({ summary: 'Convert accepted candidate to employee' })
   convert(
     @TenantId() tenantId: string,

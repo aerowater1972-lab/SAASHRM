@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
+import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { AttendanceService } from '@modules/attendance/services/attendance.service';
@@ -18,12 +20,13 @@ import { AttendanceCorrectionDto } from '@modules/attendance/dto/attendance-corr
 
 @ApiTags('ESS - Attendance')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PermissionGuard)
 @Controller('ess')
 export class AttendanceEssController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('clock-in')
+  @Permissions('ess:attendance:clock')
   @ApiOperation({ summary: 'Clock in (delegates to attendance module)' })
   clockIn(
     @TenantId() tenantId: string,
@@ -34,6 +37,7 @@ export class AttendanceEssController {
   }
 
   @Post('clock-out')
+  @Permissions('ess:attendance:clock')
   @ApiOperation({ summary: 'Clock out (delegates to attendance module)' })
   clockOut(
     @TenantId() tenantId: string,
@@ -44,6 +48,7 @@ export class AttendanceEssController {
   }
 
   @Get('attendance')
+  @Permissions('ess:attendance:read')
   @ApiOperation({ summary: 'My attendance history' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
@@ -64,6 +69,7 @@ export class AttendanceEssController {
   }
 
   @Post('attendance/correction')
+  @Permissions('ess:attendance:clock')
   @ApiOperation({ summary: 'Request attendance correction' })
   requestCorrection(
     @TenantId() tenantId: string,
@@ -75,6 +81,7 @@ export class AttendanceEssController {
 
   // US-06 / BR-03: manager approval on-the-go — same source logic as web.
   @Post('approvals/correction/:id')
+  @Permissions('ess:attendance:read')
   @ApiOperation({ summary: 'Approve/reject a team attendance correction (mobile)' })
   reviewCorrection(
     @TenantId() tenantId: string,

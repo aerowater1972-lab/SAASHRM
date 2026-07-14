@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Query, UseGuards} from '@nestjs/com
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { RunService } from '../services/run.service';
@@ -16,6 +17,7 @@ export class RunController {
   constructor(private readonly runService: RunService) {}
 
   @Post()
+  @Permissions('payroll:run:create')
   @ApiOperation({ summary: 'Create a new payroll run for a period' })
   create(
     @TenantId() tenantId: string,
@@ -26,18 +28,21 @@ export class RunController {
   }
 
   @Get()
+  @Permissions('payroll:run:read')
   @ApiOperation({ summary: 'Get all payroll runs' })
   findAll(@TenantId() tenantId: string, @Query() filters: PayrollRunListQueryDto) {
     return this.runService.findAll(tenantId, filters);
   }
 
   @Get(':id')
+  @Permissions('payroll:run:read')
   @ApiOperation({ summary: 'Get payroll run by ID with payslips' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.runService.findOne(tenantId, id);
   }
 
   @Post(':id/process')
+  @Permissions('payroll:run:process')
   @ApiOperation({ summary: 'Process payroll calculations for the run' })
   process(
     @TenantId() tenantId: string,
@@ -48,6 +53,7 @@ export class RunController {
   }
 
   @Post(':id/approve')
+  @Permissions('payroll:run:approve')
   @ApiOperation({ summary: 'Approve payroll run' })
   approve(
     @TenantId() tenantId: string,
@@ -58,6 +64,7 @@ export class RunController {
   }
 
   @Post(':id/publish')
+  @Permissions('payroll:run:lock')
   @ApiOperation({ summary: 'Publish payroll run (final)' })
   publish(
     @TenantId() tenantId: string,
@@ -68,18 +75,21 @@ export class RunController {
   }
 
   @Get(':id/summary')
+  @Permissions('payroll:run:read')
   @ApiOperation({ summary: 'Get payroll run summary' })
   getSummary(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.runService.getSummary(tenantId, id);
   }
 
   @Post(':id/generate-payslips')
+  @Permissions('payroll:run:process')
   @ApiOperation({ summary: 'Generate payslip data for the run' })
   generatePayslips(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.runService.generatePayslips(tenantId, id);
   }
 
   @Post(':id/generate-bank-transfer')
+  @Permissions('payroll:bank-transfer:export')
   @ApiOperation({ summary: 'Generate bank transfer file for the run' })
   generateBankTransfer(
     @TenantId() tenantId: string,

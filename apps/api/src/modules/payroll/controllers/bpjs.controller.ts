@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Body, Param, Query , UseGuards} from '@nest
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { BpjsService } from '../services/bpjs.service';
 import { CreateBpjsConfigDto, BpjsCalculationDto, BpjsReportDto } from '../dto/bpjs-config.dto';
@@ -14,18 +15,21 @@ export class BpjsController {
   constructor(private readonly bpjsService: BpjsService) {}
 
   @Post('configs')
+  @Permissions('payroll:bpjs:update')
   @ApiOperation({ summary: 'Create BPJS configuration' })
   createConfig(@TenantId() tenantId: string, @Body() dto: CreateBpjsConfigDto) {
     return this.bpjsService.createConfig(tenantId, dto);
   }
 
   @Get('configs')
+  @Permissions('payroll:bpjs:read')
   @ApiOperation({ summary: 'Get BPJS configurations' })
   getConfigs(@TenantId() tenantId: string) {
     return this.bpjsService.getConfigs(tenantId);
   }
 
   @Put('configs/:id')
+  @Permissions('payroll:bpjs:update')
   @ApiOperation({ summary: 'Update BPJS configuration' })
   updateConfig(
     @TenantId() tenantId: string,
@@ -36,12 +40,14 @@ export class BpjsController {
   }
 
   @Post('calculate')
+  @Permissions('payroll:bpjs:read')
   @ApiOperation({ summary: 'Calculate BPJS for an employee in a period' })
   calculate(@TenantId() tenantId: string, @Body() dto: BpjsCalculationDto) {
     return this.bpjsService.calculate(tenantId, dto);
   }
 
   @Post('report')
+  @Permissions('payroll:bpjs:read')
   @ApiOperation({ summary: 'Generate BPJS report for a period' })
   report(@TenantId() tenantId: string, @Body() dto: BpjsReportDto) {
     return this.bpjsService.generateReport(tenantId, dto);

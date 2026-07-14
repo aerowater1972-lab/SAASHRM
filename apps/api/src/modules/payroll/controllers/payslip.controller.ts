@@ -2,7 +2,9 @@ import { Controller, Get, Put, Param, Query , UseGuards} from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { PayslipService } from '../services/payslip.service';
 
 @ApiTags('Payroll - Payslips')
@@ -13,6 +15,7 @@ export class PayslipController {
   constructor(private readonly payslipService: PayslipService) {}
 
   @Get()
+  @Permissions('payroll:payslip:read')
   @ApiOperation({ summary: 'Get payslips with filters' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'runId', required: false })
@@ -22,23 +25,35 @@ export class PayslipController {
     @Query('employeeId') employeeId?: string,
     @Query('runId') runId?: string,
     @Query('periodId') periodId?: string,
+    @CurrentUser('role') role?: string,
   ) {
-    return this.payslipService.findAll(tenantId, employeeId, runId, periodId);
+    return this.payslipService.findAll(tenantId, role, employeeId, runId, periodId);
   }
 
   @Get(':id')
+  @Permissions('payroll:payslip:read')
   @ApiOperation({ summary: 'Get payslip by ID' })
-  findOne(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.payslipService.findOne(tenantId, id);
+  findOne(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('role') role?: string,
+  ) {
+    return this.payslipService.findOne(tenantId, id, role);
   }
 
   @Get(':id/pdf')
+  @Permissions('payroll:payslip:read')
   @ApiOperation({ summary: 'Generate payslip PDF' })
-  generatePdf(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.payslipService.generatePdf(tenantId, id);
+  generatePdf(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('role') role?: string,
+  ) {
+    return this.payslipService.generatePdf(tenantId, id, role);
   }
 
   @Put(':id/acknowledge')
+  @Permissions('payroll:payslip:acknowledge')
   @ApiOperation({ summary: 'Employee acknowledges payslip' })
   acknowledge(
     @TenantId() tenantId: string,

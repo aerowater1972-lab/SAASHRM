@@ -26,6 +26,7 @@ export class OvertimeController {
   constructor(private readonly overtimeService: OvertimeService) {}
 
   @Post('requests')
+  @Permissions('overtime:create')
   @ApiOperation({ summary: 'Create overtime request' })
   createRequest(
     @TenantId() tenantId: string,
@@ -36,6 +37,7 @@ export class OvertimeController {
   }
 
   @Get('requests')
+  @Permissions('overtime:read')
   @ApiOperation({ summary: 'Get overtime requests with filters' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'status', required: false })
@@ -52,6 +54,7 @@ export class OvertimeController {
   }
 
   @Get('requests/:id')
+  @Permissions('overtime:read')
   @ApiOperation({ summary: 'Get overtime request by ID' })
   findOneRequest(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.overtimeService.findOneRequest(tenantId, id);
@@ -72,6 +75,7 @@ export class OvertimeController {
   }
 
   @Get('summary')
+  @Permissions('overtime:read')
   @ApiOperation({ summary: 'Get overtime summary for payroll' })
   @ApiQuery({ name: 'employeeId', required: true })
   @ApiQuery({ name: 'startDate', required: true })

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Body, Param , UseGuards} from '@nestjs/comm
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { PeriodService } from '../services/period.service';
 import { CreatePeriodDto } from '../dto/create-period.dto';
@@ -14,36 +15,42 @@ export class PeriodController {
   constructor(private readonly periodService: PeriodService) {}
 
   @Post()
+  @Permissions('payroll:period:create')
   @ApiOperation({ summary: 'Create a payroll period' })
   create(@TenantId() tenantId: string, @Body() dto: CreatePeriodDto) {
     return this.periodService.create(tenantId, dto);
   }
 
   @Get()
+  @Permissions('payroll:period:read')
   @ApiOperation({ summary: 'Get all payroll periods' })
   findAll(@TenantId() tenantId: string) {
     return this.periodService.findAll(tenantId);
   }
 
   @Get(':id')
+  @Permissions('payroll:period:read')
   @ApiOperation({ summary: 'Get payroll period by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.periodService.findOne(tenantId, id);
   }
 
   @Put(':id')
+  @Permissions('payroll:period:update')
   @ApiOperation({ summary: 'Update payroll period' })
   update(@TenantId() tenantId: string, @Param('id') id: string, @Body() dto: Partial<CreatePeriodDto>) {
     return this.periodService.update(tenantId, id, dto);
   }
 
   @Post(':id/close')
+  @Permissions('payroll:period:close')
   @ApiOperation({ summary: 'Close payroll period' })
   close(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.periodService.close(tenantId, id);
   }
 
   @Post(':id/lock')
+  @Permissions('payroll:period:close')
   @ApiOperation({ summary: 'Lock payroll period (prevents any modifications)' })
   lock(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.periodService.lock(tenantId, id);

@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
+import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { LeaveService } from '@modules/attendance/services/leave.service';
@@ -16,12 +18,13 @@ import { CreateLeaveRequestDto } from '@modules/attendance/dto/create-leave-requ
 
 @ApiTags('ESS - Leave')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PermissionGuard)
 @Controller('ess')
 export class LeaveEssController {
   constructor(private readonly leaveService: LeaveService) {}
 
   @Post('leave-requests')
+  @Permissions('ess:leave:create')
   @ApiOperation({ summary: 'Submit leave request' })
   createLeaveRequest(
     @TenantId() tenantId: string,
@@ -32,6 +35,7 @@ export class LeaveEssController {
   }
 
   @Get('leave-requests')
+  @Permissions('ess:leave:read')
   @ApiOperation({ summary: 'My leave requests' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'startDate', required: false })
@@ -52,6 +56,7 @@ export class LeaveEssController {
   }
 
   @Get('leave-requests/:id')
+  @Permissions('ess:leave:read')
   @ApiOperation({ summary: 'Get leave request detail' })
   getLeaveRequest(
     @TenantId() tenantId: string,
@@ -61,6 +66,7 @@ export class LeaveEssController {
   }
 
   @Get('leave-balances')
+  @Permissions('ess:leave:read')
   @ApiOperation({ summary: 'My leave balances for current year' })
   @ApiQuery({ name: 'year', required: false })
   getLeaveBalances(
@@ -76,6 +82,7 @@ export class LeaveEssController {
   }
 
   @Get('team-calendar')
+  @Permissions('ess:leave:read')
   @ApiOperation({ summary: "Team's leave calendar" })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
@@ -90,6 +97,7 @@ export class LeaveEssController {
 
   // US-06 / BR-03: manager approval on-the-go — same source logic as web.
   @Post('approvals/leave/:id/approve')
+  @Permissions('ess:leave:approve')
   @ApiOperation({ summary: 'Approve a team leave request (mobile)' })
   approveLeave(
     @TenantId() tenantId: string,
@@ -101,6 +109,7 @@ export class LeaveEssController {
   }
 
   @Post('approvals/leave/:id/reject')
+  @Permissions('ess:leave:approve')
   @ApiOperation({ summary: 'Reject a team leave request (mobile)' })
   rejectLeave(
     @TenantId() tenantId: string,

@@ -37,12 +37,14 @@ export class ShiftController {
   }
 
   @Get('shifts')
+  @Permissions('shifts:read')
   @ApiOperation({ summary: 'Get all shifts' })
   findAllShifts(@TenantId() tenantId: string) {
     return this.shiftService.findAllShifts(tenantId);
   }
 
   @Get('shifts/:id')
+  @Permissions('shifts:read')
   @ApiOperation({ summary: 'Get shift by ID' })
   findOneShift(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.shiftService.findOneShift(tenantId, id);
@@ -74,12 +76,14 @@ export class ShiftController {
   }
 
   @Get('rosters')
+  @Permissions('rosters:read')
   @ApiOperation({ summary: 'Get all rosters' })
   findAllRosters(@TenantId() tenantId: string) {
     return this.shiftService.findAllRosters(tenantId);
   }
 
   @Get('rosters/:id')
+  @Permissions('rosters:read')
   @ApiOperation({ summary: 'Get roster by ID with entries' })
   findOneRoster(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.shiftService.findOneRoster(tenantId, id);
@@ -97,6 +101,7 @@ export class ShiftController {
   }
 
   @Post('rosters/:id/swap')
+  @Permissions('rosters:update')
   @ApiOperation({ summary: 'Request shift swap' })
   requestShiftSwap(
     @TenantId() tenantId: string,
@@ -115,6 +120,7 @@ export class ShiftController {
   }
 
   @Get('holidays')
+  @Permissions('holidays:read')
   @ApiOperation({ summary: 'Get holidays with filters' })
   @ApiQuery({ name: 'year', required: false })
   @ApiQuery({ name: 'entityId', required: false })
