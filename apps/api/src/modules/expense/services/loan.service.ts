@@ -97,6 +97,37 @@ export class LoanService {
 
     const transition = this.workflow.transition('loan', loan.status, 'APPROVE');
 
+    // FR-05 / BR-02: validate installment capacity against net salary before approval.
+    const latestPayslip = await this.prisma.payslip.findFirst({
+      where: { employeeId: loan.employeeId, tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (latestPayslip) {
+      const netPay = latestPayslip.netPay.toNumber();
+      const maxInstallment = Math.round(netPay * 0.3 * 100) / 100;
+
+      // Sum existing active loan installments for this employee.
+      const activeLoans = await this.prisma.loan.findMany({
+        where: { employeeId: loan.employeeId, tenantId, status: 'APPROVED' },
+      });
+      let existingTotal = 0;
+      for (const al of activeLoans) {
+        existingTotal += al.installmentAmount.toNumber();
+      }
+
+      if (loan.installmentAmount.toNumber() > maxInstallment) {
+        throw new BadRequestException(
+          `Installment amount exceeds 30% of net salary (BR-02). Max allowed: ${maxInstallment}`,
+        );
+      }
+
+      if (existingTotal + loan.installmentAmount.toNumber() > maxInstallment) {
+        throw new BadRequestException(
+          `Total installment amount (existing + new) exceeds 30% of net salary (BR-02)`,
+        );
+      }
+    }
+
     const updated = await this.prisma.loan.update({
       where: { id },
       data: {
@@ -112,6 +143,14 @@ export class LoanService {
     });
 
     await this.generateInstallments(tenantId, id, updated.installmentCount, updated.installmentAmount.toNumber());
+
+    // Publish LOAN_DISBURSED (contract event).
+    await this.eventBus.publishTyped(DomainEventType.LOAN_DISBURSED, {
+      loanId: id,
+      employeeId: loan.employeeId,
+      amount: loan.amount.toNumber(),
+      tenantId,
+    }, { aggregateId: id, tenantId, userId: approverId });
 
     const installments = await this.prisma.loanInstallment.findMany({ where: { loanId: id }, orderBy: { periodName: 'asc' } });
     for (const inst of installments) {

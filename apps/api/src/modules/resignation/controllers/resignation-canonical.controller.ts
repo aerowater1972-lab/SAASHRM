@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
@@ -22,6 +23,7 @@ export class ResignationCanonicalController {
   constructor(private readonly resignationService: ResignationService) {}
 
   @Post('resignations')
+  @Permissions('resignations:create')
   @ApiOperation({ summary: 'Submit a resignation request (canonical endpoint)' })
   create(
     @TenantId() tenantId: string,
@@ -32,6 +34,7 @@ export class ResignationCanonicalController {
   }
 
   @Post('resignations/:id/approve')
+  @Permissions('resignations:approve')
   @ApiOperation({ summary: 'Approve a resignation request (canonical endpoint)' })
   approve(
     @TenantId() tenantId: string,
@@ -42,12 +45,14 @@ export class ResignationCanonicalController {
   }
 
   @Get('resignations/:id/final-settlement')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Get final settlement for a resignation (canonical endpoint)' })
   getFinalSettlement(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.resignationService.getFinalSettlement(tenantId, id);
   }
 
   @Post('exit-interviews')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Conduct an exit interview (canonical endpoint)' })
   createExitInterview(
     @TenantId() tenantId: string,
@@ -63,6 +68,7 @@ export class ResignationCanonicalController {
   }
 
   @Post('offboarding-tasks/:id/complete')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Complete an offboarding task (canonical endpoint)' })
   completeTask(@TenantId() tenantId: string, @Param('id') taskId: string) {
     return this.resignationService.completeTaskById(tenantId, taskId);

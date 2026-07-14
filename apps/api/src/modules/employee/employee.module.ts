@@ -5,6 +5,7 @@ import { EmployeeController } from './controllers/employee.controller';
 import { OrganizationController } from './controllers/organization.controller';
 import { EmploymentController } from './controllers/employment.controller';
 import { MovementController } from './controllers/movement.controller';
+import { MovementHistoryController } from './controllers/movement-history.controller';
 import { MedicalController } from './controllers/medical.controller';
 import { EmployeeService } from './services/employee.service';
 import { OrganizationService } from './services/organization.service';
@@ -20,6 +21,7 @@ import { MedicalService } from './services/medical.service';
   ],
   controllers: [
     MovementController,
+    MovementHistoryController,
     OrganizationController,
     EmploymentController,
     EmployeeController,

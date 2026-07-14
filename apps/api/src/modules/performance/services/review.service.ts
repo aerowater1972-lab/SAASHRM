@@ -52,6 +52,7 @@ export class ReviewService {
   async findAll(
     tenantId: string,
     filters: ReviewListQueryDto,
+    currentUserId?: string,
   ): Promise<PerformanceReview[] | Paginated<PerformanceReview>> {
     const where: Prisma.PerformanceReviewWhereInput = { tenantId };
 
@@ -68,7 +69,7 @@ export class ReviewService {
       ];
     }
 
-    return paginate(
+    const result = await paginate(
       this.prisma.performanceReview,
       {
         where,
@@ -82,9 +83,13 @@ export class ReviewService {
       filters.page,
       filters.limit,
     );
+
+    const items = Array.isArray(result) ? result : (result as any).data;
+    this.maskPeerReviews(items, currentUserId);
+    return result as any;
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, currentUserId?: string) {
     const review = await this.prisma.performanceReview.findFirst({
       where: { id, tenantId },
       include: {
@@ -97,7 +102,22 @@ export class ReviewService {
       },
     });
     if (!review) throw new NotFoundException('Performance review not found');
+    this.maskPeerReviews([review], currentUserId);
     return review;
+  }
+
+  /**
+   * BR-03: anonymize non-self reviews (peer feedback). The reviewer identity is hidden from
+   * everyone except the reviewer themself.  Manager reviews are not distinguished from peer
+   * reviews in this release (no managerId on Employment); that refinement is a documented gap.
+   */
+  private maskPeerReviews(items: any[], currentUserId?: string): void {
+    if (!currentUserId || !items?.length) return;
+    for (const r of items) {
+      if (r.reviewerId !== r.employeeId && r.reviewerId !== currentUserId) {
+        r.reviewerId = null;
+      }
+    }
   }
 
   async update(tenantId: string, id: string, dto: Partial<CreateReviewDto & { summary?: string; strengths?: string; improvements?: string }>) {
@@ -192,5 +212,29 @@ export class ReviewService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /** US-05 / FR-06: historical final scores and reviews across all cycles for an employee. */
+  async getPerformanceHistory(tenantId: string, employeeId: string, currentUserId?: string) {
+    const finalScores = await this.prisma.finalScore.findMany({
+      where: { employeeId },
+      include: {
+        cycle: { select: { id: true, name: true, period: true, startDate: true, endDate: true } },
+      },
+      orderBy: { finalizedAt: 'desc' },
+    });
+
+    const reviews = await this.prisma.performanceReview.findMany({
+      where: { employeeId, tenantId },
+      include: {
+        ratings: true,
+        cycle: { select: { id: true, name: true, period: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    this.maskPeerReviews(finalScores, currentUserId);
+    this.maskPeerReviews(reviews, currentUserId);
+    return { employeeId, finalScores, reviews };
   }
 }

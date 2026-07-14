@@ -29,6 +29,7 @@ export class MovementService {
         employee: { select: { id: true, fullName: true, employeeId: true } },
         newPosition: { select: { id: true, name: true } },
         newDepartment: { select: { id: true, name: true } },
+        newOrganization: { select: { id: true, name: true } },
         performanceReview: true,
       },
     });
@@ -47,12 +48,18 @@ export class MovementService {
     });
     if (pending) throw new BadRequestException('Employee already has a pending movement request');
 
+    // BR-02: effective date cannot be retroactive past locked payroll period.
+    if (new Date(dto.effectiveDate) < new Date(new Date().toDateString())) {
+      throw new BadRequestException('Effective date cannot be in the past (BR-02)');
+    }
+
     return this.prisma.movementRequest.create({
       data: {
         employeeId: dto.employeeId,
         type: dto.type,
         newPositionId: dto.newPositionId,
         newDepartmentId: dto.newDepartmentId,
+        newOrganizationId: dto.newOrganizationId,
         effectiveDate: new Date(dto.effectiveDate),
         status: 'pending',
         performanceReviewRefId: dto.performanceReviewRefId,
@@ -84,7 +91,7 @@ export class MovementService {
           data: { endDate: new Date() },
         });
       }
-      await this.prisma.employment.create({
+      const newEmployment = await this.prisma.employment.create({
         data: {
           employeeId: req.employeeId,
           positionId: req.newPositionId || current?.positionId,
@@ -94,6 +101,25 @@ export class MovementService {
           type: current?.type || 'PERMANENT',
         } as any,
       });
+
+      // Publish employee.grade.changed when the new position has a different grade (promotion / FR-06 / contract).
+      if (req.newPositionId) {
+        const oldGradeId = current?.gradeId;
+        const newPos = await this.prisma.position.findUnique({ where: { id: req.newPositionId }, select: { gradeId: true } });
+        const newGradeId = newPos?.gradeId;
+        if (oldGradeId !== newGradeId) {
+          await this.eventBus.publishTyped(
+            DomainEventType.EMPLOYEE_GRADE_CHANGED,
+            {
+              employeeId: req.employeeId,
+              oldGradeId,
+              newGradeId,
+              effectiveDate: req.effectiveDate,
+            },
+            { aggregateId: newEmployment.id, tenantId },
+          );
+        }
+      }
     }
 
     await this.eventBus.publishTyped(
@@ -117,6 +143,19 @@ export class MovementService {
     return this.prisma.movementRequest.update({
       where: { id },
       data: { status: 'rejected' },
+    });
+  }
+
+  /** US-04 / FR-07: movement history for a specific employee. */
+  async getEmployeeHistory(tenantId: string, employeeId: string) {
+    return this.prisma.movementRequest.findMany({
+      where: { employeeId, employee: { tenantId } },
+      include: {
+        newPosition: { select: { id: true, name: true } },
+        newDepartment: { select: { id: true, name: true } },
+        newOrganization: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 }

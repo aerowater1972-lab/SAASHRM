@@ -29,6 +29,7 @@ export class ExpenseController {
   constructor(private readonly expenseService: ExpenseService) {}
 
   @Post('claims')
+  @Permissions('expense-claims:create')
   @ApiOperation({ summary: 'Create expense claim with optional items' })
   create(
     @TenantId() tenantId: string,
@@ -39,6 +40,7 @@ export class ExpenseController {
   }
 
   @Get('claims')
+  @Permissions('expense-claims:read')
   @ApiOperation({ summary: 'Get expense claims with filters' })
   findAll(
     @TenantId() tenantId: string,
@@ -48,12 +50,14 @@ export class ExpenseController {
   }
 
   @Get('claims/:id')
+  @Permissions('expense-claims:read')
   @ApiOperation({ summary: 'Get expense claim by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.expenseService.findOne(tenantId, id);
   }
 
   @Put('claims/:id')
+  @Permissions('expense-claims:update')
   @ApiOperation({ summary: 'Update draft expense claim (add/update items)' })
   update(
     @TenantId() tenantId: string,
@@ -65,6 +69,7 @@ export class ExpenseController {
 
   @Post('claims/:id/submit')
   @HttpCode(200)
+  @Permissions('expense-claims:update')
   @ApiOperation({ summary: 'Submit draft claim for approval' })
   submit(
     @TenantId() tenantId: string,
@@ -111,6 +116,7 @@ export class ExpenseController {
   }
 
   @Get('claims/:id/items')
+  @Permissions('expense-claims:read')
   @ApiOperation({ summary: 'Get all items for a claim' })
   getItems(
     @TenantId() tenantId: string,
@@ -120,6 +126,7 @@ export class ExpenseController {
   }
 
   @Post('claims/:id/items')
+  @Permissions('expense-claims:update')
   @ApiOperation({ summary: 'Add item to a draft claim' })
   addItem(
     @TenantId() tenantId: string,

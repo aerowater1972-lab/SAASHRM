@@ -102,25 +102,10 @@ export class CycleService {
       data: { status: CycleStatus.COMPLETED },
     });
 
-    const reviews = await this.prisma.performanceReview.findMany({
-      where: { cycleId: id, tenantId },
-      select: { id: true, employeeId: true, overallScore: true, tenantId: true },
-    });
-
-    for (const review of reviews) {
-      const score = review.overallScore;
-      const finalRating = score && typeof score === 'object' && 'toNumber' in score ? (score as any).toNumber() : (score as number | null) ?? 0;
-      await this.eventBus.publishTyped(DomainEventType.PERFORMANCE_SCORE_FINALIZED, {
-        employeeId: review.employeeId,
-        reviewCycleId: id,
-        finalRating,
-        tenantId,
-      }, { aggregateId: review.id, tenantId });
-    }
-
+    // Final scores + `performance.score.finalized` events are emitted by CalibrationService.finalize
+    // (the canonical publisher per FR-05 / contract) to avoid duplicate events.
     await this.eventBus.publishTyped(DomainEventType.REVIEW_CYCLE_FINALIZED, {
       cycleId: id,
-      finalScoresCount: reviews.length,
       tenantId,
     }, { aggregateId: id, tenantId });
 

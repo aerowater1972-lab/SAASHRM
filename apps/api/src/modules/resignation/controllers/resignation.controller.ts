@@ -9,6 +9,7 @@ import {
   UseGuards} from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
@@ -24,6 +25,7 @@ export class ResignationController {
   constructor(private readonly resignationService: ResignationService) {}
 
   @Post('requests')
+  @Permissions('resignations:create')
   @ApiOperation({ summary: 'Employee submits a resignation request' })
   create(
     @TenantId() tenantId: string,
@@ -34,6 +36,7 @@ export class ResignationController {
   }
 
   @Get('requests')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Get all resignation requests with filters' })
   findAll(
     @TenantId() tenantId: string,
@@ -43,12 +46,14 @@ export class ResignationController {
   }
 
   @Get('requests/:id')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Get resignation request by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.resignationService.findOne(tenantId, id);
   }
 
   @Put('requests/:id/approve')
+  @Permissions('resignations:approve')
   @ApiOperation({ summary: 'Approve a resignation request' })
   approve(
     @TenantId() tenantId: string,
@@ -59,6 +64,7 @@ export class ResignationController {
   }
 
   @Put('requests/:id/reject')
+  @Permissions('resignations:approve')
   @ApiOperation({ summary: 'Reject a resignation request' })
   reject(
     @TenantId() tenantId: string,
@@ -69,6 +75,7 @@ export class ResignationController {
   }
 
   @Post('requests/:id/exit-interview')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Conduct exit interview for approved resignation' })
   createExitInterview(
     @TenantId() tenantId: string,
@@ -80,12 +87,14 @@ export class ResignationController {
   }
 
   @Get('requests/:id/exit-interview')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Get exit interview for a resignation' })
   getExitInterview(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.resignationService.getExitInterview(tenantId, id);
   }
 
   @Post('requests/:id/tasks')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Create an offboarding task' })
   createTask(
     @TenantId() tenantId: string,
@@ -96,12 +105,14 @@ export class ResignationController {
   }
 
   @Get('requests/:id/tasks')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Get all offboarding tasks for a resignation' })
   getTasks(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.resignationService.getTasks(tenantId, id);
   }
 
   @Put('requests/:id/tasks/:taskId')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Mark offboarding task as completed' })
   completeTask(
     @TenantId() tenantId: string,
@@ -112,6 +123,7 @@ export class ResignationController {
   }
 
   @Post('requests/:id/offboard')
+  @Permissions('resignations:offboard')
   @ApiOperation({ summary: 'Execute offboarding: deactivate employee, return assets, disable accounts' })
   offboard(
     @TenantId() tenantId: string,
@@ -121,12 +133,14 @@ export class ResignationController {
   }
 
   @Get('requests/:id/final-settlement')
+  @Permissions('resignations:read')
   @ApiOperation({ summary: 'Get final settlement for a resignation' })
   getFinalSettlement(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.resignationService.getFinalSettlement(tenantId, id);
   }
 
   @Post('requests/:id/final-settlement')
+  @Permissions('resignations:offboard')
   @ApiOperation({ summary: 'Create or update final settlement' })
   upsertFinalSettlement(
     @TenantId() tenantId: string,

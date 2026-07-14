@@ -44,6 +44,9 @@ describe('LoanService', () => {
       findMany: jest.fn(),
       create: jest.fn(),
     },
+    payslip: {
+      findFirst: jest.fn(),
+    },
     employee: {
       findUnique: jest.fn(),
     },
@@ -103,6 +106,11 @@ describe('LoanService', () => {
   });
 
   describe('approve', () => {
+    beforeEach(() => {
+      mockPrisma.payslip.findFirst.mockResolvedValue(null); // skip BR-02 when no payslip
+      mockPrisma.loan.findMany.mockResolvedValue([]);
+    });
+
     it('should approve a pending loan and generate installments', async () => {
       mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
       mockPrisma.loanInstallment.findMany.mockResolvedValue([]);
@@ -114,9 +122,31 @@ describe('LoanService', () => {
       expect(mockPrisma.loanInstallment.create).toHaveBeenCalledTimes(4);
     });
 
+    it('should publish LOAN_DISBURSED event after approval', async () => {
+      mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
+      mockPrisma.loanInstallment.findMany.mockResolvedValue([]);
+      mockPrisma.loan.findUnique.mockResolvedValue(mockLoan);
+      mockPrisma.loan.update.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED });
+
+      await service.approve('default', 'loan-1', 'approver-1');
+      expect(mockEventBus.publishTyped).toHaveBeenCalledWith(
+        'loan.disbursed',
+        expect.objectContaining({ loanId: 'loan-1', employeeId: 'emp-1' }),
+        expect.objectContaining({ aggregateId: 'loan-1' }),
+      );
+    });
+
     it('should throw BadRequestException when approving non-pending loan', async () => {
       mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED });
       await expect(service.approve('default', 'loan-1', 'approver-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should enforce BR-02 when installment exceeds 30% of net pay', async () => {
+      mockPrisma.payslip.findFirst.mockResolvedValue({ netPay: { toNumber: () => 500 } });
+      mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
+      mockPrisma.loan.findMany.mockResolvedValue([]);
+      // installmentAmount = 250, maxInstallment = 150 (30% of 500) => should fail
+      await expect(service.approve('default', 'loan-1', 'approver-1')).rejects.toThrow('BR-02');
     });
   });
 

@@ -41,6 +41,7 @@ export class TrainingController {
   }
 
   @Get('trainings')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get training programs with filters' })
   findAll(
     @TenantId() tenantId: string,
@@ -50,6 +51,7 @@ export class TrainingController {
   }
 
   @Get('trainings/:id')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get training program by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.trainingService.findOne(tenantId, id);
@@ -67,6 +69,7 @@ export class TrainingController {
   }
 
   @Post('trainings/:id/register')
+  @Permissions('learning:create')
   @ApiOperation({ summary: 'Register an employee for training' })
   register(
     @TenantId() tenantId: string,
@@ -88,6 +91,7 @@ export class TrainingController {
   }
 
   @Get('trainings/:id/participants')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get participants of a training' })
   getParticipants(
     @TenantId() tenantId: string,
@@ -117,6 +121,7 @@ export class TrainingController {
   }
 
   @Get('employees/:employeeId/history')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get employee learning history (trainings + certifications)' })
   getLearningHistory(
     @TenantId() tenantId: string,

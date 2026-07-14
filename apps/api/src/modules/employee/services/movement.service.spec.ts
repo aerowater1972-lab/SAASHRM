@@ -12,6 +12,7 @@ describe('MovementService', () => {
 
   const mockPrisma = {
     employee: { findFirst: jest.fn() },
+    position: { findUnique: jest.fn() },
     movementRequest: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -29,8 +30,10 @@ describe('MovementService', () => {
     type: 'PROMOTION',
     newPositionId: 'pos-2',
     newDepartmentId: null,
+    newOrganizationId: null,
     status: 'pending',
     effectiveDate: new Date('2026-02-01'),
+    newOrganization: null,
   };
 
   beforeEach(async () => {
@@ -67,10 +70,20 @@ describe('MovementService', () => {
         service.create('tenant-x', { employeeId: 'emp-1', type: 'PROMOTION' }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('rejects retroactive effectiveDate (BR-02)', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1' });
+      prisma.movementRequest.findFirst.mockResolvedValue(null);
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      await expect(
+        service.create('tenant-x', { employeeId: 'emp-1', type: 'PROMOTION', effectiveDate: yesterday.toISOString() }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('approve', () => {
-    it('publishes MOVEMENT_APPROVED event after approval', async () => {
+    it('publishes MOVEMENT_APPROVED and EMPLOYEE_GRADE_CHANGED events on promotion', async () => {
       prisma.movementRequest.findFirst.mockResolvedValue(pendingReq);
       prisma.employment.findFirst.mockResolvedValue({
         id: 'emp-old',
@@ -79,10 +92,11 @@ describe('MovementService', () => {
         gradeId: 'g-1',
         type: 'PERMANENT',
       });
+      prisma.position.findUnique.mockResolvedValue({ gradeId: 'g-2' });
       prisma.movementRequest.update.mockResolvedValue({ ...pendingReq, status: 'approved' });
       prisma.employment.update.mockResolvedValue({});
       prisma.employment.create.mockResolvedValue({ id: 'emp-new' });
-      prisma.movementRequest.findMany.mockResolvedValue([{ ...pendingReq, status: 'approved' }]);
+      prisma.movementRequest.findMany.mockResolvedValue([{ ...pendingReq, status: 'approved', newOrganization: null }]);
 
       await service.approve('tenant-x', 'mov-1');
 
@@ -91,6 +105,56 @@ describe('MovementService', () => {
         expect.objectContaining({ movementId: 'mov-1', employeeId: 'emp-1', type: 'PROMOTION' }),
         { aggregateId: 'mov-1', tenantId: 'tenant-x' },
       );
+      expect(eventBus.publishTyped).toHaveBeenCalledWith(
+        DomainEventType.EMPLOYEE_GRADE_CHANGED,
+        expect.objectContaining({ employeeId: 'emp-1', oldGradeId: 'g-1', newGradeId: 'g-2' }),
+        { aggregateId: 'emp-new', tenantId: 'tenant-x' },
+      );
+    });
+
+    it('does not publish EMPLOYEE_GRADE_CHANGED when grade unchanged', async () => {
+      prisma.movementRequest.findFirst.mockResolvedValue(pendingReq);
+      prisma.employment.findFirst.mockResolvedValue({
+        id: 'emp-old',
+        positionId: 'pos-1',
+        departmentId: 'dep-1',
+        gradeId: 'g-1',
+        type: 'PERMANENT',
+      });
+      prisma.position.findUnique.mockResolvedValue({ gradeId: 'g-1' });
+      prisma.movementRequest.update.mockResolvedValue({ ...pendingReq, status: 'approved' });
+      prisma.employment.update.mockResolvedValue({});
+      prisma.employment.create.mockResolvedValue({ id: 'emp-new' });
+      prisma.movementRequest.findMany.mockResolvedValue([{ ...pendingReq, status: 'approved', newOrganization: null }]);
+
+      await service.approve('tenant-x', 'mov-1');
+
+      const gradeCalls = mockEventBus.publishTyped.mock.calls.filter(
+        (c: any[]) => c[0] === DomainEventType.EMPLOYEE_GRADE_CHANGED,
+      );
+      expect(gradeCalls).toHaveLength(0);
+    });
+
+    it('rejects if request not pending', async () => {
+      prisma.movementRequest.findFirst.mockResolvedValue({ ...pendingReq, status: 'approved', newOrganization: null });
+      await expect(service.approve('tenant-x', 'mov-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getEmployeeHistory', () => {
+    it('returns movements scoped by tenantId and sorted desc', async () => {
+      mockPrisma.movementRequest.findMany.mockResolvedValue([{ id: 'mov-1' }]);
+      const result = await service.getEmployeeHistory('tenant-x', 'emp-1');
+      expect(mockPrisma.movementRequest.findMany).toHaveBeenCalledWith({
+        where: { employeeId: 'emp-1', employee: { tenantId: 'tenant-x' } },
+        include: {
+          newPosition: { select: { id: true, name: true } },
+          newDepartment: { select: { id: true, name: true } },
+          newOrganization: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(result).toEqual([{ id: 'mov-1' }]);
     });
   });
 });

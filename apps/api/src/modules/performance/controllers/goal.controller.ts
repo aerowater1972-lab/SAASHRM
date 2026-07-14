@@ -9,6 +9,7 @@ import {
   UseGuards} from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
@@ -26,6 +27,7 @@ export class GoalController {
   constructor(private readonly goalService: GoalService) {}
 
   @Post()
+  @Permissions('performance:goal:create')
   @ApiOperation({ summary: 'Create a new goal/OKR for an employee' })
   create(
     @TenantId() tenantId: string,
@@ -36,6 +38,7 @@ export class GoalController {
   }
 
   @Get()
+  @Permissions('performance:goal:read')
   @ApiOperation({ summary: 'Get all goals with filters' })
   @ApiQuery({ name: 'employeeId', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, enum: GoalStatus })
@@ -47,12 +50,14 @@ export class GoalController {
   }
 
   @Get(':id')
+  @Permissions('performance:goal:read')
   @ApiOperation({ summary: 'Get goal by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.goalService.findOne(tenantId, id);
   }
 
   @Put(':id')
+  @Permissions('performance:goal:update')
   @ApiOperation({ summary: 'Update goal details' })
   update(
     @TenantId() tenantId: string,
@@ -62,7 +67,19 @@ export class GoalController {
     return this.goalService.update(tenantId, id, dto);
   }
 
+  @Put(':id/approve')
+  @Permissions('performance:goal:approve')
+  @ApiOperation({ summary: 'HRBP approves a late-created goal (BR-02)' })
+  approve(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('sub') approverId: string,
+  ) {
+    return this.goalService.approve(tenantId, id, approverId);
+  }
+
   @Put(':id/progress')
+  @Permissions('performance:goal:progress')
   @ApiOperation({ summary: 'Update goal actual progress value' })
   updateProgress(
     @TenantId() tenantId: string,

@@ -7,6 +7,8 @@ import { CalibrationController } from './controllers/calibration.controller';
 import { CycleService } from './services/cycle.service';
 import { ReviewService } from './services/review.service';
 import { GoalService } from './services/goal.service';
+import { CalibrationService } from './services/calibration.service';
+import { PerformanceController } from './controllers/performance.controller';
 
 @Module({
   imports: [EmployeeModule],
@@ -15,16 +17,19 @@ import { GoalService } from './services/goal.service';
     ReviewController,
     GoalController,
     CalibrationController,
+    PerformanceController,
   ],
   providers: [
     CycleService,
     ReviewService,
     GoalService,
+    CalibrationService,
   ],
   exports: [
     CycleService,
     ReviewService,
     GoalService,
+    CalibrationService,
   ],
 })
 export class PerformanceModule {}

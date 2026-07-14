@@ -1,59 +1,53 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  NotFoundException,
+} from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
-import { PrismaService } from '@common/prisma/prisma.service';
+import { CalibrationService } from '../services/calibration.service';
+import { FinalizeCalibrationDto } from '../dto/finalize-calibration.dto';
 
 @ApiTags('Performance - Calibration')
 @UseGuards(AuthGuard, PermissionGuard)
 @Controller('performance/calibrations')
 export class CalibrationController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly calibration: CalibrationService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a calibration session' })
+  @Permissions('performance:calibration:create')
+  @ApiOperation({ summary: 'Create a calibration session (HRBP)' })
   async create(@TenantId() tenantId: string, @CurrentUser('sub') createdBy: string, @Body() dto: any) {
-    return this.prisma.calibrationSession.create({
-      data: {
-        reviewCycleId: dto.reviewCycleId,
-        departmentId: dto.departmentId,
-        facilitatorId: dto.facilitatorId,
-        status: dto.status || 'scheduled',
-      },
-    });
+    return this.calibration.create(tenantId, createdBy, dto);
   }
 
   @Get()
+  @Permissions('performance:calibration:read')
   @ApiOperation({ summary: 'List calibration sessions' })
   async findAll(@TenantId() tenantId: string, @Query('reviewCycleId') reviewCycleId?: string) {
-    return this.prisma.calibrationSession.findMany({
-      where: { ...(reviewCycleId && { reviewCycleId }), cycle: { tenantId } } as any,
-      include: { cycle: true, department: true, facilitator: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.calibration.findAll(tenantId, reviewCycleId);
   }
 
   @Get(':id')
+  @Permissions('performance:calibration:read')
   @ApiOperation({ summary: 'Get calibration session by ID' })
   async findOne(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.prisma.calibrationSession.findFirst({
-      where: { id, cycle: { tenantId } } as any,
-      include: { cycle: true, department: true, facilitator: true },
-    });
+    return this.calibration.findOne(tenantId, id);
   }
 
   @Post(':id/finalize')
-  @ApiOperation({ summary: 'Finalize calibration session' })
-  async finalize(@TenantId() tenantId: string, @Param('id') id: string) {
-    const session = await this.prisma.calibrationSession.findFirst({
-      where: { id, cycle: { tenantId } } as any,
-    });
-    if (!session) throw new NotFoundException('Calibration session not found');
-    return this.prisma.calibrationSession.update({
-      where: { id },
-      data: { status: 'finalized' },
-    });
+  @Permissions('performance:calibration:finalize')
+  @ApiOperation({ summary: 'Finalize calibration session — publishes final scores (BR-01/FR-05)' })
+  async finalize(@TenantId() tenantId: string, @Param('id') id: string, @Body() dto: FinalizeCalibrationDto) {
+    return this.calibration.finalize(tenantId, id, dto);
   }
 }

@@ -25,6 +25,7 @@ export class LoanController {
   constructor(private readonly loanService: LoanService) {}
 
   @Post('loans')
+  @Permissions('loans:create')
   @ApiOperation({ summary: 'Create loan application' })
   create(
     @TenantId() tenantId: string,
@@ -35,6 +36,7 @@ export class LoanController {
   }
 
   @Get('loans')
+  @Permissions('loans:read')
   @ApiOperation({ summary: 'Get loans with filters' })
   findAll(
     @TenantId() tenantId: string,
@@ -44,6 +46,7 @@ export class LoanController {
   }
 
   @Get('loans/:id')
+  @Permissions('loans:read')
   @ApiOperation({ summary: 'Get loan by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.loanService.findOne(tenantId, id);
@@ -76,6 +79,7 @@ export class LoanController {
   }
 
   @Get('loans/:id/installments')
+  @Permissions('loans:read')
   @ApiOperation({ summary: 'Get installments for a loan' })
   getInstallments(
     @TenantId() tenantId: string,
@@ -85,6 +89,7 @@ export class LoanController {
   }
 
   @Get('loans/:id/amortization-schedule')
+  @Permissions('loans:read')
   @ApiOperation({ summary: 'Get amortization schedule for a loan' })
   getAmortizationSchedule(
     @TenantId() tenantId: string,

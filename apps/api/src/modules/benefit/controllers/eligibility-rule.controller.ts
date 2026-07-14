@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UseGuards, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
+import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
@@ -12,6 +13,7 @@ export class EligibilityRuleController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Post()
+  @Permissions('benefits:update')
   @ApiOperation({ summary: 'Create eligibility rule' })
   async create(@TenantId() tenantId: string, @Body() dto: any) {
     const benefit = await this.prisma.benefit.findFirst({
@@ -24,6 +26,7 @@ export class EligibilityRuleController {
   }
 
   @Get()
+  @Permissions('benefits:read')
   @ApiOperation({ summary: 'List eligibility rules' })
   async findAll(@TenantId() tenantId: string) {
     return this.prisma.benefitEligibilityRule.findMany({
@@ -34,6 +37,7 @@ export class EligibilityRuleController {
   }
 
   @Get(':id')
+  @Permissions('benefits:read')
   @ApiOperation({ summary: 'Get rule by ID' })
   async findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     const rule = await this.prisma.benefitEligibilityRule.findFirst({
@@ -47,6 +51,7 @@ export class EligibilityRuleController {
   }
 
   @Delete(':id')
+  @Permissions('benefits:update')
   @ApiOperation({ summary: 'Delete eligibility rule' })
   async remove(@TenantId() tenantId: string, @Param('id') id: string) {
     const rule = await this.prisma.benefitEligibilityRule.findFirst({

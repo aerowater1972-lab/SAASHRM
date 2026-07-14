@@ -20,11 +20,30 @@ export class GoalService {
     const employee = await this.employeeService.findById(tenantId, employeeId);
     if (!employee) throw new NotFoundException('Employee not found');
 
+    let cycleId: string | undefined;
     if (dto.reviewId) {
       const review = await this.prisma.performanceReview.findFirst({
         where: { id: dto.reviewId, tenantId },
+        select: { cycleId: true },
       });
       if (!review) throw new NotFoundException('Performance review not found');
+      cycleId = review.cycleId;
+    }
+
+    // BR-02: a goal created after >50% of the cycle has elapsed needs HRBP approval before it becomes active.
+    let approvalRequired = false;
+    const cycle = cycleId
+      ? await this.prisma.reviewCycle.findFirst({ where: { id: cycleId, tenantId } })
+      : await this.prisma.reviewCycle.findFirst({
+          where: { tenantId, status: 'IN_PROGRESS' as any },
+          orderBy: { startDate: 'desc' },
+        });
+    if (cycle && cycle.startDate && cycle.endDate) {
+      const total = cycle.endDate.getTime() - cycle.startDate.getTime();
+      const elapsed = Date.now() - new Date(cycle.startDate).getTime();
+      if (total > 0 && elapsed / total > 0.5) {
+        approvalRequired = true;
+      }
     }
 
     return this.prisma.goal.create({
@@ -39,6 +58,25 @@ export class GoalService {
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         reviewId: dto.reviewId,
         status: GoalStatus.NOT_STARTED,
+        approvalRequired,
+      },
+    });
+  }
+
+  /**
+   * BR-02: HRBP approves a late-created goal so it can become active.
+   * Only goals flagged `approvalRequired` need this; others are auto-active.
+   */
+  async approve(tenantId: string, id: string, approverId: string) {
+    const goal = await this.prisma.goal.findFirst({ where: { id, tenantId } });
+    if (!goal) throw new NotFoundException('Goal not found');
+    if (!goal.approvalRequired) return goal;
+
+    return this.prisma.goal.update({
+      where: { id },
+      data: {
+        approvedById: approverId,
+        status: goal.status === GoalStatus.NOT_STARTED ? GoalStatus.IN_PROGRESS : goal.status,
       },
     });
   }

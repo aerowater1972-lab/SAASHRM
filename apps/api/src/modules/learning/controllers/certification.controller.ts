@@ -38,6 +38,7 @@ export class CertificationController {
   }
 
   @Get('certifications')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get certifications with filters' })
   findAll(
     @TenantId() tenantId: string,
@@ -47,6 +48,7 @@ export class CertificationController {
   }
 
   @Get('certifications/expiring')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get certifications expiring within N days' })
   @ApiQuery({ name: 'days', type: Number, required: false })
   findExpiring(
@@ -57,6 +59,7 @@ export class CertificationController {
   }
 
   @Get('certifications/:id')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get certification by ID' })
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.certificationService.findOne(tenantId, id);
@@ -74,6 +77,7 @@ export class CertificationController {
   }
 
   @Get('certifications/employee/:employeeId')
+  @Permissions('learning:read')
   @ApiOperation({ summary: 'Get certifications by employee ID' })
   findByEmployee(
     @TenantId() tenantId: string,
