@@ -3,6 +3,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { PrismaModule } from '@common/prisma/prisma.module';
 import { EmployeeModule } from '@modules/employee/employee.module';
+import { AttendanceModule } from '@modules/attendance/attendance.module';
 import { ProfileController } from './controllers/profile.controller';
 import { ProfileChangeRequestController } from './controllers/profile-change-request.controller';
 import { DashboardController } from './controllers/dashboard.controller';
@@ -26,6 +27,7 @@ const NOTIFICATION_SWEEP_MS = 60 * 60 * 1000; // BR-05: hourly archive sweep
   imports: [
     PrismaModule,
     EmployeeModule,
+    AttendanceModule,
     MulterModule.register({
       storage: memoryStorage(),
     }),
@@ -46,8 +48,6 @@ const NOTIFICATION_SWEEP_MS = 60 * 60 * 1000; // BR-05: hourly archive sweep
     DashboardService,
     EssNotificationService,
     EssOnboardingService,
-    AttendanceService,
-    LeaveService,
     PayslipService,
   ],
   exports: [

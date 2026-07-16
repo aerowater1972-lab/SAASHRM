@@ -52,23 +52,23 @@ export async function deleteShift(id: string): Promise<void> {
 }
 
 export async function fetchOvertimeRequests(): Promise<OvertimeRequest[]> {
-  return api.get<OvertimeRequest[]>('/attendance/overtime/requests');
+  return api.get<OvertimeRequest[]>('/overtime-requests');
 }
 
 export async function createOvertime(data: any): Promise<OvertimeRequest> {
-  return api.post<OvertimeRequest>('/attendance/overtime/requests', data);
+  return api.post<OvertimeRequest>('/overtime-requests', data);
 }
 
 export async function approveOvertime(id: string): Promise<OvertimeRequest> {
-  return api.post<OvertimeRequest>(`/attendance/overtime/requests/${id}/approve`);
+  return api.post<OvertimeRequest>(`/overtime-requests/${id}/approve`);
 }
 
 export async function rejectOvertime(id: string, reason?: string): Promise<OvertimeRequest> {
-  return api.post<OvertimeRequest>(`/attendance/overtime/requests/${id}/reject`, { reason });
+  return api.post<OvertimeRequest>(`/overtime-requests/${id}/reject`, { reason });
 }
 
 export async function retroactiveApproveOvertime(id: string, reason: string): Promise<OvertimeRequest> {
-  return api.post<OvertimeRequest>(`/attendance/overtime/requests/${id}/retroactive-approve`, { reason });
+  return api.post<OvertimeRequest>(`/overtime-requests/${id}/retroactive-approve`, { reason });
 }
 
 export interface OvertimeRecord {
@@ -85,5 +85,5 @@ export interface OvertimeRecord {
 }
 
 export async function fetchOvertimeRecords(params?: { employeeId?: string; startDate?: string; endDate?: string }): Promise<OvertimeRecord[]> {
-  return api.get<OvertimeRecord[]>('/attendance/overtime', { params: params as Record<string, unknown> });
+  return api.get<OvertimeRecord[]>('/overtime', { params: params as Record<string, unknown> });
 }
