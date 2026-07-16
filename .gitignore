@@ -9,3 +9,8 @@ coverage/
 openapi.json
 .next/
 .swc/
+
+# dev server error logs
+*.err
+*.log
+
