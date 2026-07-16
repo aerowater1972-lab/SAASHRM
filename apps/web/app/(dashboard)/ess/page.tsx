@@ -1,0 +1,186 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { useEssDashboard, useClockIn, useClockOut } from '@/lib/hooks/ess';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState, EmptyState } from '@/components/ui/data-states';
+import { Clock, LogOut, CalendarDays, Wallet, Bell, User, ChevronRight } from 'lucide-react';
+
+const menuItems = [
+  { href: '/ess/leave', label: 'Cuti', icon: CalendarDays, color: 'text-blue-600' },
+  { href: '/ess/expense', label: 'Klaim', icon: Wallet, color: 'text-green-600' },
+  { href: '/ess/profile', label: 'Profil', icon: User, color: 'text-purple-600' },
+  { href: '/ess/payslips', label: 'Payslip', icon: Bell, color: 'text-orange-600' },
+];
+
+interface DashboardData {
+  employeeName?: string;
+  date?: string;
+  clockStatus?: string;
+  clockInTime?: string;
+  clockOutTime?: string;
+  leaveBalance?: { label: string; used: number; total: number }[];
+  latestPayslip?: { month: string; netPay: number };
+  unreadNotifications?: number;
+}
+
+export default function EssDashboardPage() {
+  const { data: raw, isLoading, error, refetch } = useEssDashboard();
+  const clockInMut = useClockIn();
+  const clockOutMut = useClockOut();
+  const [clocking, setClocking] = useState(false);
+
+  const d = raw as DashboardData | undefined;
+  const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  const handleClock = async () => {
+    setClocking(true);
+    try {
+      if (d?.clockStatus === 'CLOCKED_IN') {
+        await clockOutMut.mutateAsync({});
+      } else {
+        await clockInMut.mutateAsync({ method: 'web' });
+      }
+    } catch { /* ignore */ }
+    setClocking(false);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 p-4">
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error) return <ErrorState onRetry={() => refetch()} />;
+
+  return (
+    <div className="mx-auto max-w-md pb-20">
+      {/* Greeting Card */}
+      <Card className="rounded-none border-x-0 border-t-0 p-4 shadow-none">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">Selamat Datang,</p>
+            <h1 className="text-xl font-bold">{d?.employeeName ?? 'Karyawan'}</h1>
+            <p className="mt-1 text-xs text-muted-foreground">{today}</p>
+          </div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+            <User className="h-7 w-7 text-primary" />
+          </div>
+        </div>
+      </Card>
+
+      {/* Clock In/Out Button */}
+      <div className="px-4 py-6">
+        <Button
+          onClick={handleClock}
+          disabled={clocking}
+          className="flex h-28 w-full flex-col items-center justify-center gap-2 rounded-2xl text-lg shadow-lg"
+        >
+          <Clock className={`h-10 w-10 ${d?.clockStatus === 'CLOCKED_IN' ? 'animate-pulse' : ''}`} />
+          <span className="text-base font-semibold">
+            {clocking ? 'Memproses...' : d?.clockStatus === 'CLOCKED_IN' ? 'Clock Out' : 'Clock In'}
+          </span>
+          {d?.clockStatus === 'CLOCKED_IN' && d?.clockInTime && (
+            <span className="text-xs opacity-80">Masuk {d.clockInTime}</span>
+          )}
+        </Button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="space-y-3 px-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-blue-600" />
+              <span className="text-sm font-medium">Sisa Cuti</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="mt-2 flex gap-2">
+            {(d?.leaveBalance ?? []).slice(0, 3).map((lb, i) => (
+              <Badge key={i} variant="secondary" className="text-xs">
+                {lb.label}: {lb.used}/{lb.total}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-green-600" />
+              <span className="text-sm font-medium">Payslip Terakhir</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </div>
+          {d?.latestPayslip ? (
+            <p className="mt-1 text-lg font-bold">
+              Rp {d.latestPayslip.netPay.toLocaleString('id-ID')}
+              <span className="ml-2 text-xs font-normal text-muted-foreground">{d.latestPayslip.month}</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">Belum ada payslip</p>
+          )}
+        </Card>
+
+        <Link href="/ess/notifications">
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-orange-600" />
+                <span className="text-sm font-medium">Notifikasi</span>
+              </div>
+              {d?.unreadNotifications ? (
+                <Badge variant="destructive" className="text-xs">{d.unreadNotifications}</Badge>
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </Card>
+        </Link>
+      </div>
+
+      {/* 2x2 Menu Grid */}
+      <div className="px-4 py-6">
+        <div className="grid grid-cols-2 gap-3">
+          {menuItems.map((item) => (
+            <Link key={item.href} href={item.href}>
+              <Card className="flex cursor-pointer flex-col items-center gap-2 p-5 transition-colors hover:bg-accent">
+                <item.icon className={`h-8 w-8 ${item.color}`} />
+                <span className="text-sm font-medium">{item.label}</span>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom Navigation */}
+      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t bg-background">
+        <div className="flex justify-around py-2">
+          {[
+            { href: '/ess', label: 'Home', icon: Clock, active: true },
+            { href: '/attendance', label: 'Absensi', icon: LogOut, active: false },
+            { href: '/ess/leave', label: 'Cuti', icon: CalendarDays, active: false },
+             { href: '/ess/profile', label: 'Profil', icon: User, active: false },
+             { href: '/ess/notifications', label: 'Notif', icon: Bell, active: false },
+           ].map((item) => (
+            <Link key={item.label} href={item.href}>
+              <div className={`flex flex-col items-center gap-0.5 px-3 py-1 ${item.active ? 'text-primary' : 'text-muted-foreground'}`}>
+                <item.icon className="h-5 w-5" />
+                <span className="text-[10px]">{item.label}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

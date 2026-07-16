@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
@@ -81,6 +81,9 @@ export class RunService {
 
   async process(tenantId: string, id: string, userId?: string) {
     const run = await this.findOne(tenantId, id);
+    if ((run as any).status === 'LOCKED') {
+      throw new ForbiddenException('Cannot process a locked payroll run');
+    }
     const runTransition = this.workflow.transition('payroll-run', (run as any).status, 'RUN');
 
     await this.prisma.payrollRun.update({

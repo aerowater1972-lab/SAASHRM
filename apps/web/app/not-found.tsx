@@ -1,12 +1,17 @@
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export default function NotFound() {
   return (
-    <div style={{ maxWidth: 480, margin: '80px auto', textAlign: 'center', padding: '0 24px' }}>
-      <div style={{ fontSize: 64, fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>404</div>
-      <h2 style={{ margin: '0 0 8px' }}>Page not found</h2>
-      <p style={{ color: 'var(--muted)', margin: '0 0 24px' }}>The page you are looking for does not exist.</p>
-      <Link href="/dashboard" className="btn" style={{ textDecoration: 'none', display: 'inline-block' }}>Go to Dashboard</Link>
+    <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
+      <div className="text-8xl font-bold text-muted-foreground/30 mb-4">404</div>
+      <h1 className="text-2xl font-bold mb-2">Halaman tidak ditemukan</h1>
+      <p className="text-muted-foreground mb-8 max-w-sm">
+        Halaman yang Anda cari tidak tersedia atau telah dipindahkan.
+      </p>
+      <Link href="/dashboard">
+        <Button>Ke Dashboard</Button>
+      </Link>
     </div>
   );
 }

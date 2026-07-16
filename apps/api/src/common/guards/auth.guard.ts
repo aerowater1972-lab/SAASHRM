@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import * as jwt from 'jsonwebtoken';
+import { setTenant } from '@common/tenant/tenant.context';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 
@@ -43,11 +44,12 @@ export class AuthGuard implements CanActivate {
       request.user = {
         sub: decoded.sub,
         email: decoded.email,
-        tenantId: decoded.tenantId || request.headers['x-tenant-id'],
+        tenantId: decoded.tenantId,
         employeeId: decoded.employeeId ?? null,
         role: decoded.role,
         permissions: decoded.permissions || [],
       };
+      setTenant(decoded.tenantId);
       return true;
     } catch (error) {
       this.logger.warn(`Invalid token: ${(error as Error).message}`);

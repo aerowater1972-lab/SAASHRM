@@ -213,4 +213,28 @@ export const WORKFLOW_DEFINITIONS: WorkflowDefinition[] = [
       CANCELLED: { transitions: [] },
     },
   },
+  {
+    key: 'overtime',
+    description: 'Overtime request approval lifecycle (pre-approval SPL)',
+    initialState: 'PENDING',
+    states: {
+      PENDING: {
+        transitions: [
+          { action: 'APPROVE', to: 'APPROVED' },
+          { action: 'REJECT', to: 'REJECTED' },
+          { action: 'CANCEL', to: 'CANCELLED' },
+        ],
+      },
+      APPROVED: { transitions: [] },
+      REJECTED: { transitions: [] },
+      CANCELLED: { transitions: [] },
+      RETROACTIVE_PENDING: {
+        transitions: [
+          { action: 'APPROVE', to: 'APPROVED' },
+          { action: 'REJECT', to: 'REJECTED' },
+          { action: 'CANCEL', to: 'CANCELLED' },
+        ],
+      },
+    },
+  },
 ];

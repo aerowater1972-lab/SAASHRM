@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { AnalyticsFilterDto } from '../dto/analytics-filter.dto';
 import { AnalyticsExportDto } from '../dto/analytics-export.dto';
@@ -9,45 +10,38 @@ export class AnalyticsService {
 
   async getHeadcount(tenantId: string, filters: AnalyticsFilterDto) {
     const { departmentId } = filters;
-
     const deptFilter = departmentId
-      ? `AND e."departmentId" = '${departmentId}'`
-      : '';
+      ? Prisma.sql`AND e."departmentId" = ${departmentId}`
+      : Prisma.sql``;
 
     const [byDepartment, byStatus, byGrade] = await Promise.all([
-      this.prisma.$queryRawUnsafe<
-        { department: string; count: bigint }[]
-      >(`
+      this.prisma.$queryRaw<{ department: string; count: bigint }[]>`
         SELECT d.name AS department, COUNT(*)::int AS count
         FROM "Employee" emp
         JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
         JOIN "Department" d ON d.id = e."departmentId"
-        WHERE emp."tenantId" = '${tenantId}' AND emp."deletedAt" IS NULL
+        WHERE emp."tenantId" = ${tenantId} AND emp."deletedAt" IS NULL
         ${deptFilter}
         GROUP BY d.name
         ORDER BY count DESC
-      `),
-      this.prisma.$queryRawUnsafe<
-        { status: string; count: bigint }[]
-      >(`
+      `,
+      this.prisma.$queryRaw<{ status: string; count: bigint }[]>`
         SELECT emp.status, COUNT(*)::int AS count
         FROM "Employee" emp
-        WHERE emp."tenantId" = '${tenantId}' AND emp."deletedAt" IS NULL
+        WHERE emp."tenantId" = ${tenantId} AND emp."deletedAt" IS NULL
         GROUP BY emp.status
         ORDER BY count DESC
-      `),
-      this.prisma.$queryRawUnsafe<
-        { grade: string; count: bigint }[]
-      >(`
+      `,
+      this.prisma.$queryRaw<{ grade: string; count: bigint }[]>`
         SELECT g.name AS grade, COUNT(*)::int AS count
         FROM "Employee" emp
         JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
         JOIN "Grade" g ON g.id = e."gradeId"
-        WHERE emp."tenantId" = '${tenantId}' AND emp."deletedAt" IS NULL
+        WHERE emp."tenantId" = ${tenantId} AND emp."deletedAt" IS NULL
         ${deptFilter}
         GROUP BY g.name
         ORDER BY count DESC
-      `),
+      `,
     ]);
 
     return { byDepartment, byStatus, byGrade };
@@ -58,19 +52,17 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
 
-    const rows = await this.prisma.$queryRawUnsafe<
-      { period: string; count: bigint }[]
-    >(`
+    const rows = await this.prisma.$queryRaw<{ period: string; count: bigint }[]>`
       SELECT TO_CHAR(emp."startDate", 'YYYY-MM') AS period, COUNT(*)::int AS count
       FROM "Employee" emp
-      WHERE emp."tenantId" = '${tenantId}'
+      WHERE emp."tenantId" = ${tenantId}
         AND emp."deletedAt" IS NULL
         AND emp."startDate" IS NOT NULL
-        AND emp."startDate" >= '${start}'::date
-        AND emp."startDate" <= '${end}'::date
+        AND emp."startDate" >= ${start}::date
+        AND emp."startDate" <= ${end}::date
       GROUP BY period
       ORDER BY period ASC
-    `);
+    `;
 
     return { trend: rows };
   }
@@ -80,12 +72,12 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
     const deptFilter = departmentId
-      ? `AND e."departmentId" = '${departmentId}'`
-      : '';
+      ? Prisma.sql`AND e."departmentId" = ${departmentId}`
+      : Prisma.sql``;
 
-    const summary = await this.prisma.$queryRawUnsafe<
+    const summary = await this.prisma.$queryRaw<
       { total: bigint; present: bigint; late: bigint; absent: bigint; early_leave: bigint }[]
-    >(`
+    >`
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE ar.status = 'PRESENT')::int AS present,
@@ -95,11 +87,11 @@ export class AnalyticsService {
       FROM "AttendanceRecord" ar
       JOIN "Employee" emp ON emp.id = ar."employeeId"
       LEFT JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
-      WHERE ar."tenantId" = '${tenantId}'
-        AND ar.date >= '${start}'::date
-        AND ar.date <= '${end}'::date
+      WHERE ar."tenantId" = ${tenantId}
+        AND ar.date >= ${start}::date
+        AND ar.date <= ${end}::date
         ${deptFilter}
-    `);
+    `;
 
     const row = summary[0] || { total: 0, present: 0, late: 0, absent: 0, early_leave: 0 };
     const total = Number(row.total) || 1;
@@ -121,19 +113,17 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
 
-    const rows = await this.prisma.$queryRawUnsafe<
-      { status: string; count: bigint }[]
-    >(`
+    const rows = await this.prisma.$queryRaw<{ status: string; count: bigint }[]>`
       SELECT ar.status, COUNT(*)::int AS count
       FROM "AttendanceRecord" ar
       JOIN "Employee" emp ON emp.id = ar."employeeId"
       JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
-      WHERE ar."tenantId" = '${tenantId}'
-        AND e."departmentId" = '${departmentId}'
-        AND ar.date >= '${start}'::date
-        AND ar.date <= '${end}'::date
+      WHERE ar."tenantId" = ${tenantId}
+        AND e."departmentId" = ${departmentId}
+        AND ar.date >= ${start}::date
+        AND ar.date <= ${end}::date
       GROUP BY ar.status
-    `);
+    `;
 
     const total = rows.reduce<number>((s: number, r: { count: bigint }) => s + Number(r.count), 0) || 1;
     const enriched = rows.map((r: { status: string; count: bigint }) => ({
@@ -150,13 +140,11 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
     const deptFilter = departmentId
-      ? `AND e."departmentId" = '${departmentId}'`
-      : '';
+      ? Prisma.sql`AND e."departmentId" = ${departmentId}`
+      : Prisma.sql``;
 
     const [byType, totals] = await Promise.all([
-      this.prisma.$queryRawUnsafe<
-        { leaveType: string; totalDays: number; count: bigint }[]
-      >(`
+      this.prisma.$queryRaw<{ leaveType: string; totalDays: number; count: bigint }[]>`
         SELECT lt.name AS "leaveType",
                COALESCE(SUM(lr."totalDays"), 0)::numeric AS "totalDays",
                COUNT(*)::int AS count
@@ -164,23 +152,23 @@ export class AnalyticsService {
         JOIN "LeaveType" lt ON lt.id = lr."leaveTypeId"
         JOIN "Employee" emp ON emp.id = lr."employeeId"
         LEFT JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
-        WHERE lr."tenantId" = '${tenantId}'
+        WHERE lr."tenantId" = ${tenantId}
           AND lr.status = 'APPROVED'
-          AND lr."startDate" >= '${start}'::date
-          AND lr."endDate" <= '${end}'::date
+          AND lr."startDate" >= ${start}::date
+          AND lr."endDate" <= ${end}::date
           ${deptFilter}
         GROUP BY lt.name
         ORDER BY "totalDays" DESC
-      `),
-      this.prisma.$queryRawUnsafe<{ totalDays: number; totalRequests: bigint }[]>(`
+      `,
+      this.prisma.$queryRaw<{ totalDays: number; totalRequests: bigint }[]>`
         SELECT COALESCE(SUM(lr."totalDays"), 0)::numeric AS "totalDays",
                COUNT(*)::int AS "totalRequests"
         FROM "LeaveRequest" lr
-        WHERE lr."tenantId" = '${tenantId}'
+        WHERE lr."tenantId" = ${tenantId}
           AND lr.status = 'APPROVED'
-          AND lr."startDate" >= '${start}'::date
-          AND lr."endDate" <= '${end}'::date
-      `),
+          AND lr."startDate" >= ${start}::date
+          AND lr."endDate" <= ${end}::date
+      `,
     ]);
 
     return {
@@ -200,9 +188,7 @@ export class AnalyticsService {
     const end = endDate || '2099-12-31';
 
     const [totals, byDepartment] = await Promise.all([
-      this.prisma.$queryRawUnsafe<
-        { totalPayroll: number; totalEmployees: bigint; avgSalary: number }[]
-      >(`
+      this.prisma.$queryRaw<{ totalPayroll: number; totalEmployees: bigint; avgSalary: number }[]>`
         SELECT
           COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
           COUNT(DISTINCT p."employeeId")::int AS "totalEmployees",
@@ -210,14 +196,12 @@ export class AnalyticsService {
         FROM "Payslip" p
         JOIN "PayrollRun" pr ON pr.id = p."runId"
         JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
-        WHERE p."tenantId" = '${tenantId}'
-          AND pp."startDate" >= '${start}'::date
-          AND pp."endDate" <= '${end}'::date
+        WHERE p."tenantId" = ${tenantId}
+          AND pp."startDate" >= ${start}::date
+          AND pp."endDate" <= ${end}::date
           AND pr.status = 'COMPLETED'
-      `),
-      this.prisma.$queryRawUnsafe<
-        { department: string; totalPayroll: number; employeeCount: bigint; avgSalary: number }[]
-      >(`
+      `,
+      this.prisma.$queryRaw<{ department: string; totalPayroll: number; employeeCount: bigint; avgSalary: number }[]>`
         SELECT
           d.name AS department,
           COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
@@ -229,13 +213,13 @@ export class AnalyticsService {
         JOIN "Employee" emp ON emp.id = p."employeeId"
         JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
         JOIN "Department" d ON d.id = e."departmentId"
-        WHERE p."tenantId" = '${tenantId}'
-          AND pp."startDate" >= '${start}'::date
-          AND pp."endDate" <= '${end}'::date
+        WHERE p."tenantId" = ${tenantId}
+          AND pp."startDate" >= ${start}::date
+          AND pp."endDate" <= ${end}::date
           AND pr.status = 'COMPLETED'
         GROUP BY d.name
         ORDER BY "totalPayroll" DESC
-      `),
+      `,
     ]);
 
     return {
@@ -256,9 +240,7 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
 
-    const rows = await this.prisma.$queryRawUnsafe<
-      { componentType: string; totalAmount: number; employeeCount: bigint; avgAmount: number }[]
-    >(`
+    const rows = await this.prisma.$queryRaw<{ componentType: string; totalAmount: number; employeeCount: bigint; avgAmount: number }[]>`
       SELECT
         pc.type AS "componentType",
         COALESCE(SUM(pi.amount), 0)::numeric AS "totalAmount",
@@ -269,13 +251,13 @@ export class AnalyticsService {
       JOIN "Payslip" ps ON ps.id = pi."payslipId"
       JOIN "PayrollRun" pr ON pr.id = ps."runId"
       JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
-      WHERE ps."tenantId" = '${tenantId}'
-        AND pp."startDate" >= '${start}'::date
-        AND pp."endDate" <= '${end}'::date
+      WHERE ps."tenantId" = ${tenantId}
+        AND pp."startDate" >= ${start}::date
+        AND pp."endDate" <= ${end}::date
         AND pr.status = 'COMPLETED'
       GROUP BY pc.type
       ORDER BY "totalAmount" DESC
-    `);
+    `;
 
     return {
       breakdown: rows.map((r: { componentType: string; totalAmount: number; employeeCount: bigint; avgAmount: number }) => ({
@@ -292,17 +274,15 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
 
-    const rows = await this.prisma.$queryRawUnsafe<
-      { status: string; count: bigint }[]
-    >(`
+    const rows = await this.prisma.$queryRaw<{ status: string; count: bigint }[]>`
       SELECT a.status, COUNT(*)::int AS count
       FROM "Application" a
-      WHERE a."tenantId" = '${tenantId}'
-        AND a."appliedAt" >= '${start}'::date
-        AND a."appliedAt" <= '${end}'::date
+      WHERE a."tenantId" = ${tenantId}
+        AND a."appliedAt" >= ${start}::date
+        AND a."appliedAt" <= ${end}::date
       GROUP BY a.status
       ORDER BY count DESC
-    `);
+    `;
 
     const total = rows.reduce<number>((s: number, r: { count: bigint }) => s + Number(r.count), 0) || 1;
 
@@ -321,9 +301,7 @@ export class AnalyticsService {
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
 
-    const result = await this.prisma.$queryRawUnsafe<
-      { avgDays: number; minDays: number; maxDays: number; totalHired: bigint }[]
-    >(`
+    const result = await this.prisma.$queryRaw<{ avgDays: number; minDays: number; maxDays: number; totalHired: bigint }[]>`
       SELECT
         COALESCE(AVG(EXTRACT(DAY FROM (o."acceptedAt" - a."appliedAt"))), 0)::numeric AS "avgDays",
         COALESCE(MIN(EXTRACT(DAY FROM (o."acceptedAt" - a."appliedAt"))), 0)::numeric AS "minDays",
@@ -331,12 +309,12 @@ export class AnalyticsService {
         COUNT(*)::int AS "totalHired"
       FROM "Application" a
       JOIN "Offer" o ON o."applicationId" = a.id
-      WHERE a."tenantId" = '${tenantId}'
+      WHERE a."tenantId" = ${tenantId}
         AND o.status = 'ACCEPTED'
         AND o."acceptedAt" IS NOT NULL
-        AND a."appliedAt" >= '${start}'::date
-        AND a."appliedAt" <= '${end}'::date
-    `);
+        AND a."appliedAt" >= ${start}::date
+        AND a."appliedAt" <= ${end}::date
+    `;
 
     return {
       avgDays: Math.round(Number(result[0]?.avgDays || 0)),
@@ -352,7 +330,7 @@ export class AnalyticsService {
     const end = endDate || '2099-12-31';
 
     const [distribution, summary] = await Promise.all([
-      this.prisma.$queryRawUnsafe<{ scoreRange: string; count: bigint }[]>(`
+      this.prisma.$queryRaw<{ scoreRange: string; count: bigint }[]>`
         SELECT
           CASE
             WHEN pr."overallScore" >= 4.5 THEN '4.5-5.0'
@@ -365,23 +343,23 @@ export class AnalyticsService {
           END AS "scoreRange",
           COUNT(*)::int AS count
         FROM "PerformanceReview" pr
-        WHERE pr."tenantId" = '${tenantId}'
+        WHERE pr."tenantId" = ${tenantId}
           AND pr."overallScore" IS NOT NULL
-          AND pr."submittedAt" >= '${start}'::date
-          AND pr."submittedAt" <= '${end}'::date
+          AND pr."submittedAt" >= ${start}::date
+          AND pr."submittedAt" <= ${end}::date
         GROUP BY "scoreRange"
         ORDER BY "scoreRange" ASC
-      `),
-      this.prisma.$queryRawUnsafe<{ avgScore: number; totalReviews: bigint }[]>(`
+      `,
+      this.prisma.$queryRaw<{ avgScore: number; totalReviews: bigint }[]>`
         SELECT
           COALESCE(AVG(pr."overallScore"), 0)::numeric AS "avgScore",
           COUNT(*)::int AS "totalReviews"
         FROM "PerformanceReview" pr
-        WHERE pr."tenantId" = '${tenantId}'
+        WHERE pr."tenantId" = ${tenantId}
           AND pr."overallScore" IS NOT NULL
-          AND pr."submittedAt" >= '${start}'::date
-          AND pr."submittedAt" <= '${end}'::date
-      `),
+          AND pr."submittedAt" >= ${start}::date
+          AND pr."submittedAt" <= ${end}::date
+      `,
     ]);
 
     return {
@@ -398,40 +376,39 @@ export class AnalyticsService {
     const { startDate, endDate, period } = filters;
     const start = startDate || '1970-01-01';
     const end = endDate || '2099-12-31';
+    // Whitelist the period into a fixed TO_CHAR format literal (no user input reaches SQL).
     const dateTrunc = period === 'YEARLY' ? 'YYYY' : period === 'QUARTERLY' ? 'YYYY-Q' : 'YYYY-MM';
 
-    const rows = await this.prisma.$queryRawUnsafe<
-      { period: string; hired: bigint; resigned: bigint; headcount: bigint; turnoverRate: number }[]
-    >(`
+    const rows = await this.prisma.$queryRaw<{ period: string; hired: bigint; resigned: bigint; headcount: bigint; turnoverRate: number }[]>`
       WITH date_series AS (
         SELECT generate_series(
-          date_trunc('month', '${start}'::date),
-          date_trunc('month', '${end}'::date),
+          date_trunc('month', ${start}::date),
+          date_trunc('month', ${end}::date),
           '1 month'::interval
         )::date AS month_start
       ),
       monthly_hires AS (
         SELECT date_trunc('month', emp."startDate") AS month, COUNT(*)::int AS hired
         FROM "Employee" emp
-        WHERE emp."tenantId" = '${tenantId}'
+        WHERE emp."tenantId" = ${tenantId}
           AND emp."startDate" IS NOT NULL
-          AND emp."startDate" >= '${start}'::date
-          AND emp."startDate" <= '${end}'::date
+          AND emp."startDate" >= ${start}::date
+          AND emp."startDate" <= ${end}::date
         GROUP BY month
       ),
       monthly_resignations AS (
         SELECT date_trunc('month', rr."effectiveDate") AS month, COUNT(*)::int AS resigned
         FROM "ResignationRequest" rr
-        WHERE rr."tenantId" = '${tenantId}'
+        WHERE rr."tenantId" = ${tenantId}
           AND rr.status = 'APPROVED'
-          AND rr."effectiveDate" >= '${start}'::date
-          AND rr."effectiveDate" <= '${end}'::date
+          AND rr."effectiveDate" >= ${start}::date
+          AND rr."effectiveDate" <= ${end}::date
         GROUP BY month
       ),
       monthly_headcount AS (
         SELECT date_trunc('month', ds.month_start) AS month,
                (SELECT COUNT(*) FROM "Employee" e
-                WHERE e."tenantId" = '${tenantId}'
+                WHERE e."tenantId" = ${tenantId}
                   AND e."deletedAt" IS NULL
                   AND e."startDate" <= ds.month_start + interval '1 month'
                   AND (e."endDate" IS NULL OR e."endDate" > ds.month_start)
@@ -439,7 +416,7 @@ export class AnalyticsService {
         FROM date_series ds
       )
       SELECT
-        TO_CHAR(mh.month, '${dateTrunc}') AS period,
+        TO_CHAR(mh.month, ${dateTrunc}) AS period,
         COALESCE(mh.hired, 0)::int AS hired,
         COALESCE(mr.resigned, 0)::int AS resigned,
         COALESCE(mhc.headcount, 0)::int AS headcount,
@@ -452,7 +429,7 @@ export class AnalyticsService {
       FULL JOIN monthly_resignations mr ON mr.month = mh.month
       FULL JOIN monthly_headcount mhc ON mhc.month = COALESCE(mh.month, mr.month)
       ORDER BY period ASC
-    `);
+    `;
 
     return {
       turnover: rows.map((r: { period: string; hired: bigint; resigned: bigint; headcount: bigint; turnoverRate: number }) => ({
@@ -472,69 +449,69 @@ export class AnalyticsService {
 
     const [headcount, attendance, leave, payroll, recruitment, performance, turnover] =
       await Promise.all([
-        this.prisma.$queryRawUnsafe<{ total: bigint }[]>(`
+        this.prisma.$queryRaw<{ total: bigint }[]>`
           SELECT COUNT(*)::int AS total
           FROM "Employee" emp
-          WHERE emp."tenantId" = '${tenantId}'
+          WHERE emp."tenantId" = ${tenantId}
             AND emp."deletedAt" IS NULL
             AND emp.status = 'ACTIVE'
-        `),
-        this.prisma.$queryRawUnsafe<{ present: bigint; total: bigint }[]>(`
+        `,
+        this.prisma.$queryRaw<{ present: bigint; total: bigint }[]>`
           SELECT
             COUNT(*) FILTER (WHERE ar.status = 'PRESENT')::int AS present,
             COUNT(*)::int AS total
           FROM "AttendanceRecord" ar
-          WHERE ar."tenantId" = '${tenantId}'
-            AND ar.date >= '${start}'::date
-            AND ar.date <= '${end}'::date
-        `),
-        this.prisma.$queryRawUnsafe<{ totalDays: number; totalRequests: bigint }[]>(`
+          WHERE ar."tenantId" = ${tenantId}
+            AND ar.date >= ${start}::date
+            AND ar.date <= ${end}::date
+        `,
+        this.prisma.$queryRaw<{ totalDays: number; totalRequests: bigint }[]>`
           SELECT
             COALESCE(SUM(lr."totalDays"), 0)::numeric AS "totalDays",
             COUNT(*)::int AS "totalRequests"
           FROM "LeaveRequest" lr
-          WHERE lr."tenantId" = '${tenantId}'
+          WHERE lr."tenantId" = ${tenantId}
             AND lr.status = 'APPROVED'
-            AND lr."startDate" >= '${start}'::date
-            AND lr."endDate" <= '${end}'::date
-        `),
-        this.prisma.$queryRawUnsafe<{ totalPayroll: number; avgSalary: number }[]>(`
+            AND lr."startDate" >= ${start}::date
+            AND lr."endDate" <= ${end}::date
+        `,
+        this.prisma.$queryRaw<{ totalPayroll: number; avgSalary: number }[]>`
           SELECT
             COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
             COALESCE(AVG(p."netPay"), 0)::numeric AS "avgSalary"
           FROM "Payslip" p
           JOIN "PayrollRun" pr ON pr.id = p."runId"
           JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
-          WHERE p."tenantId" = '${tenantId}'
-            AND pp."startDate" >= '${start}'::date
-            AND pp."endDate" <= '${end}'::date
+          WHERE p."tenantId" = ${tenantId}
+            AND pp."startDate" >= ${start}::date
+            AND pp."endDate" <= ${end}::date
             AND pr.status = 'COMPLETED'
-        `),
-        this.prisma.$queryRawUnsafe<{ total: bigint }[]>(`
+        `,
+        this.prisma.$queryRaw<{ total: bigint }[]>`
           SELECT COUNT(*)::int AS total
           FROM "Application" a
-          WHERE a."tenantId" = '${tenantId}'
-            AND a."appliedAt" >= '${start}'::date
-            AND a."appliedAt" <= '${end}'::date
-        `),
-        this.prisma.$queryRawUnsafe<{ avgScore: number; total: bigint }[]>(`
+          WHERE a."tenantId" = ${tenantId}
+            AND a."appliedAt" >= ${start}::date
+            AND a."appliedAt" <= ${end}::date
+        `,
+        this.prisma.$queryRaw<{ avgScore: number; total: bigint }[]>`
           SELECT
             COALESCE(AVG(pr."overallScore"), 0)::numeric AS "avgScore",
-            COUNT(*)::int AS total
+            COUNT(*)::int AS "total"
           FROM "PerformanceReview" pr
-          WHERE pr."tenantId" = '${tenantId}'
+          WHERE pr."tenantId" = ${tenantId}
             AND pr."overallScore" IS NOT NULL
-            AND pr."submittedAt" >= '${start}'::date
-            AND pr."submittedAt" <= '${end}'::date
-        `),
-        this.prisma.$queryRawUnsafe<{ resigned: bigint }[]>(`
+            AND pr."submittedAt" >= ${start}::date
+            AND pr."submittedAt" <= ${end}::date
+        `,
+        this.prisma.$queryRaw<{ resigned: bigint }[]>`
           SELECT COUNT(*)::int AS resigned
           FROM "ResignationRequest" rr
-          WHERE rr."tenantId" = '${tenantId}'
+          WHERE rr."tenantId" = ${tenantId}
             AND rr.status = 'APPROVED'
-            AND rr."effectiveDate" >= '${start}'::date
-            AND rr."effectiveDate" <= '${end}'::date
-        `),
+            AND rr."effectiveDate" >= ${start}::date
+            AND rr."effectiveDate" <= ${end}::date
+        `,
       ]);
 
     return {

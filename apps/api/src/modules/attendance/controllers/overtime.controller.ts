@@ -16,6 +16,8 @@ import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { OvertimeService } from '../services/overtime.service';
 import { CreateOvertimeDto } from '../dto/create-overtime.dto';
+import { ApproveOvertimeDto, RejectOvertimeDto, RetroactiveApproveOvertimeDto } from '../dto/overtime-action.dto';
+import { ReconcileOvertimeDto } from '../dto/reconcile-overtime.dto';
 import { RequestStatus } from '@prisma/client';
 
 @ApiTags('Overtime')
@@ -27,7 +29,7 @@ export class OvertimeController {
 
   @Post('requests')
   @Permissions('overtime:create')
-  @ApiOperation({ summary: 'Create overtime request' })
+  @ApiOperation({ summary: 'Create overtime request (pre-approval SPL)' })
   createRequest(
     @TenantId() tenantId: string,
     @CurrentUser('employeeId') employeeId: string,
@@ -60,23 +62,72 @@ export class OvertimeController {
     return this.overtimeService.findOneRequest(tenantId, id);
   }
 
-  @Put('requests/:id')
+  @Post('requests/:id/approve')
   @Permissions('overtime:approve')
-  @ApiOperation({ summary: 'Approve or reject overtime request' })
-  @ApiQuery({ name: 'action', enum: RequestStatus })
-  approveOrReject(
+  @ApiOperation({ summary: 'Approve overtime request (FR-17)' })
+  approveRequest(
     @TenantId() tenantId: string,
     @Param('id') id: string,
     @CurrentUser('sub') approverId: string,
-    @Query('action') action: 'APPROVED' | 'REJECTED',
-    @Query('notes') notes?: string,
+    @Body() dto: ApproveOvertimeDto,
   ) {
-    return this.overtimeService.approveOrReject(tenantId, id, approverId, action, notes);
+    return this.overtimeService.approveRequest(tenantId, id, approverId, dto.notes);
+  }
+
+  @Post('requests/:id/reject')
+  @Permissions('overtime:approve')
+  @ApiOperation({ summary: 'Reject overtime request (FR-17)' })
+  rejectRequest(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('sub') approverId: string,
+    @Body() dto: RejectOvertimeDto,
+  ) {
+    return this.overtimeService.rejectRequest(tenantId, id, approverId, dto.reason);
+  }
+
+  @Post('requests/:id/retroactive-approve')
+  @Permissions('overtime:approve')
+  @ApiOperation({ summary: 'Retroactive approve unplanned overtime by HR (FR-20)' })
+  retroactiveApprove(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('sub') approverId: string,
+    @Body() dto: RetroactiveApproveOvertimeDto,
+  ) {
+    return this.overtimeService.retroactiveApprove(tenantId, id, approverId, dto.reason);
+  }
+
+  @Post('reconcile')
+  @Permissions('overtime:approve')
+  @ApiOperation({ summary: 'Reconcile actual clock-out with approved plan (FR-18: payableMinutes = MIN)' })
+  reconcile(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') currentEmployeeId: string,
+    @Body() dto: ReconcileOvertimeDto,
+  ) {
+    const employeeId = dto.employeeId ?? currentEmployeeId;
+    return this.overtimeService.reconcile(tenantId, employeeId, new Date(dto.date), dto.actualMinutes);
+  }
+
+  @Get()
+  @Permissions('overtime:read')
+  @ApiOperation({ summary: 'Get reconciled overtime records (FR-19: payableMinutes + dayType)' })
+  @ApiQuery({ name: 'employeeId', required: false })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  findRecords(
+    @TenantId() tenantId: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.overtimeService.findRecords(tenantId, { employeeId, startDate, endDate });
   }
 
   @Get('summary')
   @Permissions('overtime:read')
-  @ApiOperation({ summary: 'Get overtime summary for payroll' })
+  @ApiOperation({ summary: 'Get overtime summary for payroll (payableMinutes)' })
   @ApiQuery({ name: 'employeeId', required: true })
   @ApiQuery({ name: 'startDate', required: true })
   @ApiQuery({ name: 'endDate', required: true })

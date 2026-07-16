@@ -444,6 +444,19 @@ async function main() {
     }
   }
 
+  // ── 10. FEATURE FLAGS ──
+  console.log('10/10  Feature Flags...');
+  await prisma.featureFlag.upsert({
+    where: { tenantId_feature: { tenantId, feature: 'OVERTIME_RETROACTIVE' } },
+    update: {},
+    create: {
+      tenantId,
+      module: 'attendance',
+      feature: 'OVERTIME_RETROACTIVE',
+      enabled: false, // FR-20: retroactive overtime OFF by default (BR-10)
+    },
+  });
+
   console.log('\n✓ Seed completed successfully!');
   console.log('  Admin login: admin@flexy.local / admin123');
   console.log('  Employee login: budi@flexy.local / password123');

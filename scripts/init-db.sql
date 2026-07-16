@@ -23,3 +23,9 @@ VALUES
   ('manager-role', 'default', 'Manager', 'Team management access', true),
   ('employee-role', 'default', 'Employee', 'Self-service only', true)
 ON CONFLICT DO NOTHING;
+
+-- Audit log immutability (F-07): the application role must never be able to
+-- UPDATE/DELETE audit entries. Adjust the role name to match the runtime DB role.
+-- NOTE: table owners bypass REVOKE; ensure the app connects as a non-owner role
+-- and grant only INSERT/SELECT on "AuditLog".
+REVOKE UPDATE, DELETE ON "AuditLog" FROM PUBLIC;

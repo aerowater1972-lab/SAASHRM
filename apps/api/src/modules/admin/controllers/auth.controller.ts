@@ -19,6 +19,7 @@ export class AuthController {
 
   @Post('register')
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new admin user (tenant-aware via x-tenant-id)' })
   register(@TenantId() tenantId: string, @Body() dto: RegisterDto) {
@@ -36,6 +37,7 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
   refresh(@Body('refreshToken') refreshToken: string) {

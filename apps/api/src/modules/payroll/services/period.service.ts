@@ -118,6 +118,8 @@ export class PeriodService {
       await this.eventBus.publishTyped(DomainEventType.ATTENDANCE_PERIOD_CLOSED, {
         employeeId,
         period: period.name,
+        periodStart: period.startDate,
+        periodEnd: period.endDate,
         workedDays: data.workedDays,
         lateCount: data.lateCount,
         overtimeMinutes: data.overtimeMinutes,

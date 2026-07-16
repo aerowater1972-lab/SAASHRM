@@ -6,8 +6,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
+import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { CreateOvertimeDto } from '../dto/create-overtime.dto';
-import { PayrollPeriodStatus, Prisma, RequestStatus } from '@prisma/client';
+import {
+  OvertimeDayType,
+  PayrollPeriodStatus,  Prisma,
+  RequestStatus,
+} from '@prisma/client';
+
+const RETROACTIVE_FEATURE = 'OVERTIME_RETROACTIVE';
 
 @Injectable()
 export class OvertimeService {
@@ -16,8 +24,14 @@ export class OvertimeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly workflow: WorkflowEngineService,
+    private readonly eventBus: EventBusService,
   ) {
     this.overtimeMinMinutes = this.config.get<number>('OVERTIME_MIN_MINUTES', 30);
+  }
+
+  private diffMinutes(start: Date, end: Date): number {
+    return Math.floor((end.getTime() - start.getTime()) / 60000);
   }
 
   async createRequest(tenantId: string, employeeId: string, dto: CreateOvertimeDto) {
@@ -28,13 +42,13 @@ export class OvertimeService {
       throw new BadRequestException('End time must be after start time');
     }
 
-    const totalMinutes = dto.totalMinutes ?? Math.floor((endTime.getTime() - startTime.getTime()) / 60000);
+    const totalMinutes = dto.totalMinutes ?? this.diffMinutes(startTime, endTime);
 
     if (totalMinutes < this.overtimeMinMinutes) {
       throw new BadRequestException(`Overtime minimum is ${this.overtimeMinMinutes} minutes`);
     }
 
-    return this.prisma.overtimeRequest.create({
+    const request = await this.prisma.overtimeRequest.create({
       data: {
         tenantId,
         employeeId,
@@ -47,6 +61,42 @@ export class OvertimeService {
       include: {
         employee: { select: { id: true, employeeId: true, fullName: true } },
       },
+    });
+
+    await this.eventBus.publish({
+      name: 'overtime.requested',
+      aggregateId: request.id,
+      aggregateType: 'OvertimeRequest',
+      payload: {
+        employeeId,
+        date: request.date,
+        totalMinutes: request.totalMinutes,
+        reason: request.reason,
+      },
+      tenantId,
+    });
+
+    return request;
+  }
+
+  async findRecords(tenantId: string, filters: { employeeId?: string; startDate?: string; endDate?: string }) {
+    const where: Prisma.OvertimeRecordWhereInput = { tenantId };
+
+    if (filters.employeeId) where.employeeId = filters.employeeId;
+
+    if (filters.startDate || filters.endDate) {
+      where.date = {};
+      if (filters.startDate) where.date.gte = new Date(filters.startDate);
+      if (filters.endDate) where.date.lte = new Date(filters.endDate);
+    }
+
+    return this.prisma.overtimeRecord.findMany({
+      where,
+      include: {
+        overtimeRequest: true,
+        employee: { select: { id: true, employeeId: true, fullName: true } },
+      },
+      orderBy: { date: 'desc' },
     });
   }
 
@@ -86,20 +136,185 @@ export class OvertimeService {
     return request;
   }
 
-  async approveOrReject(tenantId: string, id: string, approverId: string, status: 'APPROVED' | 'REJECTED', notes?: string) {
+  async approveRequest(tenantId: string, id: string, approverId: string, notes?: string) {
     const request = await this.findOneRequest(tenantId, id);
 
-    if (request.status !== RequestStatus.PENDING) {
-      throw new BadRequestException('Overtime request is not in PENDING status');
-    }
+    const transition = this.workflow.transition('overtime', request.status, 'APPROVE');
 
-    return this.prisma.overtimeRequest.update({
+    const updated = await this.prisma.overtimeRequest.update({
       where: { id },
       data: {
-        status,
+        status: transition.to as RequestStatus,
         approvedBy: approverId,
         approvedAt: new Date(),
         notes,
+      },
+    });
+
+    await this.eventBus.publish({
+      name: 'overtime.approved',
+      aggregateId: id,
+      aggregateType: 'OvertimeRequest',
+      payload: { employeeId: request.employeeId, date: request.date, totalMinutes: request.totalMinutes, approverId },
+      tenantId,
+    });
+
+    return updated;
+  }
+
+  async rejectRequest(tenantId: string, id: string, approverId: string, reason: string) {
+    const request = await this.findOneRequest(tenantId, id);
+
+    const transition = this.workflow.transition('overtime', request.status, 'REJECT');
+
+    const updated = await this.prisma.overtimeRequest.update({
+      where: { id },
+      data: {
+        status: transition.to as RequestStatus,
+        approvedBy: approverId,
+        approvedAt: new Date(),
+        rejectedReason: reason,
+      },
+    });
+
+    await this.eventBus.publish({
+      name: 'overtime.rejected',
+      aggregateId: id,
+      aggregateType: 'OvertimeRequest',
+      payload: { employeeId: request.employeeId, date: request.date, reason },
+      tenantId,
+    });
+
+    return updated;
+  }
+
+  async cancelRequest(tenantId: string, id: string, employeeId: string) {
+    const request = await this.findOneRequest(tenantId, id);
+
+    if (request.employeeId !== employeeId) {
+      throw new BadRequestException('You can only cancel your own requests');
+    }
+
+    this.workflow.transition('overtime', request.status, 'CANCEL');
+
+    return this.prisma.overtimeRequest.update({
+      where: { id },
+      data: { status: RequestStatus.CANCELLED },
+    });
+  }
+
+  /**
+   * FR-20 / BR-10: retroactive approval by HR for unplanned overtime.
+   * Only available when the tenant enables the OVERTIME_RETROACTIVE feature flag.
+   */
+  async retroactiveApprove(tenantId: string, id: string, approverId: string, reason: string) {
+    const enabled = await this.isRetroactiveEnabled(tenantId);
+    if (!enabled) {
+      throw new ForbiddenException('Retroactive overtime approval is disabled for this tenant');
+    }
+
+    const request = await this.findOneRequest(tenantId, id);
+
+    if (request.status !== RequestStatus.PENDING) {
+      throw new BadRequestException(`Cannot retroactively approve a ${request.status} overtime request`);
+    }
+
+    const transition = this.workflow.transition('overtime', request.status, 'APPROVE');
+
+    const updated = await this.prisma.overtimeRequest.update({
+      where: { id },
+      data: {
+        status: transition.to as RequestStatus,
+        approvedBy: approverId,
+        approvedAt: new Date(),
+        notes: reason,
+      },
+    });
+
+    await this.eventBus.publish({
+      name: 'overtime.approved',
+      aggregateId: id,
+      aggregateType: 'OvertimeRequest',
+      payload: { employeeId: request.employeeId, date: request.date, totalMinutes: request.totalMinutes, approverId, retroactive: true },
+      tenantId,
+    });
+
+    return updated;
+  }
+
+  private async isRetroactiveEnabled(tenantId: string): Promise<boolean> {
+    const flag = await this.prisma.featureFlag.findFirst({
+      where: { tenantId, feature: RETROACTIVE_FEATURE },
+    });
+    return Boolean(flag?.enabled);
+  }
+
+  /**
+   * FR-19: classify the overtime day type against the tenant holiday calendar.
+   * hari_libur_resmi if the date is a recorded holiday, istirahat_mingguan if
+   * Sunday, otherwise hari_kerja.
+   */
+  private async classifyDayType(tenantId: string, date: Date): Promise<OvertimeDayType> {
+    const day = new Date(date);
+    day.setUTCHours(0, 0, 0, 0);
+
+    const holiday = await this.prisma.holidayCalendar.findFirst({
+      where: { tenantId, date: day },
+    });
+
+    if (holiday) return OvertimeDayType.HARI_LIBUR_RESM;
+    if (day.getUTCDay() === 0) return OvertimeDayType.ISTIRAHAT_MINGGUAN;
+    return OvertimeDayType.HARI_KERJA;
+  }
+
+  /**
+   * FR-18 / BR-09: reconcile actual clock-out with approved plan and persist an
+   * OvertimeRecord. payableMinutes = MIN(planned, actual). Unplanned overtime
+   * (no approved request) is only recorded as paid when the tenant allows
+   * retroactive mode; otherwise it is marked unpaid and excluded from payroll.
+   */
+  async reconcile(tenantId: string, employeeId: string, date: Date, actualMinutes: number) {
+    const day = new Date(date);
+    day.setUTCHours(0, 0, 0, 0);
+
+    const request = await this.prisma.overtimeRequest.findFirst({
+      where: { tenantId, employeeId, date: day, status: RequestStatus.APPROVED },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const dayType = await this.classifyDayType(tenantId, date);
+
+    if (!request) {
+      const retroactive = await this.isRetroactiveEnabled(tenantId);
+      return this.prisma.overtimeRecord.create({
+        data: {
+          tenantId,
+          employeeId,
+          date: day,
+          plannedMinutes: 0,
+          actualMinutes,
+          payableMinutes: 0,
+          dayType,
+          isRetroactive: true,
+          isPaid: retroactive,
+        },
+      });
+    }
+
+    const payableMinutes = Math.min(request.totalMinutes, actualMinutes);
+
+    return this.prisma.overtimeRecord.create({
+      data: {
+        tenantId,
+        employeeId,
+        overtimeRequestId: request.id,
+        date: day,
+        plannedMinutes: request.totalMinutes,
+        actualMinutes,
+        payableMinutes,
+        dayType,
+        isRetroactive: false,
+        isPaid: true,
       },
     });
   }
@@ -108,28 +323,28 @@ export class OvertimeService {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    const requests = await this.prisma.overtimeRequest.findMany({
+    const records = await this.prisma.overtimeRecord.findMany({
       where: {
         tenantId,
         employeeId,
         date: { gte: start, lte: end },
-        status: RequestStatus.APPROVED,
+        isPaid: true,
       },
       orderBy: { date: 'asc' },
     });
 
-    const totalMinutes = requests.reduce((sum, r) => sum + r.totalMinutes, 0);
-    const totalHours = Math.floor(totalMinutes / 60);
-    const remainingMinutes = totalMinutes % 60;
+    const payableMinutes = records.reduce((sum, r) => sum + r.payableMinutes, 0);
+    const totalHours = Math.floor(payableMinutes / 60);
+    const remainingMinutes = payableMinutes % 60;
 
     return {
       employeeId,
       period: { startDate, endDate },
-      totalMinutes,
+      payableMinutes,
       totalHours,
       remainingMinutes,
-      totalRequests: requests.length,
-      requests,
+      totalRecords: records.length,
+      records,
     };
   }
 }

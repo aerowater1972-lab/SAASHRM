@@ -8,7 +8,7 @@ export interface DashboardData {
   attendance: any
   leaveBalances: any[]
   recentPayslips:any[];
-  pendingApprovals: number;
+  pendingApprovals: { total: number; leaveRequests: number; corrections: number };
   [key: string]: any
 }
 
@@ -27,6 +27,9 @@ export function useDashboard() {
 export function useRecentActivity() {
   return useQuery({
     queryKey: [...queryKeys.dashboard.all, 'activity'],
-    queryFn: () => api.get<AuditEntry[]>('/admin/audit-logs?limit=10'),
+    queryFn: async () => {
+      const res = await api.get<{ data: AuditEntry[] }>('/admin/audit-logs?limit=10');
+      return res.data ?? [];
+    },
   });
 }

@@ -330,6 +330,7 @@ model Employee {
   attendanceRecords              AttendanceRecord[]
   rosterEntries                  RosterEntry[]
   overtimeRequests               OvertimeRequest[]
+  overtimeRecords                OvertimeRecord[]
   leaveRequests                  LeaveRequest[]
   leaveBalances                  LeaveBalance[]
   payslips                       Payslip[]
@@ -381,6 +382,7 @@ model Employment {
   endDate        DateTime?
   isActive       Boolean        @default(true)
   salary         Decimal?       @db.Decimal(18, 2)
+  salaryEnc      String?        @map("salary_enc")
   salaryCurrency String         @default("IDR")
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -673,22 +675,50 @@ model WorkLocation {
 }
 
 model OvertimeRequest {
-  id           String        @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  date         DateTime
-  startTime    DateTime
-  endTime      DateTime
-  totalMinutes Int
-  reason       String
-  status       RequestStatus @default(PENDING)
-  approvedBy   String?
-  approvedAt   DateTime?
-  notes        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id            String        @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  date          DateTime
+  startTime     DateTime
+  endTime       DateTime
+  totalMinutes  Int
+  reason        String
+  status        RequestStatus @default(PENDING)
+  approvedBy    String?
+  approvedAt    DateTime?
+  notes         String?
+  rejectedReason String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id])
+  records  OvertimeRecord[]
+
+  @@index([tenantId])
+  @@index([employeeId])
+}
+
+model OvertimeRecord {
+  id                String         @id @default(uuid())
+  tenantId          String
+  employeeId        String
+  overtimeRequestId String?
+  date              DateTime
+  plannedMinutes    Int
+  actualMinutes     Int
+  payableMinutes    Int
+  dayType           OvertimeDayType @default(HARI_KERJA)
+  isRetroactive     Boolean        @default(false)
+  isPaid            Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  employee       Employee        @relation(fields: [employeeId], references: [id])
+  overtimeRequest OvertimeRequest? @relation(fields: [overtimeRequestId], references: [id])
+
+  @@index([tenantId])
+  @@index([employeeId])
+  @@index([overtimeRequestId])
 }
 
 model LeaveType {
@@ -1730,6 +1760,12 @@ enum HolidayType {
   COMPANY
   RELIGIOUS
   SPECIAL
+}
+
+enum OvertimeDayType {
+  HARI_KERJA
+  ISTIRAHAT_MINGGUAN
+  HARI_LIBUR_RESM
 }
 
 enum AttendanceStatus {

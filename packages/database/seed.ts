@@ -673,7 +673,7 @@ async function main() {
     await prisma.employee.upsert({
       where: { id: emp.id },
       update: {},
-      create: { ...emp, tenantId: 'default' },
+      create: { ...emp, tenantId: 'entity-1' },
     });
   }
   console.log(`${employees.length} employees created`);
@@ -692,7 +692,7 @@ async function main() {
     await prisma.employment.upsert({
       where: { id },
       update: {},
-      create: { id, ...emp, tenantId: 'default' },
+      create: { id, ...emp },
     });
   }
   console.log(`${employments.length} employment records created`);

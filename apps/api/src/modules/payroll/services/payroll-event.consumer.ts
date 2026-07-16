@@ -179,7 +179,7 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
 
     const overtimeMinutes = Number(payload.overtimeMinutes || 0);
     if (overtimeMinutes > 0 && hourlyRate > 0) {
-      const overtimeAmount = Math.round((overtimeMinutes / 60) * hourlyRate);
+      const overtimeAmount = Math.round((overtimeMinutes / 60) * hourlyRate * 1.5);
       if (overtimeAmount > 0) {
         await this.adjustments.create({
           tenantId,
@@ -190,6 +190,53 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
           amount: overtimeAmount,
           description: `Overtime (${overtimeMinutes} min) — period ${period}`,
         });
+      }
+    }
+
+    // CROSS-REFERENCE (Attendance & Leave v1.1 Addendum, Bagian 5 / BR-10):
+    // modul Payroll bertanggung jawab menerapkan pengali Kepmenaker No. 102/2004.
+    // Sumber otoritatif adalah OvertimeRecord (payableMinutes + dayType) yang
+    // dihasilkan modul Attendance saat reconciling clock-out dengan rencana
+    // lembur yang disetujui. payroll.reads `payableMinutes` (bukan actualMinutes)
+    // dan `dayType` untuk menentukan pengali: HARI_KERJA = 1.5x jam pertama +
+    // 2x sisanya; ISTIRAHAT_MINGGUAN / HARI_LIBUR_RESM = 2x sejak jam pertama.
+    // Catatan: konsumsi ini hanya trigger jika employee punya AttendanceRecord
+    // di periode tersebut (event ATTENDANCE_PERIOD_CLOSED di-emit per-employee).
+    const periodStart = payload.periodStart ? new Date(payload.periodStart) : null;
+    const periodEnd = payload.periodEnd ? new Date(payload.periodEnd) : null;
+    if (periodStart && periodEnd) {
+      const records = await this.prisma.overtimeRecord.findMany({
+        where: {
+          tenantId,
+          employeeId,
+          isPaid: true,
+          date: { gte: periodStart, lte: periodEnd },
+        },
+      });
+
+      for (const rec of records) {
+        if (rec.payableMinutes <= 0 || hourlyRate <= 0) continue;
+        const hours = rec.payableMinutes / 60;
+        let multiplier: number;
+        if (rec.dayType === 'HARI_KERJA') {
+          // first hour 1.5x, subsequent hours 2x
+          multiplier = hours <= 1 ? 1.5 : 1.5 + (hours - 1) * 2;
+        } else {
+          // istirahat mingguan / hari libur resmi: 2x from the first hour
+          multiplier = 2;
+        }
+        const amount = Math.round(hours * hourlyRate * multiplier);
+        if (amount > 0) {
+          await this.adjustments.create({
+            tenantId,
+            employeeId,
+            sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+            referenceId: `${referenceId}:${rec.id}`,
+            type: 'EARNING',
+            amount,
+            description: `Overtime ${rec.dayType} (${rec.payableMinutes} min, x${multiplier}) — period ${period}`,
+          });
+        }
       }
     }
 

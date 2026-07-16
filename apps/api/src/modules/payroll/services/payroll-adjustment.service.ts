@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
@@ -90,6 +90,10 @@ export class PayrollAdjustmentService {
 
   async markApplied(ids: string[], runId: string) {
     if (ids.length === 0) return;
+    const run = await this.prisma.payrollRun.findFirst({ where: { id: runId } });
+    if ((run as any)?.status === 'LOCKED') {
+      throw new ForbiddenException('Cannot apply adjustments to a locked payroll run');
+    }
     await this.prisma.payrollAdjustment.updateMany({
       where: { id: { in: ids } },
       data: { status: 'APPLIED' as any, appliedRunId: runId },
