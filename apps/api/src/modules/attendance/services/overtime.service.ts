@@ -48,6 +48,18 @@ export class OvertimeService {
       throw new BadRequestException(`Overtime minimum is ${this.overtimeMinMinutes} minutes`);
     }
 
+    // FR-16 / Flow 3.1 step 2: validate no roster/shift clash on the same date.
+    // An employee already scheduled via a roster entry cannot be double-booked
+    // with an overtime plan for the same day.
+    const day = new Date(dto.date);
+    day.setUTCHours(0, 0, 0, 0);
+    const clash = await this.prisma.rosterEntry.findFirst({
+      where: { employeeId, date: day },
+    });
+    if (clash) {
+      throw new BadRequestException('Karyawan sudah memiliki jadwal roster/shift pada tanggal tersebut');
+    }
+
     const request = await this.prisma.overtimeRequest.create({
       data: {
         tenantId,

@@ -12,6 +12,7 @@ import { ClockInDto, ClockInMethod } from '../dto/clock-in.dto';
 import { ClockOutDto } from '../dto/clock-out.dto';
 import { AttendanceFilterDto } from '../dto/attendance-filter.dto';
 import { AttendanceCorrectionDto } from '../dto/attendance-correction.dto';
+import { OvertimeService } from './overtime.service';
 import {
   AttendanceStatus,
   PayrollPeriodStatus,
@@ -29,6 +30,7 @@ export class AttendanceService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly eventBus: EventBusService,
+    private readonly overtimeService: OvertimeService,
   ) {
     this.geofenceRadius = this.config.get<number>('GEOFENCE_RADIUS_METERS', 100);
     this.overtimeMinMinutes = this.config.get<number>('OVERTIME_MIN_MINUTES', 30);
@@ -142,40 +144,16 @@ export class AttendanceService {
       include: { employee: true },
     });
 
+    // FR-18 / FR-11: lembur dibayar harus dicocokkan dengan rencana yang
+    // disetujui (bukan reaktif dari selisih clock-out). Panggil reconcile yang
+    // menghitung payableMinutes = MIN(rencana, aktual) dan mengklasifikasi
+    // dayType. Tanpa overtime_request yang disetujui, catatan tetap dibuat
+    // namun isPaid=false (FR-20 default off).
     if (eligibleOvertime > 0) {
-      await this.createAutoOvertime(tenantId, employeeId, today, record.clockIn || clockOutTime, clockOutTime, eligibleOvertime);
+      await this.overtimeService.reconcile(tenantId, employeeId, today, eligibleOvertime);
     }
 
     return updated;
-  }
-
-  private async createAutoOvertime(
-    tenantId: string,
-    employeeId: string,
-    date: Date,
-    startTime: Date,
-    endTime: Date,
-    totalMinutes: number,
-  ) {
-    const existing = await this.prisma.overtimeRequest.findFirst({
-      where: { tenantId, employeeId, date },
-    });
-
-    if (existing) {
-      return existing;
-    }
-
-    return this.prisma.overtimeRequest.create({
-      data: {
-        tenantId,
-        employeeId,
-        date,
-        startTime,
-        endTime,
-        totalMinutes,
-        reason: 'Auto-generated from clock-out',
-      },
-    });
   }
 
   async findAll(tenantId: string, filters: AttendanceFilterDto): Promise<AttendanceRecord[] | Paginated<AttendanceRecord>> {
