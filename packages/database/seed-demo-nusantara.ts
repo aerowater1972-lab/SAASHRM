@@ -19,11 +19,16 @@
  * membuat AttendanceRecord/LeaveRequest.
  */
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 const TENANT_ID = 'nusantara';
-const ENTITY_ID = 'entity-nusantara';
+// Employee.tenantId adalah FK ke TenantEntity.id, tapi API memfilter employee
+// berdasarkan string tenant id (dari JWT). Agar data demo TERLIHAT via API,
+// kita buat entity id == tenant id (satu entity per tenant, id == tenant id).
+// Ini menyelaraskan FK dengan filter query API.
+const ENTITY_ID = TENANT_ID;
 
 async function main() {
   console.log('=== Seeding demo: PT Nusantara Sejahtera Makmur ===');
@@ -43,6 +48,10 @@ async function main() {
   await prisma.department.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.organization.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.grade.deleteMany({ where: { tenantId: TENANT_ID } });
+  // demo users + role assignments (dibuat di bawah)
+  await prisma.userRole.deleteMany({ where: { user: { tenantId: TENANT_ID } } });
+  await prisma.user.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.role.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.tenantEntity.deleteMany({ where: { id: ENTITY_ID } });
   await prisma.tenant.deleteMany({ where: { id: TENANT_ID } });
   console.log('→ cleared previous demo tenant data');
@@ -432,6 +441,93 @@ async function main() {
     }
   }
   console.log(`Roster '${roster.name}' created with ${entryCount} entries`);
+
+  // -------------------------------------------------------------------------
+  // 9. Demo login users + roles (agar tenant nusantara bisa di-login & dilihat)
+  //    Password demo sama untuk semua akun demo: 'Demo123!'
+  // -------------------------------------------------------------------------
+  const DEMO_PASSWORD = 'Demo123!';
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+
+  const roleDefs = [
+    { id: 'nsm-role-sysadmin', name: 'System Administrator', isSystem: true },
+    { id: 'nsm-role-hr', name: 'HR Admin', isSystem: true },
+    { id: 'nsm-role-manager', name: 'Manager', isSystem: true },
+    { id: 'nsm-role-employee', name: 'Employee', isSystem: true },
+  ];
+  for (const r of roleDefs) {
+    await prisma.role.upsert({ where: { id: r.id }, update: {}, create: { ...r, tenantId: TENANT_ID } });
+  }
+
+  // assign ALL catalog permissions to sysadmin; HR dapat semua (demo); manager & employee subset
+  const allPerms = await prisma.permission.findMany();
+  for (const perm of allPerms) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: 'nsm-role-sysadmin', permissionId: perm.id } },
+      update: {},
+      create: { roleId: 'nsm-role-sysadmin', permissionId: perm.id, scope: 'ALL' },
+    });
+  }
+  // HR demo: berikan semua permission agar bisa kelola modul HR/demo
+  for (const perm of allPerms) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: 'nsm-role-hr', permissionId: perm.id } },
+      update: {},
+      create: { roleId: 'nsm-role-hr', permissionId: perm.id, scope: 'ALL' },
+    });
+  }
+  // Employee: ESS self-service subset
+  const empPerms = [
+    'employee:read',
+    'ess:attendance:clock', 'ess:attendance:read', 'ess:dashboard:read',
+    'ess:leave:approve', 'ess:leave:create', 'ess:leave:read',
+    'ess:notification:read', 'ess:notification:update',
+    'ess:onboarding:complete', 'ess:onboarding:read',
+    'ess:payslip:acknowledge', 'ess:payslip:read',
+    'ess:profile:read', 'ess:profile:update',
+    'benefits:enroll', 'benefits:read',
+    'leave-balances:read', 'leave-requests:create', 'leave-requests:read',
+    'learning:read', 'performance:goal:create', 'performance:goal:progress',
+    'performance:goal:read', 'performance:goal:update', 'performance:read',
+    'performance:review:create', 'performance:review:read', 'performance:review:submit',
+    'performance:review:update', 'resignations:create',
+    'expense-claims:create', 'expense-claims:read', 'loans:create', 'loans:read',
+    'assets:read', 'analytics:read',
+  ];
+  for (const p of empPerms) {
+    const lastColon = p.lastIndexOf(':');
+    const module = p.slice(0, lastColon);
+    const action = p.slice(lastColon + 1);
+    const perm = await prisma.permission.findUnique({ where: { module_action: { module, action } } });
+    if (perm) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: 'nsm-role-employee', permissionId: perm.id } },
+        update: {},
+        create: { roleId: 'nsm-role-employee', permissionId: perm.id, scope: 'ALL' },
+      });
+    }
+  }
+  console.log('Demo roles + permissions created');
+
+  const demoUsers = [
+    { id: 'nsm-user-admin', email: 'admin@nusantarasejahtera.co.id', fullName: 'Admin Nusantara (Demo)', roleId: 'nsm-role-sysadmin', employeeId: null },
+    { id: 'nsm-user-hr', email: 'maya.sari@nusantarasejahtera.co.id', fullName: 'Maya Sari', roleId: 'nsm-role-hr', employeeId: 'emp-NSM-2024-007' },
+    { id: 'nsm-user-emp', email: 'budi.santoso@nusantarasejahtera.co.id', fullName: 'Budi Santoso', roleId: 'nsm-role-employee', employeeId: 'emp-NSM-2024-001' },
+  ];
+  for (const u of demoUsers) {
+    const user = await prisma.user.upsert({
+      where: { id: u.id },
+      update: {},
+      create: { id: u.id, tenantId: TENANT_ID, email: u.email, passwordHash, fullName: u.fullName, status: 'ACTIVE', employeeId: u.employeeId },
+    });
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: user.id, roleId: u.roleId } },
+      update: {},
+      create: { userId: user.id, roleId: u.roleId },
+    });
+  }
+  console.log(`Demo users created (password: ${DEMO_PASSWORD}):`);
+  demoUsers.forEach((u) => console.log(`   - ${u.email} [${u.roleId.replace('nsm-role-', '')}]`));
 
   console.log('\n✅ Demo seed PT Nusantara Sejahtera Makmur selesai.');
   console.log(`   Tenant: ${TENANT_ID} (${tenant.domain})`);

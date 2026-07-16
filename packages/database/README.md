@@ -37,6 +37,34 @@ Atau langsung via ts-node:
 > `[MODULE_TYPELESS_PACKAGE_JSON]` bersifat kosmetik dan tidak memengaruhi
 > hasil seed.
 
+### Akun login demo (tenant `nusantara`)
+
+Skrip juga membuat **role** (`System Administrator`, `HR Admin`, `Manager`,
+`Employee`) dan **user login** untuk tenant `nusantara` agar data bisa
+dilihat melalui aplikasi (UI/API). Password semua akun demo: **`Demo123!`**
+
+| Email | Role | Keterangan |
+|---|---|---|
+| `admin@nusantarasejahtera.co.id` | System Administrator | Akses penuh tenant demo |
+| `maya.sari@nusantarasejahtera.co.id` | HR Admin | Di-link ke emp `NSM-2024-007` |
+| `budi.santoso@nusantarasejahtera.co.id` | Employee | Di-link ke emp `NSM-2024-001` (Direktur Utama) |
+
+Login via `POST /api/v1/admin/auth/login` dengan header `x-tenant-id: nusantara`.
+Setelah login, token membawa `tenantId=nusantara` sehingga `GET /employees`,
+`GET /organizations`, `GET /departments`, dll. menampilkan data demo.
+
+> Catatan: `GET /employees` secara default menyembunyikan karyawan
+> `PENDING_ACTIVATION` (4 orang). Gunakan filter `?status=PENDING_ACTIVATION`
+> atau query DB langsung untuk melihat ke-4 karyawan tersebut (demonstrasi BR-08).
+
+### Keputusan pemodelan: `Employee.tenantId` vs `TenantEntity`
+
+Skema `Employee.tenantId` adalah FK ke `TenantEntity.id`, tetapi layer service
+memfilter employee berdasarkan **string tenant id** (dari JWT). Agar data demo
+TERLIHAT via API, skrip membuat `TenantEntity` dengan `id == tenant id`
+(`nusantara`), sehingga `employee.tenantId = 'nusantara'` memuaskan sekaligus FK
+maupun filter query API. Ini menyelaraskan dengan cara kerja API yang ada.
+
 ### Ringkasan isi data
 
 - **Tenant**: `nusantara` — domain `nusantara-sejahtera.flexyhrms.demo`
