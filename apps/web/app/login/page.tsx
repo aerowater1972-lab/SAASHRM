@@ -13,8 +13,11 @@ import { Building2, ChevronLeft } from 'lucide-react';
 interface TenantInfo { id: string; name: string; code: string }
 
 const DEMO_ACCOUNTS = [
-  { email: 'admin@flexy.local', password: 'admin123', label: 'Admin (full access)', tenant: 'default' },
-  { email: 'budi@flexy.local', password: 'password123', label: 'Employee (limited)', tenant: 'default' },
+  { email: 'admin@flexy.local', password: 'admin123', label: 'Admin (default tenant)', tenant: 'default' },
+  { email: 'budi@flexy.local', password: 'password123', label: 'Employee (default tenant)', tenant: 'default' },
+  { email: 'admin@nusantarasejahtera.co.id', password: 'Demo123!', label: 'Admin PT Nusantara (demo data)', tenant: 'nusantara' },
+  { email: 'maya.sari@nusantarasejahtera.co.id', password: 'Demo123!', label: 'HR PT Nusantara (demo data)', tenant: 'nusantara' },
+  { email: 'budi.santoso@nusantarasejahtera.co.id', password: 'Demo123!', label: 'Karyawan PT Nusantara (demo data)', tenant: 'nusantara' },
 ];
 
 export default function LoginPage() {
