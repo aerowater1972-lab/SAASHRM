@@ -1,20 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsUUID, IsEnum, IsDateString, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsNumber } from 'class-validator';
 import { EmploymentType } from '@prisma/client';
 export class CreateEmploymentDto {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   positionId!: string;
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   departmentId!: string;
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   gradeId?: string;
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   entityId?: string;
   @ApiProperty({ enum: EmploymentType })
   @IsEnum(EmploymentType)

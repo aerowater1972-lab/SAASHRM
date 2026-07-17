@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, ChevronLeft } from 'lucide-react';
 
-interface TenantInfo { id: string; name: string; code: string }
+interface TenantInfo { id: string; name: string; code?: string }
 
 const DEMO_ACCOUNTS = [
   { email: 'admin@flexy.local', password: 'admin123', label: 'Admin (default tenant)', tenant: 'default' },
@@ -66,11 +66,11 @@ export default function LoginPage() {
             ) : (
               <div className="space-y-2">
                 {tenants.map((t: TenantInfo) => (
-                  <button key={t.id} onClick={() => { setSelectedTenant(t.code); setStep('credentials'); }}
+                  <button key={t.id} onClick={() => { setSelectedTenant(t.id); setStep('credentials'); }}
                     className="w-full p-3 rounded-lg border border-border bg-card text-left text-sm text-foreground hover:bg-accent transition-colors"
                   >
                     <span className="font-medium">{t.name}</span>
-                    <span className="ml-2 text-muted-foreground">({t.code})</span>
+                    {t.code ? <span className="ml-2 text-muted-foreground">({t.code})</span> : null}
                   </button>
                 ))}
                 <hr className="border-border my-3" />

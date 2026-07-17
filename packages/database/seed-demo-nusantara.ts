@@ -509,6 +509,49 @@ async function main() {
   }
   console.log('Demo roles + permissions created');
 
+  // Leave types (Addendum v1.2 FR-18 + BR-11): katalog jenis cuti/izin Indonesia
+  const nsmLeaveTypes: any[] = [
+    { id: 'nsm-lt-annual', name: 'Cuti Tahunan', code: 'CT', isPaid: true, isBalanceDeducting: true, carryForwardLimit: 5, carryForwardExpiry: 'Q1_NEXT_YEAR' },
+    { id: 'nsm-lt-sick', name: 'Cuti Sakit', code: 'CS', isPaid: true, isBalanceDeducting: true },
+    { id: 'nsm-lt-maternity', name: 'Cuti Melahirkan', code: 'CM', isPaid: true, isBalanceDeducting: true, maxConsecutiveDays: 90, genderRestriction: 'FEMALE' },
+    { id: 'nsm-lt-menstrual', name: 'Cuti Haid', code: 'CH', isPaid: true, isBalanceDeducting: false, sameDayApproval: true, carryForwardLimit: 0 },
+    { id: 'nsm-lt-bereavement', name: 'Cuti Duka (Keluarga Inti)', code: 'CD', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
+    { id: 'nsm-lt-marry-child', name: 'Cuti Menikahkan/Mengkhitankan Anak', code: 'CC', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
+    { id: 'nsm-lt-spouse-birth', name: 'Cuti Istri Melahirkan/Keguguran', code: 'CI', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
+    { id: 'nsm-lt-personal', name: 'Izin Pribadi', code: 'IP', isPaid: false, isBalanceDeducting: false, allowNegativeBalance: true },
+  ];
+  for (const lt of nsmLeaveTypes) {
+    await prisma.leaveType.upsert({ where: { id: lt.id }, update: {}, create: { ...lt, tenantId: TENANT_ID } });
+  }
+  console.log(`${nsmLeaveTypes.length} leave types created`);
+
+  // Leave balances 2026 untuk karyawan aktif (hanya jenis yang memotong saldo)
+  for (const e of employees) {
+    if (e.status !== 'PENDING_ACTIVATION') {
+      for (const lt of nsmLeaveTypes) {
+        if (lt.isBalanceDeducting) {
+          const balId = `nsm-bal-${e.no}-${lt.id}-2026`;
+          await prisma.leaveBalance.upsert({
+            where: { id: balId },
+            update: {},
+            create: {
+              id: balId,
+              tenantId: TENANT_ID,
+              employeeId: `emp-${e.no}`,
+              leaveTypeId: lt.id,
+              year: 2026,
+              totalEntitled: lt.code === 'CM' ? 90 : 12,
+              totalUsed: 0,
+              totalPending: 0,
+              carryForward: 0,
+            },
+          });
+        }
+      }
+    }
+  }
+  console.log('Leave balances (2026) created for active employees');
+
   const demoUsers = [
     { id: 'nsm-user-admin', email: 'admin@nusantarasejahtera.co.id', fullName: 'Admin Nusantara (Demo)', roleId: 'nsm-role-sysadmin', employeeId: null },
     { id: 'nsm-user-hr', email: 'maya.sari@nusantarasejahtera.co.id', fullName: 'Maya Sari', roleId: 'nsm-role-hr', employeeId: 'emp-NSM-2024-007' },

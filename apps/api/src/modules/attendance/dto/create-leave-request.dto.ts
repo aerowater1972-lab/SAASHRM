@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 export class CreateLeaveRequestDto {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   leaveTypeId!: string;
   @ApiProperty()
   @IsDateString()
@@ -22,4 +22,8 @@ export class CreateLeaveRequestDto {
   @IsOptional()
   @IsString()
   documentUrl?: string;
+  @ApiPropertyOptional({ description: 'Addendum v1.2 BR-13: referensi kejadian unik untuk izin sekali-pakai per kejadian' })
+  @IsOptional()
+  @IsString()
+  eventRef?: string;
 }

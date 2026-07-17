@@ -200,7 +200,12 @@ export class LeaveService {
     startDay.setHours(0, 0, 0, 0);
     const isUrgent = startDay.getTime() <= tomorrow.getTime();
 
-    await this.validateBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, leaveType.allowNegativeBalance);
+    // Addendum v1.2 FR-17 + BR-11: izin non-deducting tidak memotong saldo leave_balances
+    const deductsBalance = leaveType.isBalanceDeducting !== false;
+
+    if (deductsBalance) {
+      await this.validateBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, leaveType.allowNegativeBalance);
+    }
 
     const overlapping = await this.prisma.leaveRequest.findFirst({
       where: {
@@ -216,6 +221,25 @@ export class LeaveService {
       throw new ConflictException('Leave request overlaps with an existing request');
     }
 
+    // Addendum v1.2 BR-13: izin sekali-pakai per kejadian — cek duplikasi kejadian yang sama
+    if (!deductsBalance && dto.eventRef) {
+      const duplicate = await this.prisma.leaveRequest.findFirst({
+        where: {
+          tenantId,
+          employeeId,
+          leaveTypeId: dto.leaveTypeId,
+          eventRef: dto.eventRef,
+          status: { in: [RequestStatus.PENDING, RequestStatus.APPROVED] },
+        },
+      });
+      if (duplicate) {
+        throw new ConflictException('Izin untuk kejadian yang sama sudah pernah diajukan');
+      }
+    }
+
+    // Addendum v1.2 FR-19: Cuti Haid (sameDayApproval) langsung disetujui tanpa pre-approval
+    const autoApprove = leaveType.sameDayApproval === true;
+
     const request = await this.prisma.leaveRequest.create({
       data: {
         tenantId,
@@ -227,6 +251,9 @@ export class LeaveService {
         reason: dto.reason,
         documentUrl: dto.documentUrl,
         isUrgent,
+        eventRef: dto.eventRef,
+        status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
+        approvedAt: autoApprove ? new Date() : null,
       },
       include: {
         leaveType: true,
@@ -234,7 +261,9 @@ export class LeaveService {
       },
     });
 
-    await this.updatePendingBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, 'increment');
+    if (deductsBalance) {
+      await this.updatePendingBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, 'increment');
+    }
 
     await this.eventBus.publish({
       name: 'leave.requested',
@@ -243,6 +272,16 @@ export class LeaveService {
       payload: { employeeId, leaveTypeId: dto.leaveTypeId, startDate: dto.startDate, endDate: dto.endDate, totalDays },
       tenantId,
     });
+
+    if (autoApprove) {
+      await this.eventBus.publish({
+        name: 'leave.approved',
+        aggregateId: request.id,
+        aggregateType: 'LeaveRequest',
+        payload: { employeeId, leaveTypeId: dto.leaveTypeId, autoApproved: true },
+        tenantId,
+      });
+    }
 
     return request;
   }

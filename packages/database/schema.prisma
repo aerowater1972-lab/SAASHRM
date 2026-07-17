@@ -735,6 +735,8 @@ model LeaveType {
   carryForwardExpiry   String? // e.g. "Q1_NEXT_YEAR"
   genderRestriction    Gender?
   minServiceMonths     Int?
+  isBalanceDeducting   Boolean  @default(true) // Addendum v1.2: CUTI (true) vs IZIN (false)
+  sameDayApproval      Boolean  @default(false) // Addendum v1.2 FR-19: Cuti Haid dapat diajukan hari-H tanpa pre-approval
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -778,6 +780,7 @@ model LeaveRequest {
   rejectedReason String?
   isUrgent       Boolean       @default(false)
   escalated      Boolean       @default(false)
+  eventRef       String?       @map("event_ref") // Addendum v1.2 BR-13: referensi kejadian unik (mis. nama keluarga) untuk izin sekali-pakai per kejadian
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

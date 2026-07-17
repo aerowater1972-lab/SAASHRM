@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit, Logger } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { EmployeeController } from './controllers/employee.controller';
@@ -41,4 +41,28 @@ import { MedicalService } from './services/medical.service';
     MovementService,
   ],
 })
-export class EmployeeModule {}
+export class EmployeeModule implements OnModuleInit {
+  private readonly logger = new Logger(EmployeeModule.name);
+  private reminderTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(private readonly employmentService: EmploymentService) {}
+
+  onModuleInit() {
+    // Addendum v1.2 (PKWT) FR-15: pengecekan berkala akumulasi PKWT (default H-90).
+    // Diperiksa setiap 24 jam; tenant dapat mengonfigurasi via settings.pkwtReminderDays.
+    this.reminderTimer = setInterval(() => {
+      this.employmentService
+        .runPkwtReminderCheck()
+        .then((sent) => {
+          if (sent > 0) this.logger.log(`PKWT reminder sent to ${sent} employee(s)`);
+        })
+        .catch((err) => this.logger.warn(`PKWT reminder check failed: ${err.message}`));
+    }, 24 * 60 * 60 * 1000);
+
+    this.logger.log('PKWT reminder scheduler started (interval: 24h)');
+  }
+
+  onModuleDestroy() {
+    if (this.reminderTimer) clearInterval(this.reminderTimer);
+  }
+}

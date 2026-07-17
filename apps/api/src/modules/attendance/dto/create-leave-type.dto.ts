@@ -47,4 +47,12 @@ export class CreateLeaveTypeDto {
   @IsNumber()
   @Min(0)
   minServiceMonths?: number;
+  @ApiPropertyOptional({ description: 'Addendum v1.2 FR-17: true=CUTI (potong saldo), false=IZIN (tidak potong saldo)' })
+  @IsOptional()
+  @IsBoolean()
+  isBalanceDeducting?: boolean;
+  @ApiPropertyOptional({ description: 'Addendum v1.2 FR-19: dapat diajukan hari-H tanpa pre-approval' })
+  @IsOptional()
+  @IsBoolean()
+  sameDayApproval?: boolean;
 }
