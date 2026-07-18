@@ -10,6 +10,11 @@ export enum MaritalStatus {
   DIVORCED = 'DIVORCED',
   WIDOWED = 'WIDOWED',
 }
+export enum UnionStatus {
+  NONE = 'NONE',
+  MEMBER = 'MEMBER',
+  OFFICER = 'OFFICER',
+}
 export class CreateEmployeeDto {
   @ApiPropertyOptional({ description: 'Employee ID (auto-generated if omitted, per BR-01 immutable once set)' })
   @IsOptional()
@@ -49,6 +54,10 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsEnum(MaritalStatus)
   maritalStatus?: MaritalStatus;
+  @ApiPropertyOptional({ enum: UnionStatus, description: 'Addendum Serikat Pekerja: status keanggotaan serikat (feature-flagged labor_union)' })
+  @IsOptional()
+  @IsEnum(UnionStatus)
+  unionStatus?: UnionStatus;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

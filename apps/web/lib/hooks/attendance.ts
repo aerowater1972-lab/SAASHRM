@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchTodayStatus,
   fetchAttendanceRecords,
+  fetchFlaggedAttendance,
+  reviewSpoofRecord,
   clockIn,
   clockOut,
   fetchShifts,
@@ -30,6 +32,21 @@ export function useAttendanceRecords(params?: AttendanceListParams) {
   return useQuery({
     queryKey: ['attendance', 'records', params],
     queryFn: () => fetchAttendanceRecords(params),
+  });
+}
+
+export function useFlaggedAttendance(reviewed?: 'true' | 'false') {
+  return useQuery({
+    queryKey: ['attendance', 'flagged', reviewed ?? 'all'],
+    queryFn: () => fetchFlaggedAttendance(reviewed),
+  });
+}
+
+export function useReviewSpoof() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) => reviewSpoofRecord(id, note),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'flagged'] }),
   });
 }
 

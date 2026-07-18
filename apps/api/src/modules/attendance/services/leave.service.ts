@@ -20,6 +20,9 @@ import {
   LeaveRequest,
 } from '@prisma/client';
 
+// Addendum Serikat Pekerja BR-02: fitur aktif hanya bila feature flag ini ON.
+const LABOR_UNION_FEATURE = 'labor_union';
+
 @Injectable()
 export class LeaveService {
   constructor(
@@ -163,6 +166,23 @@ export class LeaveService {
 
     if (!leaveType) {
       throw new NotFoundException('Leave type not found or inactive');
+    }
+
+    // Addendum Serikat Pekerja BR-01/BR-02: izin kegiatan serikat hanya untuk
+    // union officer dan hanya bila feature flag labor_union aktif.
+    if (leaveType.isUnionActivity) {
+      const enabled = await this.isLaborUnionEnabled(tenantId);
+      if (!enabled) {
+        throw new BadRequestException(
+          'Fitur serikat pekerja tidak aktif untuk tenant ini (feature flag labor_union).',
+        );
+      }
+      const employee = await this.employeeService.findById(tenantId, employeeId);
+      if (employee?.unionStatus !== 'OFFICER') {
+        throw new BadRequestException(
+          'Izin Kegiatan Serikat hanya dapat diajukan oleh pengurus serikat (union officer).',
+        );
+      }
     }
 
     const startDate = new Date(dto.startDate);
@@ -538,6 +558,13 @@ export class LeaveService {
     });
 
     return { leaves: requests, holidays };
+  }
+
+  private async isLaborUnionEnabled(tenantId: string): Promise<boolean> {
+    const flag = await this.prisma.featureFlag.findFirst({
+      where: { tenantId, feature: LABOR_UNION_FEATURE },
+    });
+    return Boolean(flag?.enabled);
   }
 
   private async validateBalance(tenantId: string, employeeId: string, leaveTypeId: string, totalDays: number, allowNegative: boolean) {

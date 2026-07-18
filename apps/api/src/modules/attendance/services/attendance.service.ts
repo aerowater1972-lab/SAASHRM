@@ -13,6 +13,7 @@ import { ClockOutDto } from '../dto/clock-out.dto';
 import { AttendanceFilterDto } from '../dto/attendance-filter.dto';
 import { AttendanceCorrectionDto } from '../dto/attendance-correction.dto';
 import { OvertimeService } from './overtime.service';
+import { BiometricService } from './biometric.service';
 import {
   AttendanceStatus,
   PayrollPeriodStatus,
@@ -21,19 +22,38 @@ import {
   AttendanceRecord,
 } from '@prisma/client';
 
+export interface AntiSpoofThresholds {
+  maxGpsAccuracy: number;
+  maxClockSkewMs: number;
+  maxTravelSpeedKmh: number;
+}
+
 @Injectable()
 export class AttendanceService {
   private readonly geofenceRadius: number;
   private readonly overtimeMinMinutes: number;
+  private readonly maxGpsAccuracy: number;
+  private readonly maxClockSkewMs: number;
+  private readonly maxTravelSpeedKmh: number;
+
+  private static readonly ANTI_SPOOF_CACHE_TTL_MS = 60_000;
+  private readonly antiSpoofCache = new Map<string, { value: AntiSpoofThresholds; expiresAt: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly eventBus: EventBusService,
     private readonly overtimeService: OvertimeService,
+    private readonly biometricService: BiometricService,
   ) {
-    this.geofenceRadius = this.config.get<number>('GEOFENCE_RADIUS_METERS', 100);
-    this.overtimeMinMinutes = this.config.get<number>('OVERTIME_MIN_MINUTES', 30);
+    // ConfigService returns raw strings for env vars, so coerce to numbers to
+    // keep the anti-spoof thresholds strictly numeric everywhere downstream.
+    this.geofenceRadius = Number(this.config.get('GEOFENCE_RADIUS_METERS', 100));
+    this.overtimeMinMinutes = Number(this.config.get('OVERTIME_MIN_MINUTES', 30));
+    // Anti-spoof thresholds.
+    this.maxGpsAccuracy = Number(this.config.get('GPS_ACCURACY_MAX_METERS', 50));
+    this.maxClockSkewMs = Number(this.config.get('GPS_CLIENT_TS_SKEW_MS', 2 * 60 * 1000));
+    this.maxTravelSpeedKmh = Number(this.config.get('GPS_MAX_TRAVEL_SPEED_KMH', 200));
   }
 
   async clockIn(tenantId: string, employeeId: string, dto: ClockInDto) {
@@ -49,6 +69,25 @@ export class AttendanceService {
     }
 
     await this.validateGeofence(tenantId, employeeId, dto.method, dto.latitude, dto.longitude);
+    const clockInFlags = await this.detectLocationSuspicion(
+      tenantId,
+      employeeId,
+      dto.method,
+      dto.latitude,
+      dto.longitude,
+      dto.accuracy,
+      dto.clientTimestamp,
+    );
+
+    if (dto.method === ClockInMethod.FACE) {
+      if (!dto.embedding) {
+        throw new BadRequestException('Face embedding is required for FACE clock-in');
+      }
+      const result = await this.biometricService.verifyFace(tenantId, employeeId, dto.embedding);
+      if (!result.matched) {
+        throw new BadRequestException(`Face verification failed (score ${result.score.toFixed(3)})`);
+      }
+    }
 
     const shift = await this.findAssignedShift(tenantId, employeeId, today);
 
@@ -66,7 +105,11 @@ export class AttendanceService {
         clockInMethod: dto.method,
         clockInLat: dto.latitude,
         clockInLng: dto.longitude,
+        clockInAccuracy: dto.accuracy,
+        clockInClientTs: dto.clientTimestamp ? new Date(dto.clientTimestamp) : undefined,
         clockInPhoto: dto.photo,
+        clockInFlags,
+        isSuspicious: clockInFlags.length > 0,
         shiftId: shift?.id,
         status,
         lateMinutes,
@@ -77,7 +120,11 @@ export class AttendanceService {
         clockInMethod: dto.method,
         clockInLat: dto.latitude,
         clockInLng: dto.longitude,
+        clockInAccuracy: dto.accuracy,
+        clockInClientTs: dto.clientTimestamp ? new Date(dto.clientTimestamp) : undefined,
         clockInPhoto: dto.photo,
+        clockInFlags,
+        isSuspicious: clockInFlags.length > 0,
         shiftId: shift?.id,
         status,
         lateMinutes,
@@ -85,6 +132,8 @@ export class AttendanceService {
       },
       include: { employee: true },
     });
+
+    await this.notifyHrOfSuspicion(tenantId, employeeId, clockInFlags);
 
     return record;
   }
@@ -106,6 +155,25 @@ export class AttendanceService {
     }
 
     await this.validateGeofence(tenantId, employeeId, dto.method, dto.latitude, dto.longitude);
+    const clockOutFlags = await this.detectLocationSuspicion(
+      tenantId,
+      employeeId,
+      dto.method,
+      dto.latitude,
+      dto.longitude,
+      dto.accuracy,
+      dto.clientTimestamp,
+    );
+
+    if (dto.method === ClockInMethod.FACE) {
+      if (!dto.embedding) {
+        throw new BadRequestException('Face embedding is required for FACE clock-out');
+      }
+      const result = await this.biometricService.verifyFace(tenantId, employeeId, dto.embedding);
+      if (!result.matched) {
+        throw new BadRequestException(`Face verification failed (score ${result.score.toFixed(3)})`);
+      }
+    }
 
     const clockOutTime = new Date();
     const shift = record.shiftId
@@ -135,7 +203,11 @@ export class AttendanceService {
         clockOutMethod: dto.method,
         clockOutLat: dto.latitude,
         clockOutLng: dto.longitude,
+        clockOutAccuracy: dto.accuracy,
+        clockOutClientTs: dto.clientTimestamp ? new Date(dto.clientTimestamp) : undefined,
         clockOutPhoto: dto.photo,
+        clockOutFlags,
+        isSuspicious: record.isSuspicious || clockOutFlags.length > 0,
         status,
         earlyLeaveMinutes,
         overtimeMinutes: eligibleOvertime,
@@ -152,6 +224,8 @@ export class AttendanceService {
     if (eligibleOvertime > 0) {
       await this.overtimeService.reconcile(tenantId, employeeId, today, eligibleOvertime);
     }
+
+    await this.notifyHrOfSuspicion(tenantId, employeeId, clockOutFlags);
 
     return updated;
   }
@@ -212,6 +286,49 @@ export class AttendanceService {
     }
 
     return record;
+  }
+
+  async findFlagged(tenantId: string, reviewed?: string) {
+    const where: Prisma.AttendanceRecordWhereInput = { tenantId, isSuspicious: true };
+    if (reviewed === 'true') {
+      where.spoofReviewedAt = { not: null };
+    } else if (reviewed === 'false') {
+      where.spoofReviewedAt = null;
+    }
+
+    return this.prisma.attendanceRecord.findMany({
+      where,
+      orderBy: { date: 'desc' },
+      include: {
+        employee: {
+          select: { id: true, employeeId: true, fullName: true, email: true },
+        },
+      },
+    });
+  }
+
+  async reviewSpoof(tenantId: string, id: string, reviewerId: string, note?: string) {
+    const record = await this.prisma.attendanceRecord.findFirst({ where: { id, tenantId } });
+    if (!record) {
+      throw new NotFoundException('Attendance record not found');
+    }
+    if (!record.isSuspicious) {
+      throw new BadRequestException('Record is not flagged as suspicious');
+    }
+
+    return this.prisma.attendanceRecord.update({
+      where: { id },
+      data: {
+        spoofReviewedBy: reviewerId,
+        spoofReviewedAt: new Date(),
+        spoofReviewNote: note,
+      },
+      include: {
+        employee: {
+          select: { id: true, employeeId: true, fullName: true, email: true },
+        },
+      },
+    });
   }
 
   async correct(tenantId: string, id: string, employeeId: string, dto: AttendanceCorrectionDto) {
@@ -459,6 +576,253 @@ export class AttendanceService {
       throw new BadRequestException(
         `Location is outside the allowed geofence (${location.radiusMeters}m radius from ${location.name})`,
       );
+    }
+  }
+
+  /**
+   * Anti-spoof / fake-GPS defenses for GPS-based attendance.
+   * 1) Accuracy gate — implausibly coarse or missing GPS accuracy.
+   * 2) Client timestamp skew — time-travel / clock manipulation.
+   * 3) Speed sanity — physically impossible travel since the last recorded point.
+   * Non-GPS methods (FACE/FINGERPRINT/QR) and MANUAL bypass location checks.
+   *
+   * Returns a list of human-readable suspicion flags (empty = clean). The record
+   * is still saved; HR reviews flagged records instead of the employee being
+   * hard-blocked.
+   */
+  /**
+   * Resolve anti-spoof thresholds for a tenant. Per-tenant overrides live in
+   * `Tenant.settings.antiSpoof` and fall back to the env-level defaults. Values
+   * are cached briefly to avoid a DB round-trip on every clock event.
+   */
+  private async getAntiSpoofThresholds(tenantId: string): Promise<AntiSpoofThresholds> {
+    const cached = this.antiSpoofCache.get(tenantId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const defaults: AntiSpoofThresholds = {
+      maxGpsAccuracy: this.maxGpsAccuracy,
+      maxClockSkewMs: this.maxClockSkewMs,
+      maxTravelSpeedKmh: this.maxTravelSpeedKmh,
+    };
+
+    let value = defaults;
+    try {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { settings: true },
+      });
+      const settings = (tenant?.settings ?? {}) as Record<string, any>;
+      const overrides = (settings.antiSpoof ?? {}) as Record<string, unknown>;
+      value = {
+        maxGpsAccuracy: this.positiveNumberOr(overrides.maxGpsAccuracy, defaults.maxGpsAccuracy),
+        maxClockSkewMs: this.positiveNumberOr(overrides.maxClockSkewMs, defaults.maxClockSkewMs),
+        maxTravelSpeedKmh: this.positiveNumberOr(
+          overrides.maxTravelSpeedKmh,
+          defaults.maxTravelSpeedKmh,
+        ),
+      };
+    } catch {
+      value = defaults;
+    }
+
+    this.antiSpoofCache.set(tenantId, {
+      value,
+      expiresAt: Date.now() + AttendanceService.ANTI_SPOOF_CACHE_TTL_MS,
+    });
+    return value;
+  }
+
+  private positiveNumberOr(candidate: unknown, fallback: number): number {
+    const n = typeof candidate === 'number' ? candidate : Number(candidate);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  }
+
+  /**
+   * Return the effective anti-spoof thresholds for a tenant plus the raw stored
+   * overrides and env-level defaults, for the admin settings UI.
+   */
+  async getAntiSpoofSettings(tenantId: string) {
+    const effective = await this.getAntiSpoofThresholds(tenantId);
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const overrides = ((tenant?.settings as Record<string, any>)?.antiSpoof ?? {}) as Record<
+      string,
+      unknown
+    >;
+    return {
+      effective,
+      overrides,
+      defaults: {
+        maxGpsAccuracy: this.maxGpsAccuracy,
+        maxClockSkewMs: this.maxClockSkewMs,
+        maxTravelSpeedKmh: this.maxTravelSpeedKmh,
+      },
+    };
+  }
+
+  /**
+   * Persist per-tenant anti-spoof overrides. Only positive numeric values are
+   * stored; passing null/omitted for a field clears that override.
+   */
+  async updateAntiSpoofSettings(
+    tenantId: string,
+    input: {
+      maxGpsAccuracy?: number | null;
+      maxClockSkewMs?: number | null;
+      maxTravelSpeedKmh?: number | null;
+    },
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const settings = (tenant.settings ?? {}) as Record<string, any>;
+    const antiSpoof: Record<string, number> = { ...(settings.antiSpoof ?? {}) };
+
+    const apply = (key: 'maxGpsAccuracy' | 'maxClockSkewMs' | 'maxTravelSpeedKmh') => {
+      if (!(key in input)) return;
+      const val = input[key];
+      if (val == null) {
+        delete antiSpoof[key];
+        return;
+      }
+      const n = Number(val);
+      if (!Number.isFinite(n) || n <= 0) {
+        throw new BadRequestException(`${key} must be a positive number`);
+      }
+      antiSpoof[key] = n;
+    };
+    apply('maxGpsAccuracy');
+    apply('maxClockSkewMs');
+    apply('maxTravelSpeedKmh');
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings: { ...settings, antiSpoof } },
+    });
+
+    this.antiSpoofCache.delete(tenantId);
+    return this.getAntiSpoofSettings(tenantId);
+  }
+
+  private async detectLocationSuspicion(
+    tenantId: string,
+    employeeId: string,
+    method: ClockInMethod,
+    lat?: number,
+    lng?: number,
+    accuracy?: number,
+    clientTimestamp?: string,
+  ): Promise<string[]> {
+    const flags: string[] = [];
+
+    if (method !== ClockInMethod.GPS) return flags;
+    if (lat == null || lng == null) return flags;
+
+    const thresholds = await this.getAntiSpoofThresholds(tenantId);
+
+    if (accuracy == null || accuracy > thresholds.maxGpsAccuracy) {
+      flags.push(
+        `GPS accuracy too low (${accuracy ?? 'unknown'}m, max ${thresholds.maxGpsAccuracy}m) — possible mock-location app.`,
+      );
+    }
+
+    if (clientTimestamp) {
+      const clientTs = new Date(clientTimestamp).getTime();
+      const skew = Math.abs(Date.now() - clientTs);
+      if (skew > thresholds.maxClockSkewMs) {
+        flags.push(
+          `Client clock out of sync (skew ${Math.round(skew / 1000)}s) — possible device time manipulation.`,
+        );
+      }
+    }
+
+    const prev = await this.prisma.attendanceRecord.findFirst({
+      where: { tenantId, employeeId, OR: [{ clockInLat: { not: null } }, { clockOutLat: { not: null } }] },
+      orderBy: { date: 'desc' },
+    });
+
+    if (prev) {
+      const prevLat = prev.clockOutLat ?? prev.clockInLat;
+      const prevLng = prev.clockOutLng ?? prev.clockInLng;
+      const prevTs = (prev.clockOutClientTs ?? prev.clockInClientTs ?? prev.clockOut ?? prev.clockIn) as
+        | Date
+        | null;
+      if (prevLat != null && prevLng != null && prevTs) {
+        const distanceKm = this.haversineDistance(Number(prevLat), Number(prevLng), lat, lng) / 1000;
+        const elapsedH = Math.max((Date.now() - new Date(prevTs).getTime()) / 3_600_000, 1 / 60);
+        const speed = distanceKm / elapsedH;
+        if (speed > thresholds.maxTravelSpeedKmh) {
+          flags.push(
+            `Impossible travel speed (${speed.toFixed(0)} km/h) since last check-in — possible GPS spoofing.`,
+          );
+        }
+      }
+    }
+
+    return flags;
+  }
+
+  /**
+   * Notify HR (users whose role can approve attendance corrections) that a
+   * suspicious GPS attendance was recorded. Best-effort: failures here must not
+   * break the clock-in/out flow.
+   */
+  private async notifyHrOfSuspicion(
+    tenantId: string,
+    employeeId: string,
+    flags: string[],
+  ): Promise<void> {
+    if (flags.length === 0) return;
+
+    try {
+      const employee = await this.prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { fullName: true, employeeId: true },
+      });
+
+      const hrUsers = await this.prisma.user.findMany({
+        where: {
+          tenantId,
+          employeeId: { not: null },
+          userRoles: {
+            some: {
+              role: {
+                rolePermissions: {
+                  some: {
+                    permission: { module: 'attendance:correction', action: 'approve' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        select: { employeeId: true },
+      });
+
+      const recipientIds = Array.from(
+        new Set(hrUsers.map((u) => u.employeeId).filter((id): id is string => !!id && id !== employeeId)),
+      );
+      if (recipientIds.length === 0) return;
+
+      const who = employee ? `${employee.fullName} (${employee.employeeId})` : employeeId;
+      const message = `Presensi mencurigakan dari ${who}: ${flags.join(' ')}`;
+
+      await this.prisma.essNotification.createMany({
+        data: recipientIds.map((rid) => ({
+          employeeId: rid,
+          type: 'ATTENDANCE_SPOOF_FLAG',
+          message,
+        })),
+      });
+    } catch {
+      // best-effort notification; ignore failures
     }
   }
 

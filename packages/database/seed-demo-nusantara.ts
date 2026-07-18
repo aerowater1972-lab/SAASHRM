@@ -40,9 +40,37 @@ async function main() {
   await prisma.rosterEntry.deleteMany({ where: { roster: { tenantId: TENANT_ID } } });
   await prisma.roster.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.shift.deleteMany({ where: { tenantId: TENANT_ID } });
-  await prisma.employment.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  // child tables referencing Employee must be cleared before Employee itself
+  await prisma.attendanceRecord.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.overtimeRecord.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.overtimeRequest.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.resignationRequest.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.leaveRequest.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.leaveBalance.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.leaveType.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.salaryComponent.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.featureFlag.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.performanceReview.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.payslip.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.goal.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.expenseClaim.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.loan.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.assetAssignment.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.certification.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.trainingParticipant.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.movementRequest.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.payrollAdjustment.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.essNotification.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.essOnboardingProgress.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.essPreference.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.essProfileChangeRequest.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.onboardingTask.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.employeeBenefit.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.employeeDocument.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.employeeMedical.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.employeeContact.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.biometricCredential.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.employment.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.employee.deleteMany({ where: { tenantId: ENTITY_ID } });
   await prisma.position.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.department.deleteMany({ where: { tenantId: TENANT_ID } });
@@ -242,6 +270,7 @@ async function main() {
     blood: string;
     emergencyName: string;
     emergencyPhone: string;
+    union?: 'NONE' | 'MEMBER' | 'OFFICER';
   };
 
   const employees: Emp[] = [
@@ -278,12 +307,12 @@ async function main() {
     { no: 'NSM-2024-025', fullName: 'Bayu Setiawan', gender: 'MALE', positionId: 'nsm-pos-csstaff', departmentId: 'nsm-dept-cs', gradeId: 'nsm-grade-staff', type: 'CONTRACT', startDate: '2023-03-15', salary: 7000000, marital: 'SINGLE', birthDate: '1995-10-10', city: 'Bogor', phone: '+6282112340025', blood: 'A', emergencyName: 'Setiawan Bapak', emergencyPhone: '+6281312340025' },
     // Produksi (pabrik Bekasi) — banyak operator
     { no: 'NSM-2024-026', fullName: 'Suparno', gender: 'MALE', positionId: 'nsm-pos-prodmgr', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-mgr', type: 'PERMANENT', startDate: '2017-05-01', salary: 24000000, marital: 'MARRIED', birthDate: '1980-12-12', city: 'Bekasi', phone: '+6281212340026', blood: 'O', emergencyName: 'Suparni', emergencyPhone: '+6282112340026' },
-    { no: 'NSM-2024-027', fullName: 'Slamet Riyadi', gender: 'MALE', positionId: 'nsm-pos-prodspv', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-spv', type: 'PERMANENT', startDate: '2019-02-01', salary: 14000000, marital: 'MARRIED', birthDate: '1986-07-07', city: 'Bekasi', phone: '+6282112340027', blood: 'B', emergencyName: 'Riyadi Istri', emergencyPhone: '+6281312340027' },
+    { no: 'NSM-2024-027', fullName: 'Slamet Riyadi', gender: 'MALE', positionId: 'nsm-pos-prodspv', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-spv', type: 'PERMANENT', startDate: '2019-02-01', salary: 14000000, marital: 'MARRIED', birthDate: '1986-07-07', city: 'Bekasi', phone: '+6282112340027', blood: 'B', emergencyName: 'Riyadi Istri', emergencyPhone: '+6281312340027', union: 'OFFICER' },
     { no: 'NSM-2024-028', fullName: 'Warsono', gender: 'MALE', positionId: 'nsm-pos-prodspv', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-spv', type: 'PERMANENT', startDate: '2020-02-15', salary: 14000000, marital: 'MARRIED', birthDate: '1985-03-03', city: 'Bekasi', phone: '+6282112340028', blood: 'A', emergencyName: 'Warsoni Istri', emergencyPhone: '+6281212340028' },
     { no: 'NSM-2024-029', fullName: 'Juniarto', gender: 'MALE', positionId: 'nsm-pos-prodtl', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-senior', type: 'PERMANENT', startDate: '2021-01-01', salary: 11000000, marital: 'MARRIED', birthDate: '1990-05-05', city: 'Bekasi', phone: '+6281212340029', blood: 'O', emergencyName: 'Juniarto Istri', emergencyPhone: '+6282112340029' },
     { no: 'NSM-2024-030', fullName: 'Parman', gender: 'MALE', positionId: 'nsm-pos-prodtl', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-senior', type: 'PERMANENT', startDate: '2021-08-01', salary: 11000000, marital: 'MARRIED', birthDate: '1991-11-11', city: 'Bekasi', phone: '+6282112340030', blood: 'B', emergencyName: 'Parman Istri', emergencyPhone: '+6281312340030' },
-    { no: 'NSM-2024-031', fullName: 'Sugeng', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'PERMANENT', startDate: '2022-02-01', salary: 6000000, marital: 'MARRIED', birthDate: '1994-02-20', city: 'Bekasi', phone: '+6282112340031', blood: 'O', emergencyName: 'Sugeng Istri', emergencyPhone: '+6281212340031' },
-    { no: 'NSM-2024-032', fullName: 'Kardi', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'PERMANENT', startDate: '2022-04-01', salary: 6000000, marital: 'SINGLE', birthDate: '1995-06-06', city: 'Bekasi', phone: '+6282112340032', blood: 'A', emergencyName: 'Kardi Ayah', emergencyPhone: '+6281312340032' },
+    { no: 'NSM-2024-031', fullName: 'Sugeng', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'PERMANENT', startDate: '2022-02-01', salary: 6000000, marital: 'MARRIED', birthDate: '1994-02-20', city: 'Bekasi', phone: '+6282112340031', blood: 'O', emergencyName: 'Sugeng Istri', emergencyPhone: '+6281212340031', union: 'MEMBER' },
+    { no: 'NSM-2024-032', fullName: 'Kardi', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'PERMANENT', startDate: '2022-04-01', salary: 6000000, marital: 'SINGLE', birthDate: '1995-06-06', city: 'Bekasi', phone: '+6282112340032', blood: 'A', emergencyName: 'Kardi Ayah', emergencyPhone: '+6281312340032', union: 'MEMBER' },
     { no: 'NSM-2024-033', fullName: 'Tarmudi', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'PERMANENT', startDate: '2023-01-01', salary: 6000000, marital: 'SINGLE', birthDate: '1996-09-09', city: 'Bekasi', phone: '+6282112340033', blood: 'B', emergencyName: 'Tarmudi Ibu', emergencyPhone: '+6281212340033' },
     { no: 'NSM-2024-034', fullName: 'Misnan', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'CONTRACT', startDate: '2023-06-01', salary: 5800000, marital: 'MARRIED', birthDate: '1993-12-12', city: 'Bekasi', phone: '+6282112340034', blood: 'O', emergencyName: 'Misnan Istri', emergencyPhone: '+6281312340034' },
     { no: 'NSM-2024-035', fullName: 'Rohman', gender: 'MALE', positionId: 'nsm-pos-prodop', departmentId: 'nsm-dept-prod', gradeId: 'nsm-grade-staff', type: 'PERMANENT', startDate: '2024-02-01', salary: 6000000, marital: 'SINGLE', birthDate: '1997-03-03', city: 'Bekasi', phone: '+6281212340035', blood: 'AB', emergencyName: 'Rohman Bapak', emergencyPhone: '+6281212340035' },
@@ -322,6 +351,7 @@ async function main() {
         phone: e.phone,
         gender: e.gender,
         maritalStatus: e.marital,
+        unionStatus: e.union ?? 'NONE',
         birthDate: new Date(e.birthDate),
         birthPlace: e.city,
         bloodType: e.blood,
@@ -480,6 +510,7 @@ async function main() {
   const empPerms = [
     'employee:read',
     'ess:attendance:clock', 'ess:attendance:read', 'ess:dashboard:read',
+    'attendance:biometric:enroll', 'attendance:biometric:read',
     'ess:leave:approve', 'ess:leave:create', 'ess:leave:read',
     'ess:notification:read', 'ess:notification:update',
     'ess:onboarding:complete', 'ess:onboarding:read',
@@ -519,6 +550,8 @@ async function main() {
     { id: 'nsm-lt-marry-child', name: 'Cuti Menikahkan/Mengkhitankan Anak', code: 'CC', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
     { id: 'nsm-lt-spouse-birth', name: 'Cuti Istri Melahirkan/Keguguran', code: 'CI', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
     { id: 'nsm-lt-personal', name: 'Izin Pribadi', code: 'IP', isPaid: false, isBalanceDeducting: false, allowNegativeBalance: true },
+    // Addendum Serikat Pekerja: izin kegiatan serikat (non-deducting, hanya untuk union officer via BR-01)
+    { id: 'nsm-lt-union', name: 'Izin Kegiatan Serikat', code: 'IKS', isPaid: true, isBalanceDeducting: false, isUnionActivity: true },
   ];
   for (const lt of nsmLeaveTypes) {
     await prisma.leaveType.upsert({ where: { id: lt.id }, update: {}, create: { ...lt, tenantId: TENANT_ID } });
@@ -552,6 +585,28 @@ async function main() {
   }
   console.log('Leave balances (2026) created for active employees');
 
+  // -------------------------------------------------------------------------
+  // Addendum Serikat Pekerja (fitur opsional): aktifkan feature flag labor_union,
+  // lalu potongan iuran (union_dues) untuk anggota & pengurus serikat.
+  // -------------------------------------------------------------------------
+  await prisma.featureFlag.create({
+    data: { tenantId: TENANT_ID, module: 'attendance', feature: 'labor_union', enabled: true },
+  });
+  console.log('Feature flag labor_union enabled for demo tenant');
+
+  const unionMembers = employees.filter((e) => e.union === 'MEMBER' || e.union === 'OFFICER');
+  for (const e of unionMembers) {
+    await prisma.salaryComponent.create({
+      data: {
+        employeeId: `emp-${e.no}`,
+        componentType: 'union_dues',
+        amount: 50000,
+        effectiveDate: new Date('2026-01-01'),
+      },
+    });
+  }
+  console.log(`${unionMembers.length} union_dues salary components created (Rp50.000/bln)`);
+
   const demoUsers = [
     { id: 'nsm-user-admin', email: 'admin@nusantarasejahtera.co.id', fullName: 'Admin Nusantara (Demo)', roleId: 'nsm-role-sysadmin', employeeId: null },
     { id: 'nsm-user-hr', email: 'maya.sari@nusantarasejahtera.co.id', fullName: 'Maya Sari', roleId: 'nsm-role-hr', employeeId: 'emp-NSM-2024-007' },
@@ -571,6 +626,28 @@ async function main() {
   }
   console.log(`Demo users created (password: ${DEMO_PASSWORD}):`);
   demoUsers.forEach((u) => console.log(`   - ${u.email} [${u.roleId.replace('nsm-role-', '')}]`));
+
+  // -------------------------------------------------------------------------
+  // 11. Demo biometric enrollment (FACE) for the HR demo user (Maya Sari).
+  //     Reference stores a face embedding vector (JSON). In production this is
+  //     produced by an on-prem face model; here we seed a deterministic vector
+  //     so the demo "Presensi Wajah" flow has an enrollment to verify against.
+  // -------------------------------------------------------------------------
+  const demoFaceEmbedding = JSON.stringify(
+    Array.from({ length: 128 }, (_, i) => Number(Math.sin(i + 1).toFixed(4))),
+  );
+  await prisma.biometricCredential.upsert({
+    where: { tenantId_employeeId_type: { tenantId: TENANT_ID, employeeId: 'emp-NSM-2024-007', type: 'FACE' } },
+    update: { reference: demoFaceEmbedding, isActive: true },
+    create: {
+      tenantId: TENANT_ID,
+      employeeId: 'emp-NSM-2024-007',
+      type: 'FACE',
+      reference: demoFaceEmbedding,
+      isActive: true,
+    },
+  });
+  console.log('Demo FACE biometric enrollment created for emp-NSM-2024-007 (Maya Sari)');
 
   console.log('\n✅ Demo seed PT Nusantara Sejahtera Makmur selesai.');
   console.log(`   Tenant: ${TENANT_ID} (${tenant.domain})`);

@@ -443,109 +443,95 @@ export class AnalyticsService {
   }
 
   async getDashboardSummary(tenantId: string, filters: AnalyticsFilterDto) {
-    const { startDate, endDate } = filters;
-    const start = startDate || '1970-01-01';
-    const end = endDate || '2099-12-31';
-
-    const [headcount, attendance, leave, payroll, recruitment, performance, turnover] =
+    const [headcount, attendance, leave, payroll, recruitment, performance, turnover, timeToHire] =
       await Promise.all([
-        this.prisma.$queryRaw<{ total: bigint }[]>`
+        this.getHeadcount(tenantId, filters),
+        this.getAttendanceSummary(tenantId, filters),
+        this.getLeaveSummary(tenantId, filters),
+        this.getPayrollSummary(tenantId, filters),
+        this.getRecruitmentFunnel(tenantId, filters),
+        this.getPerformanceDistribution(tenantId, filters),
+        this.getTurnoverRate(tenantId, filters),
+        this.getTimeToHire(tenantId, filters),
+      ]);
+
+    const headcountTotal = Number(
+      (
+        await this.prisma.$queryRaw<{ total: bigint }[]>`
           SELECT COUNT(*)::int AS total
           FROM "Employee" emp
           WHERE emp."tenantId" = ${tenantId}
             AND emp."deletedAt" IS NULL
             AND emp.status = 'ACTIVE'
-        `,
-        this.prisma.$queryRaw<{ present: bigint; total: bigint }[]>`
-          SELECT
-            COUNT(*) FILTER (WHERE ar.status = 'PRESENT')::int AS present,
-            COUNT(*)::int AS total
-          FROM "AttendanceRecord" ar
-          WHERE ar."tenantId" = ${tenantId}
-            AND ar.date >= ${start}::date
-            AND ar.date <= ${end}::date
-        `,
-        this.prisma.$queryRaw<{ totalDays: number; totalRequests: bigint }[]>`
-          SELECT
-            COALESCE(SUM(lr."totalDays"), 0)::numeric AS "totalDays",
-            COUNT(*)::int AS "totalRequests"
-          FROM "LeaveRequest" lr
-          WHERE lr."tenantId" = ${tenantId}
-            AND lr.status = 'APPROVED'
-            AND lr."startDate" >= ${start}::date
-            AND lr."endDate" <= ${end}::date
-        `,
-        this.prisma.$queryRaw<{ totalPayroll: number; avgSalary: number }[]>`
-          SELECT
-            COALESCE(SUM(p."netPay"), 0)::numeric AS "totalPayroll",
-            COALESCE(AVG(p."netPay"), 0)::numeric AS "avgSalary"
-          FROM "Payslip" p
-          JOIN "PayrollRun" pr ON pr.id = p."runId"
-          JOIN "PayrollPeriod" pp ON pp.id = pr."periodId"
-          WHERE p."tenantId" = ${tenantId}
-            AND pp."startDate" >= ${start}::date
-            AND pp."endDate" <= ${end}::date
-            AND pr.status = 'COMPLETED'
-        `,
-        this.prisma.$queryRaw<{ total: bigint }[]>`
-          SELECT COUNT(*)::int AS total
-          FROM "Application" a
-          WHERE a."tenantId" = ${tenantId}
-            AND a."appliedAt" >= ${start}::date
-            AND a."appliedAt" <= ${end}::date
-        `,
-        this.prisma.$queryRaw<{ avgScore: number; total: bigint }[]>`
-          SELECT
-            COALESCE(AVG(pr."overallScore"), 0)::numeric AS "avgScore",
-            COUNT(*)::int AS "total"
-          FROM "PerformanceReview" pr
-          WHERE pr."tenantId" = ${tenantId}
-            AND pr."overallScore" IS NOT NULL
-            AND pr."submittedAt" >= ${start}::date
-            AND pr."submittedAt" <= ${end}::date
-        `,
-        this.prisma.$queryRaw<{ resigned: bigint }[]>`
-          SELECT COUNT(*)::int AS resigned
-          FROM "ResignationRequest" rr
-          WHERE rr."tenantId" = ${tenantId}
-            AND rr.status = 'APPROVED'
-            AND rr."effectiveDate" >= ${start}::date
-            AND rr."effectiveDate" <= ${end}::date
-        `,
-      ]);
+        `
+      )[0]?.total || 0,
+    );
+
+    const totalResigned = Number(turnover.turnover?.reduce(
+      (sum: number, r: { resigned: number }) => sum + (r.resigned || 0),
+      0,
+    ) || 0);
+    const avgHeadcount = (turnover.turnover?.reduce(
+      (sum: number, r: { headcount: number }) => sum + (r.headcount || 0),
+      0,
+    ) || 0) || 1;
+    const turnoverRate = avgHeadcount > 0 ? Number(((totalResigned / avgHeadcount) * 100).toFixed(2)) : 0;
 
     return {
-      headcount: Number(headcount[0]?.total || 0),
+      headcount: {
+        total: headcountTotal,
+        byDepartment: (headcount.byDepartment || []).map(
+          (r: { department: string; count: bigint }) => ({ name: r.department, value: Number(r.count) }),
+        ),
+        byStatus: (headcount.byStatus || []).map(
+          (r: { status: string; count: bigint }) => ({ name: r.status, value: Number(r.count) }),
+        ),
+        byGrade: (headcount.byGrade || []).map(
+          (r: { grade: string; count: bigint }) => ({ name: r.grade, value: Number(r.count) }),
+        ),
+      },
       attendance: {
-        present: Number(attendance[0]?.present || 0),
-        total: Number(attendance[0]?.total || 0),
-        attendanceRate:
-          Number(attendance[0]?.total || 0) > 0
-            ? Number(
-                (
-                  (Number(attendance[0]?.present || 0) / Number(attendance[0]?.total || 0)) *
-                  100
-                ).toFixed(2),
-              )
-            : 0,
+        avgPresence: attendance.avgPresence ?? 0,
+        latePercentage: attendance.latePercentage ?? 0,
+        absentPercentage: attendance.absentPercentage ?? 0,
+        present: attendance.present ?? 0,
+        total: attendance.totalRecords ?? 0,
       },
       leave: {
-        totalDays: Number(leave[0]?.totalDays || 0),
-        totalRequests: Number(leave[0]?.totalRequests || 0),
+        totalUsed: leave.totalDays ?? 0,
+        totalRequests: leave.totalRequests ?? 0,
+        byType: (leave.byLeaveType || []).map(
+          (r: { leaveType: string; totalDays: number }) => ({ name: r.leaveType, value: Number(r.totalDays) }),
+        ),
       },
       payroll: {
-        totalPayroll: Number(payroll[0]?.totalPayroll || 0),
-        avgSalary: Number(payroll[0]?.avgSalary || 0),
+        totalPayroll: payroll.totalPayroll ?? 0,
+        averageSalary: payroll.avgSalary ?? 0,
+        byDepartment: (payroll.byDepartment || []).map(
+          (r: { department: string; totalPayroll: number }) => ({
+            name: r.department,
+            value: Number(r.totalPayroll),
+          }),
+        ),
       },
       recruitment: {
-        totalApplications: Number(recruitment[0]?.total || 0),
+        totalApplications: recruitment.totalApplications ?? 0,
+        byStage: (recruitment.funnel || []).map(
+          (r: { stage: string; count: number }) => ({ name: r.stage, value: r.count }),
+        ),
+        averageTimeToHire: timeToHire.avgDays ?? 0,
       },
       performance: {
-        averageScore: Number(performance[0]?.avgScore || 0),
-        totalReviews: Number(performance[0]?.total || 0),
+        averageScore: performance.averageScore ?? 0,
+        totalReviews: performance.totalReviews ?? 0,
+        byScore: (performance.distribution || []).map(
+          (r: { scoreRange: string; count: number }) => ({ name: r.scoreRange, value: r.count }),
+        ),
       },
       turnover: {
-        totalResigned: Number(turnover[0]?.resigned || 0),
+        rate: turnoverRate,
+        totalResigned,
+        byPeriod: turnover.turnover || [],
       },
     };
   }

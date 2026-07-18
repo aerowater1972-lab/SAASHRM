@@ -19,6 +19,7 @@ import { ClockInDto } from '../dto/clock-in.dto';
 import { ClockOutDto } from '../dto/clock-out.dto';
 import { AttendanceFilterDto } from '../dto/attendance-filter.dto';
 import { AttendanceCorrectionDto } from '../dto/attendance-correction.dto';
+import { UpdateAntiSpoofSettingsDto } from '../dto/anti-spoof-settings.dto';
 
 @ApiTags('Attendance')
 @ApiBearerAuth()
@@ -28,7 +29,7 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('clock-in')
-  @Permissions('attendance:create')
+  @Permissions('ess:attendance:clock', 'attendance:create')
   @ApiOperation({ summary: 'Clock in with GPS location and method' })
   clockIn(
     @TenantId() tenantId: string,
@@ -39,7 +40,7 @@ export class AttendanceController {
   }
 
   @Post('clock-out')
-  @Permissions('attendance:create')
+  @Permissions('ess:attendance:clock', 'attendance:create')
   @ApiOperation({ summary: 'Clock out with GPS location and method' })
   clockOut(
     @TenantId() tenantId: string,
@@ -79,13 +80,52 @@ export class AttendanceController {
   }
 
   @Get('today')
-  @Permissions('attendance:read')
+  @Permissions('ess:attendance:read', 'attendance:read')
   @ApiOperation({ summary: 'Get current day attendance status' })
   getToday(
     @TenantId() tenantId: string,
     @CurrentUser('employeeId') employeeId: string,
   ) {
     return this.attendanceService.getToday(tenantId, employeeId);
+  }
+
+  @Get('flagged')
+  @Permissions('attendance:read')
+  @ApiOperation({ summary: 'List attendance records flagged as suspicious by anti-spoof checks' })
+  findFlagged(
+    @TenantId() tenantId: string,
+    @Query('reviewed') reviewed?: string,
+  ) {
+    return this.attendanceService.findFlagged(tenantId, reviewed);
+  }
+
+  @Post('records/:id/review-spoof')
+  @Permissions('attendance:correction:approve')
+  @ApiOperation({ summary: 'Mark a suspicious attendance record as reviewed by HR' })
+  reviewSpoof(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') reviewerId: string,
+    @Body() body: { note?: string },
+  ) {
+    return this.attendanceService.reviewSpoof(tenantId, id, reviewerId, body?.note);
+  }
+
+  @Get('anti-spoof/settings')
+  @Permissions('attendance:biometric:enroll')
+  @ApiOperation({ summary: 'Get effective per-tenant anti-spoof thresholds' })
+  getAntiSpoofSettings(@TenantId() tenantId: string) {
+    return this.attendanceService.getAntiSpoofSettings(tenantId);
+  }
+
+  @Put('anti-spoof/settings')
+  @Permissions('attendance:biometric:enroll')
+  @ApiOperation({ summary: 'Update per-tenant anti-spoof thresholds (null clears an override)' })
+  updateAntiSpoofSettings(
+    @TenantId() tenantId: string,
+    @Body() dto: UpdateAntiSpoofSettingsDto,
+  ) {
+    return this.attendanceService.updateAntiSpoofSettings(tenantId, dto);
   }
 
   @Post('bulk')

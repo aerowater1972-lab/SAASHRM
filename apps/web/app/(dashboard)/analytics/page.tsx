@@ -6,21 +6,57 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState, EmptyState, PageSkeleton } from '@/components/ui/data-states';
 
+interface ChartPoint {
+  name: string;
+  value: number;
+}
+
 interface DashboardSummary {
-  headcount: { total: number; byDepartment: Record<string, number>; byStatus: Record<string, number>; byGrade: Record<string, number> };
-  attendance: { avgPresence: number; latePercentage: number; absentPercentage: number };
-  leave: { totalUsed: number; byType: Record<string, number> };
-  payroll: { totalPayroll: number; averageSalary: number; byDepartment: Record<string, number> };
-  recruitment: { byStage: Record<string, number>; averageTimeToHire: number };
-  performance: { byScore: Record<string, number> };
-  turnover: { rate: number };
+  headcount: {
+    total: number;
+    byDepartment: ChartPoint[];
+    byStatus: ChartPoint[];
+    byGrade: ChartPoint[];
+  };
+  attendance: {
+    avgPresence: number;
+    latePercentage: number;
+    absentPercentage: number;
+    present: number;
+    total: number;
+  };
+  leave: {
+    totalUsed: number;
+    totalRequests: number;
+    byType: ChartPoint[];
+  };
+  payroll: {
+    totalPayroll: number;
+    averageSalary: number;
+    byDepartment: ChartPoint[];
+  };
+  recruitment: {
+    totalApplications: number;
+    byStage: ChartPoint[];
+    averageTimeToHire: number;
+  };
+  performance: {
+    averageScore: number;
+    totalReviews: number;
+    byScore: ChartPoint[];
+  };
+  turnover: {
+    rate: number;
+    totalResigned: number;
+    byPeriod: { period: string; resigned: number; headcount: number; turnoverRate: number }[];
+  };
 }
 
 const COLORS = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
 
-function toChartData(obj: Record<string, number> | undefined) {
-  if (!obj) return [];
-  return Object.entries(obj).sort(([, a], [, b]) => b - a).map(([name, value]) => ({ name, value }));
+function toChartData(arr: ChartPoint[] | undefined) {
+  if (!arr || !Array.isArray(arr)) return [];
+  return [...arr].sort((a, b) => b.value - a.value);
 }
 
 export default function AnalyticsPage() {
@@ -42,11 +78,11 @@ export default function AnalyticsPage() {
         <>
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{data.headcount.total}</p><p className="text-xs text-muted-foreground">Headcount</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{(data.attendance.avgPresence * 100).toFixed(1)}%</p><p className="text-xs text-muted-foreground">Presence</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{(data.attendance.latePercentage * 100).toFixed(1)}%</p><p className="text-xs text-muted-foreground">Late %</p></CardContent></Card>
+            <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{data.attendance.avgPresence.toFixed(1)}%</p><p className="text-xs text-muted-foreground">Presence</p></CardContent></Card>
+            <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{data.attendance.latePercentage.toFixed(1)}%</p><p className="text-xs text-muted-foreground">Late %</p></CardContent></Card>
             <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">Rp {(data.payroll.totalPayroll / 1e6).toFixed(1)}M</p><p className="text-xs text-muted-foreground">Total Payroll</p></CardContent></Card>
             <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">Rp {(data.payroll.averageSalary / 1e6).toFixed(1)}M</p><p className="text-xs text-muted-foreground">Avg Salary</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{(data.turnover.rate * 100).toFixed(1)}%</p><p className="text-xs text-muted-foreground">Turnover</p></CardContent></Card>
+            <Card><CardContent className="p-4 text-center"><p className="text-3xl font-bold">{data.turnover.rate.toFixed(1)}%</p><p className="text-xs text-muted-foreground">Turnover</p></CardContent></Card>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

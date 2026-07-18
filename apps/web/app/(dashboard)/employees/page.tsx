@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useEmployees } from '@/lib/hooks/employees';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,15 +24,32 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function EmployeesPage() {
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [departmentId, setDepartmentId] = useState<string | undefined>(undefined);
+  const [positionId, setPositionId] = useState<string | undefined>(undefined);
+  const [gradeId, setGradeId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const dept = searchParams.get('departmentId') || undefined;
+    const pos = searchParams.get('positionId') || undefined;
+    const grade = searchParams.get('gradeId') || undefined;
+    setDepartmentId(dept);
+    setPositionId(pos);
+    setGradeId(grade);
+    setPage(1);
+  }, [searchParams]);
 
   const { data, isLoading, error, refetch } = useEmployees({
     page,
     limit: 20,
     q: search || undefined,
     status: statusFilter || undefined,
+    departmentId,
+    positionId,
+    gradeId,
   });
 
   const employees = data?.data ?? [];
@@ -86,6 +104,15 @@ export default function EmployeesPage() {
           {total} karyawan
         </p>
       </div>
+
+      {(departmentId || positionId || gradeId) && (
+        <div className="text-xs text-muted-foreground">
+          Diffilter dari Organisasi:
+          {departmentId && <span className="ml-1 rounded bg-primary/10 px-2 py-0.5 text-primary">Departemen</span>}
+          {positionId && <span className="ml-1 rounded bg-primary/10 px-2 py-0.5 text-primary">Posisi</span>}
+          {gradeId && <span className="ml-1 rounded bg-primary/10 px-2 py-0.5 text-primary">Grade</span>}
+        </div>
+      )}
 
       {error && (
         <ErrorState

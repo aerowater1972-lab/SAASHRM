@@ -16,6 +16,7 @@ import {
   updateEssPreferences,
   getEssOnboardingStatus,
   completeEssTour,
+  type ClockPayload,
 } from '@/lib/api/ess';
 
 export function useEssDashboard() {
@@ -29,7 +30,7 @@ export function useEssProfile() {
 export function useClockIn() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { method?: string; lat?: number; lng?: number }) => clockIn(data),
+    mutationFn: (data: ClockPayload) => clockIn(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ess', 'dashboard'] });
       qc.invalidateQueries({ queryKey: ['ess', 'attendance'] });
@@ -40,7 +41,7 @@ export function useClockIn() {
 export function useClockOut() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { lat?: number; lng?: number }) => clockOut(data),
+    mutationFn: (data: ClockPayload) => clockOut(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ess', 'dashboard'] });
       qc.invalidateQueries({ queryKey: ['ess', 'attendance'] });

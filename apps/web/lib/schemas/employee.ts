@@ -6,6 +6,9 @@ export type Gender = z.infer<typeof Gender>;
 export const MaritalStatus = z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']);
 export type MaritalStatus = z.infer<typeof MaritalStatus>;
 
+export const UnionStatus = z.enum(['NONE', 'MEMBER', 'OFFICER']);
+export type UnionStatus = z.infer<typeof UnionStatus>;
+
 export const EmployeeStatus = z.enum(['ACTIVE', 'INACTIVE', 'PENDING_ACTIVATION']);
 export type EmployeeStatus = z.infer<typeof EmployeeStatus>;
 
@@ -20,6 +23,7 @@ export const createEmployeeSchema = z.object({
   gender: Gender.optional(),
   religion: z.string().optional(),
   maritalStatus: MaritalStatus.optional(),
+  unionStatus: UnionStatus.optional(),
   idCardNumber: z.string().optional(),
   taxIdNumber: z.string().optional(),
   socialSecurityNumber: z.string().optional(),

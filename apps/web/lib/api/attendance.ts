@@ -35,6 +35,16 @@ export async function clockOut(data: ClockOutInput): Promise<AttendanceRecord> {
   return api.post<AttendanceRecord>('/attendance/clock-out', data);
 }
 
+export async function fetchFlaggedAttendance(reviewed?: 'true' | 'false'): Promise<AttendanceRecord[]> {
+  return api.get<AttendanceRecord[]>('/attendance/flagged', {
+    params: reviewed ? { reviewed } : undefined,
+  });
+}
+
+export async function reviewSpoofRecord(id: string, note?: string): Promise<AttendanceRecord> {
+  return api.post<AttendanceRecord>(`/attendance/records/${id}/review-spoof`, { note });
+}
+
 export async function fetchShifts(): Promise<Shift[]> {
   return api.get<Shift[]>('/attendance/shifts');
 }

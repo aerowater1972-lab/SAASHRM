@@ -126,4 +126,37 @@ export class RoleService {
 
     return { message: `Role "${role.name}" assigned to user ${user.fullName}` };
   }
+
+  async listPermissions() {
+    return this.prisma.permission.findMany({
+      orderBy: [{ module: 'asc' }, { action: 'asc' }],
+    });
+  }
+
+  async removePermissionFromRole(tenantId: string, roleId: string, permissionId: string) {
+    await this.findById(tenantId, roleId);
+    const permission = await this.prisma.permission.findFirst({
+      where: { id: permissionId },
+    });
+    if (!permission) {
+      throw new NotFoundException(`Permission ${permissionId} not found`);
+    }
+    await this.prisma.rolePermission.deleteMany({
+      where: { roleId, permissionId },
+    });
+    return { message: 'Permission removed from role' };
+  }
+
+  async removeRoleFromUser(tenantId: string, userId: string, roleId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found in this tenant`);
+    }
+    await this.prisma.userRole.deleteMany({
+      where: { userId, roleId },
+    });
+    return { message: 'Role removed from user' };
+  }
 }

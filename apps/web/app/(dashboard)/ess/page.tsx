@@ -3,12 +3,15 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useEssDashboard, useClockIn, useClockOut } from '@/lib/hooks/ess';
+import { useEnrollBiometric, useVerifyFace } from '@/lib/hooks/biometric';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState, EmptyState } from '@/components/ui/data-states';
-import { Clock, LogOut, CalendarDays, Wallet, Bell, User, ChevronRight } from 'lucide-react';
+import { FaceCapture } from '@/components/biometric/face-capture';
+import { Clock, LogOut, CalendarDays, Wallet, Bell, User, ChevronRight, ScanFace, Loader2, MapPin } from 'lucide-react';
+import { getCurrentGeoFix, GeolocationError } from '@/lib/utils/geolocation';
 
 const menuItems = [
   { href: '/ess/leave', label: 'Cuti', icon: CalendarDays, color: 'text-blue-600' },
@@ -32,21 +35,85 @@ export default function EssDashboardPage() {
   const { data: raw, isLoading, error, refetch } = useEssDashboard();
   const clockInMut = useClockIn();
   const clockOutMut = useClockOut();
+  const enrollMut = useEnrollBiometric();
+  const verifyMut = useVerifyFace();
   const [clocking, setClocking] = useState(false);
+  const [clockPhase, setClockPhase] = useState<'locating' | 'submitting' | null>(null);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [faceClockOpen, setFaceClockOpen] = useState(false);
+  const [status, setStatus] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
 
   const d = raw as DashboardData | undefined;
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   const handleClock = async () => {
     setClocking(true);
+    setStatus(null);
     try {
+      setClockPhase('locating');
+      const fix = await getCurrentGeoFix();
+      const payload = {
+        method: 'GPS',
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        accuracy: fix.accuracy,
+        clientTimestamp: fix.clientTimestamp,
+      };
+      setClockPhase('submitting');
       if (d?.clockStatus === 'CLOCKED_IN') {
-        await clockOutMut.mutateAsync({});
+        await clockOutMut.mutateAsync(payload);
       } else {
-        await clockInMut.mutateAsync({ method: 'web' });
+        await clockInMut.mutateAsync(payload);
       }
-    } catch { /* ignore */ }
+      setStatus({ kind: 'ok', msg: 'Presensi GPS berhasil dicatat.' });
+    } catch (e) {
+      const msg =
+        e instanceof GeolocationError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Gagal melakukan presensi.';
+      setStatus({ kind: 'err', msg });
+    }
+    setClockPhase(null);
     setClocking(false);
+  };
+
+  const handleEnrollCapture = async (result: { photo: string; embedding: number[] }) => {
+    try {
+      await enrollMut.mutateAsync({
+        type: 'FACE',
+        reference: JSON.stringify(result.embedding),
+      });
+      setStatus({ kind: 'ok', msg: 'Wajah berhasil didaftarkan untuk verifikasi.' });
+    } catch {
+      setStatus({ kind: 'err', msg: 'Gagal mendaftarkan wajah.' });
+    }
+    setEnrollOpen(false);
+  };
+
+  const handleFaceClockCapture = async (result: { photo: string; embedding: number[] }) => {
+    setStatus(null);
+    try {
+      const v = await verifyMut.mutateAsync({ embedding: result.embedding });
+      if (!v.matched) {
+        setStatus({
+          kind: 'err',
+          msg: `Verifikasi wajah gagal (skor ${v.score.toFixed(2)}). Coba lagi atau gunakan cara lain.`,
+        });
+        setFaceClockOpen(false);
+        return;
+      }
+      if (d?.clockStatus === 'CLOCKED_IN') {
+        await clockOutMut.mutateAsync({ method: 'FACE', embedding: result.embedding, photo: result.photo });
+      } else {
+        await clockInMut.mutateAsync({ method: 'FACE', embedding: result.embedding, photo: result.photo });
+      }
+      setStatus({ kind: 'ok', msg: 'Verifikasi wajah berhasil. Presensi dicatat.' });
+    } catch {
+      setStatus({ kind: 'err', msg: 'Verifikasi wajah gagal.' });
+    }
+    setFaceClockOpen(false);
   };
 
   if (isLoading) {
@@ -84,14 +151,45 @@ export default function EssDashboardPage() {
           disabled={clocking}
           className="flex h-28 w-full flex-col items-center justify-center gap-2 rounded-2xl text-lg shadow-lg"
         >
-          <Clock className={`h-10 w-10 ${d?.clockStatus === 'CLOCKED_IN' ? 'animate-pulse' : ''}`} />
+          {clockPhase === 'locating' ? (
+            <MapPin className="h-10 w-10 animate-pulse" />
+          ) : clockPhase === 'submitting' ? (
+            <Loader2 className="h-10 w-10 animate-spin" />
+          ) : (
+            <Clock className={`h-10 w-10 ${d?.clockStatus === 'CLOCKED_IN' ? 'animate-pulse' : ''}`} />
+          )}
           <span className="text-base font-semibold">
-            {clocking ? 'Memproses...' : d?.clockStatus === 'CLOCKED_IN' ? 'Clock Out' : 'Clock In'}
+            {clockPhase === 'locating'
+              ? 'Mengambil lokasi...'
+              : clockPhase === 'submitting'
+                ? 'Memproses...'
+                : d?.clockStatus === 'CLOCKED_IN'
+                  ? 'Clock Out'
+                  : 'Clock In'}
           </span>
           {d?.clockStatus === 'CLOCKED_IN' && d?.clockInTime && (
             <span className="text-xs opacity-80">Masuk {d.clockInTime}</span>
           )}
         </Button>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={() => setFaceClockOpen(true)} disabled={clocking}>
+            <ScanFace className="mr-2 h-4 w-4" /> Presensi Wajah
+          </Button>
+          <Button variant="outline" onClick={() => setEnrollOpen(true)} disabled={enrollMut.isPending}>
+            <ScanFace className="mr-2 h-4 w-4" /> Daftar Wajah
+          </Button>
+        </div>
+
+        {status && (
+          <p
+            className={`mt-3 rounded-md p-2 text-center text-xs ${
+              status.kind === 'ok' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            }`}
+          >
+            {status.msg}
+          </p>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -161,6 +259,19 @@ export default function EssDashboardPage() {
           ))}
         </div>
       </div>
+
+      <FaceCapture
+        open={enrollOpen}
+        onOpenChange={setEnrollOpen}
+        onCapture={handleEnrollCapture}
+        title="Daftarkan Wajah"
+      />
+      <FaceCapture
+        open={faceClockOpen}
+        onOpenChange={setFaceClockOpen}
+        onCapture={handleFaceClockCapture}
+        title="Verifikasi Wajah"
+      />
 
       {/* Bottom Navigation */}
       <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t bg-background">

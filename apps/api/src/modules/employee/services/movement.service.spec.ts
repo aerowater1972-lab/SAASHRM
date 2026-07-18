@@ -20,9 +20,14 @@ describe('MovementService', () => {
       findMany: jest.fn(),
     },
     employment: { findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
+    $transaction: jest.fn(),
   };
+  mockPrisma.$transaction.mockImplementation((cb: any) => cb(mockPrisma));
 
-  const mockEventBus = { publishTyped: jest.fn().mockResolvedValue(undefined) };
+  const mockEventBus = {
+    publishTyped: jest.fn().mockResolvedValue(undefined),
+    publishTypedViaOutbox: jest.fn().mockResolvedValue(undefined),
+  };
 
   const pendingReq = {
     id: 'mov-1',
@@ -49,6 +54,7 @@ describe('MovementService', () => {
     prisma = module.get(PrismaService);
     eventBus = module.get(EventBusService);
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation((cb: any) => cb(mockPrisma));
     mockPrisma.movementRequest.findMany.mockResolvedValue([]);
   });
 
@@ -100,15 +106,17 @@ describe('MovementService', () => {
 
       await service.approve('tenant-x', 'mov-1');
 
-      expect(eventBus.publishTyped).toHaveBeenCalledWith(
+      expect(eventBus.publishTypedViaOutbox).toHaveBeenCalledWith(
         DomainEventType.MOVEMENT_APPROVED,
         expect.objectContaining({ movementId: 'mov-1', employeeId: 'emp-1', type: 'PROMOTION' }),
         { aggregateId: 'mov-1', tenantId: 'tenant-x' },
+        expect.anything(),
       );
-      expect(eventBus.publishTyped).toHaveBeenCalledWith(
+      expect(eventBus.publishTypedViaOutbox).toHaveBeenCalledWith(
         DomainEventType.EMPLOYEE_GRADE_CHANGED,
         expect.objectContaining({ employeeId: 'emp-1', oldGradeId: 'g-1', newGradeId: 'g-2' }),
         { aggregateId: 'emp-new', tenantId: 'tenant-x' },
+        expect.anything(),
       );
     });
 
@@ -129,7 +137,7 @@ describe('MovementService', () => {
 
       await service.approve('tenant-x', 'mov-1');
 
-      const gradeCalls = mockEventBus.publishTyped.mock.calls.filter(
+      const gradeCalls = mockEventBus.publishTypedViaOutbox.mock.calls.filter(
         (c: any[]) => c[0] === DomainEventType.EMPLOYEE_GRADE_CHANGED,
       );
       expect(gradeCalls).toHaveLength(0);

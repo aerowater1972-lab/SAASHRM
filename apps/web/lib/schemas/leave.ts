@@ -15,9 +15,16 @@ export const leaveTypeSchema = z.object({
   code: z.string().min(1, 'Kode tipe cuti wajib diisi'),
   description: z.string().optional(),
   isPaid: z.boolean().optional(),
-  maxConsecutiveDays: z.number().int().optional(),
+  allowNegativeBalance: z.boolean().optional(),
+  maxConsecutiveDays: z.number().int().min(1).optional(),
   requiresDocument: z.boolean().optional(),
-  carryForwardLimit: z.number().int().optional(),
+  carryForwardLimit: z.number().int().min(0).optional(),
+  carryForwardExpiry: z.string().optional(),
+  genderRestriction: z.enum(['MALE', 'FEMALE']).optional(),
+  minServiceMonths: z.number().int().min(0).optional(),
+  isBalanceDeducting: z.boolean().optional(),
+  sameDayApproval: z.boolean().optional(),
+  isUnionActivity: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;

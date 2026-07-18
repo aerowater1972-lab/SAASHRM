@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@common/prisma/prisma.module';
 
 import { TenantController } from './controllers/tenant.controller';
-import { RoleController, UserRoleController } from './controllers/role.controller';
+import { RoleController, UserRoleController, PermissionsController } from './controllers/role.controller';
 import { WorkflowController, WorkflowInstanceController } from './controllers/workflow.controller';
 import { AuditController } from './controllers/audit.controller';
 import { AuthController } from './controllers/auth.controller';
@@ -28,6 +28,7 @@ import { UserManagementService } from './services/user-management.service';
     TenantController,
     RoleController,
     UserRoleController,
+    PermissionsController,
     WorkflowController,
     WorkflowInstanceController,
     AuditController,

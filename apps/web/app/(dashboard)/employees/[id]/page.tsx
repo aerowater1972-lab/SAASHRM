@@ -193,6 +193,18 @@ export default function EmployeeDetailPage() {
                   <p>{employee.maritalStatus || '—'}</p>
                 </div>
                 <div>
+                  <p className="text-sm font-medium text-muted-foreground">Status Serikat Pekerja</p>
+                  <p>
+                    {employee.unionStatus === 'OFFICER'
+                      ? 'Pengurus'
+                      : employee.unionStatus === 'MEMBER'
+                        ? 'Anggota'
+                        : employee.unionStatus === 'NONE'
+                          ? 'Bukan Anggota'
+                          : '—'}
+                  </p>
+                </div>
+                <div>
                   <p className="text-sm font-medium text-muted-foreground">No. KTP</p>
                   <p>{employee.idCardNumber || '—'}</p>
                 </div>

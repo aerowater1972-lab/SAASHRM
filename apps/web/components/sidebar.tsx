@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,9 @@ import {
   LogOut,
   UserCircle,
   Settings,
+  Fingerprint,
+  ShieldAlert,
+  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -32,8 +35,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { hasPermission } from '@/lib/api';
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  permission?: string;
+};
+
+type NavGroup = {
+  group: string;
+  items: NavItem[];
+};
+
+const navItems: NavGroup[] = [
   {
     group: 'Overview',
     items: [
@@ -50,10 +66,14 @@ const navItems = [
     ],
   },
   {
-    group: 'Time & Attendance',
+    group: 'Waktu & Kehadiran',
     items: [
-      { href: '/attendance', label: 'Attendance', icon: Clock },
-      { href: '/leaves', label: 'Leave', icon: CalendarCheck },
+      { href: '/attendance', label: 'Absensi', icon: Clock },
+      { href: '/attendance/overtime', label: 'Lembur', icon: Clock },
+      { href: '/attendance/shifts', label: 'Shift', icon: CalendarCheck },
+      { href: '/attendance/flagged', label: 'Presensi Mencurigakan', icon: ShieldAlert },
+      { href: '/leaves', label: 'Cuti', icon: CalendarCheck },
+      { href: '/admin/leave-types', label: 'Tipe Cuti & Izin', icon: Settings, permission: 'leave-types:read' },
     ],
   },
   {
@@ -101,6 +121,18 @@ const navItems = [
       { href: '/resignations', label: 'Resignations', icon: LogOut },
       { href: '/profile', label: 'Profile', icon: UserCircle },
       { href: '/admin/roles', label: 'Admin', icon: Settings },
+      {
+        href: '/admin/biometric-enrollment',
+        label: 'Enrollment Biometrik',
+        icon: Fingerprint,
+        permission: 'attendance:biometric:enroll',
+      },
+      {
+        href: '/admin/anti-spoof-settings',
+        label: 'Pengaturan Anti Fake-GPS',
+        icon: ShieldCheck,
+        permission: 'attendance:biometric:enroll',
+      },
     ],
   },
 ];
@@ -114,6 +146,14 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const canShow = (item: NavItem) =>
+    !item.permission || (mounted && hasPermission(item.permission));
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
@@ -152,9 +192,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                 </p>
               )}
               <div className="mt-1 flex flex-col gap-0.5">
-                {group.items.map((item) => {
+                 {group.items
+                  .filter(canShow)
+                  .map((item) => {
                   const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== '/attendance' && pathname.startsWith(item.href + '/'));
                   return (
                     <Link
                       key={item.href}
@@ -224,9 +268,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                       {group.group}
                     </p>
                     <div className="mt-1 flex flex-col gap-0.5">
-                      {group.items.map((item) => {
+                      {group.items
+                        .filter(canShow)
+                        .map((item) => {
                         const Icon = item.icon;
-                        const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                        const isActive =
+                          pathname === item.href ||
+                          (item.href !== '/attendance' && pathname.startsWith(item.href + '/'));
                         return (
                           <Link
                             key={item.href}

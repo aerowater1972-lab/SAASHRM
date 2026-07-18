@@ -1,13 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsEnum } from 'class-validator';
 import { EmployeeStatus } from '@prisma/client';
 import { PaginationQueryDto } from '@common/dto/pagination-query.dto';
 
 export class EmployeeFilterDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   departmentId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by active employment position' })
+  @IsOptional()
+  @IsString()
+  positionId?: string;
 
   @ApiPropertyOptional({ enum: EmployeeStatus })
   @IsOptional()
@@ -20,7 +25,7 @@ export class EmployeeFilterDto extends PaginationQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   gradeId?: string;
 
   @ApiPropertyOptional()

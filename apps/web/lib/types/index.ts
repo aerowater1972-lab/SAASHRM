@@ -72,6 +72,7 @@ export interface User {
   status: string;
   lastLoginAt?: string;
   employeeId?: string;
+  userRoles?: { roleId: string; entityId?: string }[];
 }
 
 export interface Role {
@@ -80,6 +81,8 @@ export interface Role {
   name: string;
   description?: string;
   isSystem: boolean;
+  rolePermissions?: { permission: Permission }[];
+  userRoles?: { user: { id: string; fullName: string; email: string } }[];
 }
 
 export interface Permission {
@@ -172,6 +175,7 @@ export interface Employee {
   gender?: Gender;
   religion?: string;
   maritalStatus?: MaritalStatus;
+  unionStatus?: 'NONE' | 'MEMBER' | 'OFFICER';
   idCardNumber?: string;
   taxIdNumber?: string;
   socialSecurityNumber?: string;
@@ -317,6 +321,16 @@ export interface AttendanceRecord {
   clockOutMethod?: string;
   clockInLat?: number;
   clockInLng?: number;
+  clockInAccuracy?: number;
+  clockInClientTs?: string;
+  clockOutAccuracy?: number;
+  clockOutClientTs?: string;
+  clockInFlags?: string[];
+  clockOutFlags?: string[];
+  isSuspicious?: boolean;
+  spoofReviewedBy?: string | null;
+  spoofReviewedAt?: string | null;
+  spoofReviewNote?: string | null;
   status: AttendanceStatus;
   lateMinutes?: number;
   earlyLeaveMinutes?: number;
@@ -348,9 +362,16 @@ export interface LeaveType {
   code: string;
   description?: string;
   isPaid: boolean;
+  allowNegativeBalance?: boolean;
   maxConsecutiveDays?: number;
   requiresDocument: boolean;
   carryForwardLimit?: number;
+  carryForwardExpiry?: string;
+  genderRestriction?: 'MALE' | 'FEMALE';
+  minServiceMonths?: number;
+  isBalanceDeducting?: boolean;
+  sameDayApproval?: boolean;
+  isUnionActivity?: boolean;
   isActive: boolean;
 }
 

@@ -21,9 +21,9 @@ export const createWorkflowSchema = z.object({
 export type CreateWorkflowInput = z.infer<typeof createWorkflowSchema>;
 
 export const assignPermissionSchema = z.object({
-  roleId: z.string().uuid(),
-  permissionId: z.string().uuid(),
-  scope: z.string().optional(),
+  roleId: z.string(),
+  permissionKeys: z.array(z.string()),
+  scope: z.enum(['ALL', 'OWN', 'DEPARTMENT']).optional(),
 });
 export type AssignPermissionInput = z.infer<typeof assignPermissionSchema>;
 

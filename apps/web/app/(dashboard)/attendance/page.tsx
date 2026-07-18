@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { TableSkeleton, ErrorState, EmptyState } from '@/components/ui/data-states';
-import { Clock, MapPin, Search } from 'lucide-react';
+import { Clock, MapPin, Search, ShieldAlert } from 'lucide-react';
 
 const formatTime = (iso?: string) =>
   iso ? new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -172,9 +172,22 @@ export default function AttendancePage() {
                     <TableCell>{formatTime(r.clockIn)}</TableCell>
                     <TableCell>{formatTime(r.clockOut)}</TableCell>
                     <TableCell>
-                      <Badge variant={(statusVariant[r.status] || 'secondary') as any}>
-                        {r.status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={(statusVariant[r.status] || 'secondary') as any}>
+                          {r.status}
+                        </Badge>
+                        {r.isSuspicious && (
+                          <Link href="/attendance/flagged" className="no-underline">
+                            <Badge
+                              variant="destructive"
+                              title={[...(r.clockInFlags ?? []), ...(r.clockOutFlags ?? [])].join('\n')}
+                            >
+                              <ShieldAlert className="mr-1 h-3 w-3" />
+                              {r.spoofReviewedAt ? 'Direview' : 'Mencurigakan'}
+                            </Badge>
+                          </Link>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.clockInMethod || '—'}</TableCell>
                   </TableRow>

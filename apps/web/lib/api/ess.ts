@@ -8,11 +8,21 @@ export async function getEssProfile(): Promise<Record<string, unknown>> {
   return api.get<Record<string, unknown>>('/ess/profile');
 }
 
-export async function clockIn(data: { method?: string; lat?: number; lng?: number }): Promise<Record<string, unknown>> {
+export interface ClockPayload {
+  method?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  clientTimestamp?: string;
+  embedding?: number[];
+  photo?: string;
+}
+
+export async function clockIn(data: ClockPayload): Promise<Record<string, unknown>> {
   return api.post<Record<string, unknown>>('/ess/clock-in', data);
 }
 
-export async function clockOut(data: { lat?: number; lng?: number }): Promise<Record<string, unknown>> {
+export async function clockOut(data: ClockPayload): Promise<Record<string, unknown>> {
   return api.post<Record<string, unknown>>('/ess/clock-out', data);
 }
 

@@ -61,6 +61,32 @@ export class RoleController {
   ) {
     return this.roleService.assignPermissions(tenantId, roleId, dto);
   }
+
+  @Delete(':id/permissions/:permissionId')
+  @Permissions('admin:role:update')
+  @ApiOperation({ summary: 'Remove a permission from a role' })
+  removePermission(
+    @TenantId() tenantId: string,
+    @Param('id') roleId: string,
+    @Param('permissionId') permissionId: string,
+  ) {
+    return this.roleService.removePermissionFromRole(tenantId, roleId, permissionId);
+  }
+}
+
+@ApiTags('Admin - Permissions')
+@ApiBearerAuth()
+@UseGuards(AuthGuard, PermissionGuard)
+@Controller('admin/permissions')
+export class PermissionsController {
+  constructor(private readonly roleService: RoleService) {}
+
+  @Get()
+  @Permissions('admin:role:read')
+  @ApiOperation({ summary: 'List all available permissions (catalog)' })
+  listPermissions() {
+    return this.roleService.listPermissions();
+  }
 }
 
 @ApiTags('Admin - User Roles')
@@ -78,5 +104,16 @@ export class UserRoleController {
     @Body() dto: AssignRoleDto,
   ) {
     return this.roleService.assignRoleToUser(tenantId, userId, dto);
+  }
+
+  @Delete(':userId/roles/:roleId')
+  @Permissions('admin:role:assign')
+  @ApiOperation({ summary: 'Remove a role from a user' })
+  removeRole(
+    @TenantId() tenantId: string,
+    @Param('userId') userId: string,
+    @Param('roleId') roleId: string,
+  ) {
+    return this.roleService.removeRoleFromUser(tenantId, userId, roleId);
   }
 }

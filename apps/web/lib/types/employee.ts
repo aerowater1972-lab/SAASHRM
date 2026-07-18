@@ -10,6 +10,7 @@ export interface Employee {
   gender?: 'MALE' | 'FEMALE';
   religion?: string;
   maritalStatus?: 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
+  unionStatus?: 'NONE' | 'MEMBER' | 'OFFICER';
   idCardNumber?: string;
   taxIdNumber?: string;
   socialSecurityNumber?: string;

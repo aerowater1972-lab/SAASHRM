@@ -6,6 +6,8 @@ import {
   fetchPermissions,
   assignPermission,
   removePermission,
+  assignRoleToUser,
+  removeRoleFromUser,
   fetchTenants,
   createTenant,
   updateTenant,
@@ -48,6 +50,33 @@ export function useAssignPermission() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: any) => assignPermission(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'roles'] }),
+  });
+}
+
+export function useRemovePermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleId, permissionId }: { roleId: string; permissionId: string }) =>
+      removePermission(roleId, permissionId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'roles'] }),
+  });
+}
+
+export function useAssignRoleToUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
+      assignRoleToUser(userId, { roleId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'roles'] }),
+  });
+}
+
+export function useRemoveRoleFromUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
+      removeRoleFromUser(userId, roleId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'roles'] }),
   });
 }

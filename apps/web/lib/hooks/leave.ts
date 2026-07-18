@@ -8,10 +8,11 @@ import {
   cancelLeaveRequest,
   fetchLeaveTypes,
   createLeaveType,
+  updateLeaveType,
   fetchLeaveBalances,
   type LeaveListParams,
 } from '@/lib/api/leave';
-import type { LeaveRequestInput } from '@/lib/schemas/leave';
+import type { LeaveRequestInput, LeaveTypeInput } from '@/lib/schemas/leave';
 
 export function useLeaveRequests(params?: LeaveListParams) {
   return useQuery({
@@ -70,7 +71,15 @@ export function useLeaveTypes() {
 export function useCreateLeaveType() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: any) => createLeaveType(data),
+    mutationFn: (data: LeaveTypeInput) => createLeaveType(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-types'] }),
+  });
+}
+
+export function useUpdateLeaveType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<LeaveTypeInput> }) => updateLeaveType(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-types'] }),
   });
 }

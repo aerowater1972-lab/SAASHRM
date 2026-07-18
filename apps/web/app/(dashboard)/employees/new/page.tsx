@@ -37,6 +37,7 @@ export default function NewEmployeePage() {
       gender: undefined,
       religion: '',
       maritalStatus: undefined,
+      unionStatus: undefined,
       idCardNumber: '',
       taxIdNumber: '',
       address: '',
@@ -53,7 +54,7 @@ export default function NewEmployeePage() {
   const { register, handleSubmit, formState: { errors, isSubmitting }, trigger } = form;
 
   const stepFields: Record<number, (keyof CreateEmployeeInput)[]> = {
-    0: ['fullName', 'email', 'birthDate', 'birthPlace', 'gender', 'religion', 'maritalStatus'],
+    0: ['fullName', 'email', 'birthDate', 'birthPlace', 'gender', 'religion', 'maritalStatus', 'unionStatus'],
     1: ['phone', 'address', 'city', 'province', 'postalCode', 'emergencyContact', 'emergencyPhone'],
     2: ['idCardNumber', 'taxIdNumber'],
     3: ['bloodType', 'allergies', 'medicalNotes'],
@@ -171,6 +172,19 @@ export default function NewEmployeePage() {
                   <option value="MARRIED">Menikah</option>
                   <option value="DIVORCED">Cerai</option>
                   <option value="WIDOWED">Duda/Janda</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unionStatus">Status Serikat Pekerja</Label>
+                <select
+                  id="unionStatus"
+                  {...register('unionStatus')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">—</option>
+                  <option value="NONE">Bukan Anggota</option>
+                  <option value="MEMBER">Anggota</option>
+                  <option value="OFFICER">Pengurus</option>
                 </select>
               </div>
             </div>

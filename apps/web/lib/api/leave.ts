@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import type { LeaveRequest, LeaveType, LeaveBalance, PaginatedResponse } from '@/lib/types';
-import type { LeaveRequestInput } from '@/lib/schemas/leave';
+import type { LeaveRequestInput, LeaveTypeInput } from '@/lib/schemas/leave';
 
 export interface LeaveListParams {
   page?: number;
@@ -39,8 +39,12 @@ export async function fetchLeaveTypes(): Promise<LeaveType[]> {
   return api.get<LeaveType[]>('/attendance/leave-types');
 }
 
-export async function createLeaveType(data: any): Promise<LeaveType> {
+export async function createLeaveType(data: LeaveTypeInput): Promise<LeaveType> {
   return api.post<LeaveType>('/attendance/leave-types', data);
+}
+
+export async function updateLeaveType(id: string, data: Partial<LeaveTypeInput>): Promise<LeaveType> {
+  return api.put<LeaveType>(`/attendance/leave-types/${id}`, data);
 }
 
 export async function fetchLeaveBalances(): Promise<LeaveBalance[]> {

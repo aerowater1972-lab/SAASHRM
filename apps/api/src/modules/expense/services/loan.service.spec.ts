@@ -126,17 +126,21 @@ describe('LoanService', () => {
     beforeEach(() => {
       mockPrisma.payslip.findFirst.mockResolvedValue(null); // skip BR-02 when no payslip
       mockPrisma.loan.findMany.mockResolvedValue([]);
+      // generateInstallments runs on this.prisma (outside tx): no existing installments, resolvable loan.
+      mockPrisma.loanInstallment.findMany.mockResolvedValue([]);
+      mockPrisma.loanInstallment.create.mockResolvedValue({});
+      mockPrisma.loan.findUnique.mockResolvedValue(mockLoan);
+      mockTx.loanInstallment.findMany.mockResolvedValue([]);
     });
 
     it('should approve a pending loan and generate installments', async () => {
       mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
       mockTx.loan.findUnique.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED, installments: [] });
       mockTx.loan.update.mockResolvedValue({ ...mockLoan, status: RequestStatus.APPROVED, installmentCount: 4 });
-      mockTx.loanInstallment.create.mockResolvedValue({});
 
       const result = (await service.approve('default', 'loan-1', 'approver-1'))!;
       expect(result.status).toBe(RequestStatus.APPROVED);
-      expect(mockTx.loanInstallment.create).toHaveBeenCalledTimes(4);
+      expect(mockPrisma.loanInstallment.create).toHaveBeenCalledTimes(4);
     });
 
     it('should publish LOAN_DISBURSED event after approval', async () => {

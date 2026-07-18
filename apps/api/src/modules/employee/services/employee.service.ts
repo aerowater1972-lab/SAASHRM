@@ -46,6 +46,7 @@ export class EmployeeService {
         gender: dto.gender as any,
         religion: dto.religion,
         maritalStatus: (dto.maritalStatus as any) ?? 'SINGLE',
+        unionStatus: (dto.unionStatus as any) ?? 'NONE',
         idCardNumber: dto.idCardNumber,
         taxIdNumber: dto.taxIdNumber,
         socialSecurityNumber: dto.socialSecurityNumber,
@@ -100,6 +101,17 @@ export class EmployeeService {
     if (filters.departmentId) {
       where.employments = {
         some: { departmentId: filters.departmentId, isActive: true },
+      };
+    }
+
+    if (filters.positionId) {
+      where.employments = {
+        ...((where.employments as any) || {}),
+        some: {
+          ...(((where.employments as any)?.some as object) || {}),
+          positionId: filters.positionId,
+          isActive: true,
+        },
       };
     }
 

@@ -117,7 +117,7 @@ export default function LoginPage() {
           <div className="mt-5 pt-4 border-t border-border">
             <p className="text-xs text-muted-foreground mb-2">Akun demo:</p>
             {DEMO_ACCOUNTS.map((a) => (
-              <button key={a.email} type="button" onClick={() => { setEmail(a.email); setPassword(a.password); }}
+              <button key={a.email} type="button" onClick={() => { setEmail(a.email); setPassword(a.password); setSelectedTenant(a.tenant); }}
                 className="w-full text-left p-2 mb-1 rounded-lg border border-border bg-card text-xs text-foreground hover:bg-accent transition-colors"
               >{a.label}</button>
             ))}

@@ -19,11 +19,22 @@ export async function fetchPermissions(): Promise<Permission[]> {
 }
 
 export async function assignPermission(data: AssignPermissionInput): Promise<void> {
-  await api.post('/admin/permissions/assign', data);
+  await api.post(`/admin/roles/${data.roleId}/permissions`, {
+    permissionKeys: data.permissionKeys,
+    scope: data.scope,
+  });
 }
 
 export async function removePermission(roleId: string, permissionId: string): Promise<void> {
   await api.delete(`/admin/roles/${roleId}/permissions/${permissionId}`);
+}
+
+export async function assignRoleToUser(userId: string, data: { roleId: string; entityId?: string }): Promise<void> {
+  await api.post(`/admin/users/${userId}/roles`, data);
+}
+
+export async function removeRoleFromUser(userId: string, roleId: string): Promise<void> {
+  await api.delete(`/admin/users/${userId}/roles/${roleId}`);
 }
 
 export async function fetchTenants(): Promise<Tenant[]> {
@@ -39,7 +50,8 @@ export async function updateTenant(id: string, data: Partial<CreateTenantInput>)
 }
 
 export async function fetchUsers(): Promise<User[]> {
-  return api.get<User[]>('/admin/users');
+  const res = await api.get<any>('/admin/users');
+  return Array.isArray(res) ? res : (res.data ?? []);
 }
 
 export async function createUser(data: CreateUserInput): Promise<User> {

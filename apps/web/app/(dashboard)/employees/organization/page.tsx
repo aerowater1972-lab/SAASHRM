@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDepartments, usePositions, useGrades, useCreateDepartment, useCreatePosition, useCreateGrade, useOrgChart } from '@/lib/hooks/organization';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -88,6 +89,7 @@ function PositionForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function OrganizationPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('departments');
   const [dialog, setDialog] = useState<'department' | 'position' | 'grade' | null>(null);
 
@@ -169,7 +171,14 @@ export default function OrganizationPage() {
           {!deptLoading && !deptError && departments && departments.length > 0 && (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {departments.map((dept) => (
-                <Card key={dept.id}>
+                <Card
+                  key={dept.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/employees?departmentId=${dept.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/employees?departmentId=${dept.id}`); }}
+                  className="cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/50"
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -188,6 +197,7 @@ export default function OrganizationPage() {
                         ))}
                       </div>
                     )}
+                    <p className="mt-3 text-xs text-primary">Lihat karyawan &rarr;</p>
                   </CardContent>
                 </Card>
               ))}
@@ -204,7 +214,14 @@ export default function OrganizationPage() {
           {!posLoading && !posError && positions && positions.length > 0 && (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {positions.map((pos) => (
-                <Card key={pos.id}>
+                <Card
+                  key={pos.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/employees?positionId=${pos.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/employees?positionId=${pos.id}`); }}
+                  className="cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/50"
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -216,6 +233,7 @@ export default function OrganizationPage() {
                     {pos.description && (
                       <p className="mt-1 text-xs text-muted-foreground">{pos.description}</p>
                     )}
+                    <p className="mt-3 text-xs text-primary">Lihat penghuni posisi &rarr;</p>
                   </CardContent>
                 </Card>
               ))}
@@ -232,7 +250,14 @@ export default function OrganizationPage() {
           {!gradeLoading && !gradeError && grades && grades.length > 0 && (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {grades.map((grade) => (
-                <Card key={grade.id}>
+                <Card
+                  key={grade.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/employees?gradeId=${grade.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/employees?gradeId=${grade.id}`); }}
+                  className="cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/50"
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -241,6 +266,7 @@ export default function OrganizationPage() {
                       </div>
                       <Badge variant="secondary">Level {grade.level}</Badge>
                     </div>
+                    <p className="mt-3 text-xs text-primary">Lihat karyawan &rarr;</p>
                   </CardContent>
                 </Card>
               ))}

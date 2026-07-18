@@ -8,6 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { OvertimeService } from './overtime.service';
+import { BiometricService } from './biometric.service';
 import { AttendanceStatus } from '@prisma/client';
 
 describe('AttendanceService', () => {
@@ -51,6 +53,23 @@ describe('AttendanceService', () => {
     workLocation: {
       findUnique: jest.fn(),
     },
+    user: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    essNotification: {
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    tenant: {
+      findUnique: jest.fn().mockResolvedValue({ settings: {} }),
+    },
+  };
+
+  const mockOvertimeService = {
+    reconcile: jest.fn(),
+  };
+
+  const mockBiometricService = {
+    verifyFace: jest.fn(),
   };
 
   const mockConfig = {
@@ -80,11 +99,17 @@ describe('AttendanceService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfig },
         { provide: EventBusService, useValue: mockEventBus },
+        { provide: OvertimeService, useValue: mockOvertimeService },
+        { provide: BiometricService, useValue: mockBiometricService },
       ],
     }).compile();
 
     service = module.get<AttendanceService>(AttendanceService);
     prisma = module.get(PrismaService);
+
+    mockPrisma.user.findMany.mockResolvedValue([]);
+    mockPrisma.essNotification.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.tenant.findUnique.mockResolvedValue({ settings: {} });
   });
 
   afterEach(() => {
@@ -303,18 +328,16 @@ describe('AttendanceService', () => {
   });
 
   describe('clockOut overtime auto-generation (FR-11/BR-06)', () => {
-    it('should create a pending OvertimeRequest when overtime exceeds the threshold', async () => {
+    it('should reconcile overtime when eligible overtime exceeds the threshold', async () => {
       const shift = {
         id: 'shift-1',
-        startTime: '08:00',
-        endTime: '17:00',
+        startTime: '00:00',
+        endTime: '00:00',
         overtimeBeforeMinutes: 0,
         overtimeAfterMinutes: 0,
       };
       const clockIn = new Date();
-      clockIn.setHours(8, 0, 0, 0);
-      const clockOut = new Date();
-      clockOut.setHours(19, 0, 0, 0);
+      clockIn.setHours(0, 0, 0, 0);
 
       mockPrisma.attendanceRecord.findUnique.mockResolvedValue({
         ...baseRecord,
@@ -323,19 +346,19 @@ describe('AttendanceService', () => {
         shiftId: 'shift-1',
       });
       mockPrisma.shift.findUnique.mockResolvedValue(shift);
-      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, clockOut });
-      mockPrisma.overtimeRequest.findFirst.mockResolvedValue(null);
-      mockPrisma.overtimeRequest.create.mockResolvedValue({ id: 'ot-1' });
+      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, clockOut: new Date() });
 
       await service.clockOut('default', 'emp-1', { method: 'GPS' } as any);
 
-      expect(mockPrisma.overtimeRequest.create).toHaveBeenCalledTimes(1);
-      const created = mockPrisma.overtimeRequest.create.mock.calls[0][0].data;
-      expect(created.totalMinutes).toBeGreaterThanOrEqual(30);
-      expect(created.reason).toContain('Auto-generated');
+      expect(mockOvertimeService.reconcile).toHaveBeenCalledTimes(1);
+      const [tenantId, employeeId, , eligibleMinutes] =
+        mockOvertimeService.reconcile.mock.calls[0];
+      expect(tenantId).toBe('default');
+      expect(employeeId).toBe('emp-1');
+      expect(eligibleMinutes).toBeGreaterThanOrEqual(30);
     });
 
-    it('should not create an OvertimeRequest when none is accrued', async () => {
+    it('should not reconcile overtime when none is accrued', async () => {
       mockPrisma.attendanceRecord.findUnique.mockResolvedValue({
         ...baseRecord,
         clockIn: new Date(),
@@ -346,7 +369,7 @@ describe('AttendanceService', () => {
 
       await service.clockOut('default', 'emp-1', { method: 'GPS' } as any);
 
-      expect(mockPrisma.overtimeRequest.create).not.toHaveBeenCalled();
+      expect(mockOvertimeService.reconcile).not.toHaveBeenCalled();
     });
   });
 
@@ -389,6 +412,261 @@ describe('AttendanceService', () => {
 
       await expect(service.closePeriod('default', 'missing', 'closer-1')).rejects.toThrow(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('anti-spoof flagging (clockIn)', () => {
+    beforeEach(() => {
+      mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+      mockPrisma.rosterEntry.findUnique.mockResolvedValue(null);
+      mockPrisma.employee.findUnique.mockResolvedValue({ workLocationId: null });
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
+      mockPrisma.attendanceRecord.upsert.mockImplementation(({ create }: any) =>
+        Promise.resolve({ ...baseRecord, ...create }),
+      );
+    });
+
+    it('should NOT flag a valid GPS clock-in (good accuracy, no skew)', async () => {
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 10,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(false);
+      expect(result.clockInFlags).toEqual([]);
+    });
+
+    it('should flag low GPS accuracy but still save the record', async () => {
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 999,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(true);
+      expect(result.clockInFlags[0]).toContain('GPS accuracy too low');
+      expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalled();
+    });
+
+    it('should flag missing accuracy', async () => {
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(true);
+      expect(result.clockInFlags[0]).toContain('unknown');
+    });
+
+    it('should flag client clock skew', async () => {
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 10,
+        clientTimestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(true);
+      expect(result.clockInFlags.some((f: string) => f.includes('out of sync'))).toBe(true);
+    });
+
+    it('should flag impossible travel speed vs. previous record', async () => {
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue({
+        clockInLat: -6.2,
+        clockInLng: 106.8,
+        clockOutLat: null,
+        clockOutLng: null,
+        clockInClientTs: new Date(Date.now() - 60 * 1000),
+        clockOutClientTs: null,
+        clockIn: new Date(Date.now() - 60 * 1000),
+        clockOut: null,
+      });
+      const dto = {
+        method: 'GPS' as any,
+        latitude: 51.5074,
+        longitude: -0.1278,
+        accuracy: 10,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(true);
+      expect(result.clockInFlags.some((f: string) => f.includes('Impossible travel speed'))).toBe(true);
+    });
+
+    it('should NOT flag non-GPS methods regardless of accuracy', async () => {
+      const dto = { method: 'QR' as any, latitude: -6.2, longitude: 106.8 };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(false);
+    });
+
+    it('should honour a stricter per-tenant GPS accuracy override', async () => {
+      mockPrisma.tenant.findUnique.mockResolvedValue({
+        settings: { antiSpoof: { maxGpsAccuracy: 5 } },
+      });
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 20,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(true);
+      expect(result.clockInFlags[0]).toContain('max 5m');
+    });
+
+    it('should honour a looser per-tenant GPS accuracy override', async () => {
+      mockPrisma.tenant.findUnique.mockResolvedValue({
+        settings: { antiSpoof: { maxGpsAccuracy: 1000 } },
+      });
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 500,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(false);
+    });
+
+    it('should ignore invalid per-tenant overrides and use env defaults', async () => {
+      mockPrisma.tenant.findUnique.mockResolvedValue({
+        settings: { antiSpoof: { maxGpsAccuracy: -1 } },
+      });
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 40,
+        clientTimestamp: new Date().toISOString(),
+      };
+      const result: any = await service.clockIn('default', 'emp-1', dto as any);
+      expect(result.isSuspicious).toBe(false);
+    });
+  });
+
+  describe('notifyHrOfSuspicion (HR notification on flag)', () => {
+    beforeEach(() => {
+      mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+      mockPrisma.rosterEntry.findUnique.mockResolvedValue(null);
+      mockPrisma.employee.findUnique.mockResolvedValue({
+        workLocationId: null,
+        fullName: 'Budi',
+        employeeId: 'NSM-001',
+      });
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
+      mockPrisma.attendanceRecord.upsert.mockImplementation(({ create }: any) =>
+        Promise.resolve({ ...baseRecord, ...create }),
+      );
+    });
+
+    it('should notify HR (excluding the flagged employee) when a record is flagged', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        { employeeId: 'hr-1' },
+        { employeeId: 'hr-2' },
+        { employeeId: 'emp-1' },
+      ]);
+      const dto = { method: 'GPS' as any, latitude: -6.2, longitude: 106.8, accuracy: 999 };
+      await service.clockIn('default', 'emp-1', dto as any);
+
+      expect(mockPrisma.essNotification.createMany).toHaveBeenCalledTimes(1);
+      const data = mockPrisma.essNotification.createMany.mock.calls[0][0].data;
+      expect(data.map((d: any) => d.employeeId).sort()).toEqual(['hr-1', 'hr-2']);
+      expect(data[0].type).toBe('ATTENDANCE_SPOOF_FLAG');
+      expect(data[0].message).toContain('Budi');
+    });
+
+    it('should NOT notify when there are no flags', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ employeeId: 'hr-1' }]);
+      const dto = {
+        method: 'GPS' as any,
+        latitude: -6.2,
+        longitude: 106.8,
+        accuracy: 10,
+        clientTimestamp: new Date().toISOString(),
+      };
+      await service.clockIn('default', 'emp-1', dto as any);
+      expect(mockPrisma.essNotification.createMany).not.toHaveBeenCalled();
+    });
+
+    it('should not throw if notification creation fails', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ employeeId: 'hr-1' }]);
+      mockPrisma.essNotification.createMany.mockRejectedValue(new Error('db down'));
+      const dto = { method: 'GPS' as any, latitude: -6.2, longitude: 106.8, accuracy: 999 };
+      await expect(service.clockIn('default', 'emp-1', dto as any)).resolves.toBeDefined();
+    });
+  });
+
+  describe('findFlagged', () => {
+    it('should query only suspicious records for the tenant', async () => {
+      mockPrisma.attendanceRecord.findMany.mockResolvedValue([{ ...baseRecord, isSuspicious: true }]);
+      const result = await service.findFlagged('default');
+      expect(result).toHaveLength(1);
+      expect(mockPrisma.attendanceRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { tenantId: 'default', isSuspicious: true } }),
+      );
+    });
+
+    it('should filter unreviewed records when reviewed=false', async () => {
+      mockPrisma.attendanceRecord.findMany.mockResolvedValue([]);
+      await service.findFlagged('default', 'false');
+      expect(mockPrisma.attendanceRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: 'default', isSuspicious: true, spoofReviewedAt: null },
+        }),
+      );
+    });
+
+    it('should filter reviewed records when reviewed=true', async () => {
+      mockPrisma.attendanceRecord.findMany.mockResolvedValue([]);
+      await service.findFlagged('default', 'true');
+      expect(mockPrisma.attendanceRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: 'default', isSuspicious: true, spoofReviewedAt: { not: null } },
+        }),
+      );
+    });
+  });
+
+  describe('reviewSpoof', () => {
+    it('should mark a suspicious record as reviewed', async () => {
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ ...baseRecord, isSuspicious: true });
+      mockPrisma.attendanceRecord.update.mockResolvedValue({
+        ...baseRecord,
+        spoofReviewedBy: 'hr-1',
+        spoofReviewNote: 'ok',
+      });
+
+      const result: any = await service.reviewSpoof('default', 'att-1', 'hr-1', 'ok');
+      expect(result.spoofReviewedBy).toBe('hr-1');
+      expect(mockPrisma.attendanceRecord.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ spoofReviewedBy: 'hr-1', spoofReviewNote: 'ok' }),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException if the record does not exist', async () => {
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
+      await expect(service.reviewSpoof('default', 'missing', 'hr-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw BadRequestException if the record is not suspicious', async () => {
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ ...baseRecord, isSuspicious: false });
+      await expect(service.reviewSpoof('default', 'att-1', 'hr-1')).rejects.toThrow(
+        BadRequestException,
       );
     });
   });

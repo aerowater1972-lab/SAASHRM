@@ -262,6 +262,21 @@ export class RunService {
       }
     }
 
+    // Addendum Serikat Pekerja: potongan iuran serikat (union_dues) dari
+    // SalaryComponent per-karyawan, aktif dalam rentang periode payroll.
+    const unionDues = await this.prisma.salaryComponent.findMany({
+      where: {
+        employeeId: employee.id,
+        componentType: 'union_dues',
+        effectiveDate: { lte: period.endDate },
+        OR: [{ endDate: null }, { endDate: { gte: period.startDate } }],
+      },
+    });
+
+    for (const dues of unionDues) {
+      totalDeductions += Number(dues.amount || 0);
+    }
+
     const netPay = totalEarnings - totalDeductions;
 
     return {

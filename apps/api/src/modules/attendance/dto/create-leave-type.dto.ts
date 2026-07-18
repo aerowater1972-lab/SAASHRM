@@ -55,4 +55,12 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsBoolean()
   sameDayApproval?: boolean;
+  @ApiPropertyOptional({ description: 'Addendum Serikat Pekerja: izin kegiatan serikat (BR-01: hanya untuk union officer)' })
+  @IsOptional()
+  @IsBoolean()
+  isUnionActivity?: boolean;
+  @ApiPropertyOptional({ description: 'Nonaktifkan jenis cuti tanpa menghapus (list hanya menampilkan yang aktif)' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

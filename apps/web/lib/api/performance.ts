@@ -15,11 +15,11 @@ export async function fetchGoal(id: string): Promise<Goal> {
 }
 
 export async function fetchReviews(params?: { page?: number; limit?: number; q?: string }): Promise<{ data: Review[]; total: number }> {
-  return paginated<Review>('/reviews', params);
+  return paginated<Review>('/performance/reviews', params);
 }
 
 export async function fetchReview(id: string): Promise<Review> {
-  return api.get(`/reviews/${id}`);
+  return api.get(`/performance/reviews/${id}`);
 }
 
 export async function fetchCycles(params?: { page?: number; limit?: number; q?: string }): Promise<{ data: ReviewCycle[]; total: number }> {
