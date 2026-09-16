@@ -3,7 +3,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { PayrollAdjustmentService } from './payroll-adjustment.service';
 import { CreateThrRunDto } from '../dto/thr.dto';
-import { calendarMonthsBetween, computeWageBase } from './wage-base.util';
+import { calendarMonthsBetween, computeWageBase } from '@modules/shared/utils/wage-base.util';
 
 /**
  * THR Keagamaan (Permenaker 6/2016):

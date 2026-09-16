@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { CreateSeveranceDto } from '../dto/severance.dto';
-import { calendarMonthsBetween, computeWageBase } from './wage-base.util';
+import { calendarMonthsBetween, computeWageBase } from '@modules/shared/utils/wage-base.util';
 
 /**
  * Pesangon & kompensasi akhir hubungan kerja (PP 35/2021).

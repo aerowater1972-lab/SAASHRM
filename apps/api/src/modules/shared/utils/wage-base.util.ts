@@ -8,9 +8,9 @@ export function calendarMonthsBetween(start: Date, end: Date): number {
 }
 
 /**
- * Upah acuan pesangon/THR = gaji pokok (grade level x Rp1jt) + tunjangan
- * TETAP aktif (FIXED). Dipakai bersama ThrService & SeveranceService agar
- * definisi upah tidak divergen antar modul finansial.
+ * Upah acuan = gaji pokok (grade level x Rp1jt) + tunjangan TETAP aktif
+ * (FIXED). Satu definisi bersama untuk THR, pesangon, dan kepatuhan UMK
+ * agar tidak divergen antar modul finansial.
  */
 export async function computeWageBase(
   prisma: PrismaService,
