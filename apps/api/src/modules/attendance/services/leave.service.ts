@@ -96,6 +96,76 @@ export class LeaveService {
   }
 
   /**
+   * Skema upah sakit berkepanjangan (UU 13/2003 Art 93): 100% (bln 1-4),
+   * 75% (bln 5-8), 50% (bln 9-12), 25% (bln 13+ sakit terus-menerus).
+   * Versi ini MENGHITUNG jadwal yang berlaku dari riwayat cuti sakit
+   * (jenis berkode SL) yang disetujui — BELUM memotong payroll otomatis
+   * (integrasi potong gaji = langkah lanjutan yang tercatat).
+   * Hari sakit sebelum rentang menentukan bracket awal; hari dalam rentang
+   * menentukan bracket yang tersentuh.
+   */
+  sickPayPercentForMonth(monthIndex: number): number {
+    if (monthIndex < 0) return 100;
+    if (monthIndex < 4) return 100;
+    if (monthIndex < 8) return 75;
+    if (monthIndex < 12) return 50;
+    return 25;
+  }
+
+  async getSickPayStatus(tenantId: string, employeeId: string, startDate: Date, endDate: Date) {
+    const SICK_CODE = 'SL';
+
+    const sickType = await this.prisma.leaveType.findFirst({
+      where: { tenantId, code: SICK_CODE, isActive: true },
+    });
+    if (!sickType) {
+      return { employeeId, brackets: [], reason: 'TYPE_NOT_CONFIGURED' as const };
+    }
+
+    const approved = await this.prisma.leaveRequest.findMany({
+      where: { tenantId, employeeId, leaveTypeId: sickType.id, status: RequestStatus.APPROVED },
+      select: { startDate: true, endDate: true },
+    });
+
+    const dayMs = 86400000;
+    const overlapDays = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => {
+      const s = Math.max(aStart.getTime(), bStart.getTime());
+      const e = Math.min(aEnd.getTime(), bEnd.getTime());
+      return e >= s ? Math.round((e - s) / dayMs) + 1 : 0;
+    };
+
+    let priorDays = 0;
+    let rangeDays = 0;
+    for (const r of approved) {
+      const rs = new Date(r.startDate);
+      const re = new Date(r.endDate);
+      rangeDays += overlapDays(rs, re, startDate, endDate);
+      if (re < startDate) {
+        // seluruh request sebelum rentang -> hari penuh masuk prior
+        priorDays += Math.round((re.getTime() - rs.getTime()) / dayMs) + 1;
+      } else if (rs < startDate) {
+        // request mencakup batas awal -> porsi sebelum rentang masuk prior
+        priorDays += overlapDays(rs, re, new Date(0), new Date(startDate.getTime() - 1));
+      }
+    }
+
+    const startMonth = Math.floor(priorDays / 30);
+    const endMonth = Math.floor((priorDays + rangeDays) / 30);
+    const brackets: Array<{ fromMonth: number; toMonth: number; percent: number }> = [];
+    for (let m = startMonth; m <= Math.max(startMonth, endMonth); m++) {
+      const p = this.sickPayPercentForMonth(m);
+      const last = brackets[brackets.length - 1];
+      if (last && last.percent === p) {
+        last.toMonth = m;
+      } else {
+        brackets.push({ fromMonth: m, toMonth: m, percent: p });
+      }
+    }
+
+    return { employeeId, priorSickDays: priorDays, rangeSickDays: rangeDays, brackets };
+  }
+
+  /**
    * Cuti panjang / cuti besar (UU 13/2003 Art 79): masa kerja terus-menerus
    * >= 6 tahun -> hak istirahat >= 2 bulan (diambil 2 x 30 hari kalender).
    * Mengembalikan status kelayakan + sisa hak (terpakai = request APPROVED

@@ -149,4 +149,50 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       expect((r as any).reason).toBe('TYPE_NOT_CONFIGURED');
     });
   });
+
+  describe('getSickPayStatus (UU 13/2003 Art 93)', () => {
+    const d = (s: string) => new Date(s + 'T00:00:00Z');
+    it.each([[0, 100], [3, 100], [4, 75], [7, 75], [8, 50], [11, 50], [12, 25], [20, 25]])(
+      'bulan %i -> %i persen', (m, p) => {
+        expect(service.sickPayPercentForMonth(m)).toBe(p);
+      },
+    );
+    it('rentang tanpa riwayat: bracket 100% dari bulan 0', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-sick' });
+      mockPrisma.leaveRequest.findMany.mockResolvedValue([]);
+      const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
+      expect(r.priorSickDays).toBe(0);
+      expect(r.rangeSickDays).toBe(0);
+      expect(r.brackets).toEqual([{ fromMonth: 0, toMonth: 0, percent: 100 }]);
+    });
+    it('riwayat 150 hari + 30 hari berjalan -> tetap 75% (bln 6-7)', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-sick' });
+      mockPrisma.leaveRequest.findMany.mockResolvedValue([
+        { startDate: d('2026-01-01'), endDate: d('2026-05-30') },
+        { startDate: d('2026-09-01'), endDate: d('2026-09-30') },
+      ]);
+      const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
+      expect(r.priorSickDays).toBe(150);
+      expect(r.rangeSickDays).toBe(30);
+      expect(r.brackets).toEqual([{ fromMonth: 5, toMonth: 6, percent: 75 }]);
+    });
+    it('melewati ambang 8 bulan -> menyentuh 50%', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-sick' });
+      mockPrisma.leaveRequest.findMany.mockResolvedValue([
+        { startDate: d('2026-01-01'), endDate: d('2026-07-29') },
+        { startDate: d('2026-09-01'), endDate: d('2026-09-30') },
+      ]);
+      const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
+      expect(r.priorSickDays).toBe(210);
+      expect(r.brackets).toEqual([
+        { fromMonth: 7, toMonth: 7, percent: 75 },
+        { fromMonth: 8, toMonth: 8, percent: 50 },
+      ]);
+    });
+    it('tanpa jenis SL -> TYPE_NOT_CONFIGURED', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue(null);
+      const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
+      expect(r.reason).toBe('TYPE_NOT_CONFIGURED');
+    });
+  });
 });

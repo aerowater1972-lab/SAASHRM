@@ -84,6 +84,21 @@ export class LeaveController {
     return this.leaveService.getLongLeaveStatus(tenantId, employeeId);
   }
 
+  @Get('sick-pay/status')
+  @Permissions('leave-requests:read')
+  @ApiOperation({ summary: 'Jadwal persen upah sakit berkepanjangan (UU 13/2003 Art 93)' })
+  @ApiQuery({ name: 'employeeId', required: true })
+  @ApiQuery({ name: 'startDate', required: true })
+  @ApiQuery({ name: 'endDate', required: true })
+  getSickPayStatus(
+    @TenantId() tenantId: string,
+    @Query('employeeId') employeeId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.leaveService.getSickPayStatus(tenantId, employeeId, new Date(startDate), new Date(endDate));
+  }
+
   @Post('leave-requests')
   @Permissions('leave-requests:create')
   @ApiOperation({ summary: 'Create leave request' })
