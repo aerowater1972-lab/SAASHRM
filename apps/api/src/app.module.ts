@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 
 import { SharedModule } from './modules/shared/shared.module';
@@ -19,7 +20,17 @@ import { BenefitModule } from './modules/benefit/benefit.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ResignationModule } from './modules/resignation/resignation.module';
 import { LearningModule } from './modules/learning/learning.module';
+import { EmployeeRelationsModule } from './modules/employee-relations/employee-relations.module';
+import { EngagementSurveyModule } from './modules/engagement-survey/engagement-survey.module';
+import { ManpowerPlanningModule } from './modules/manpower-planning/manpower-planning.module';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { Feedback360Module } from './modules/feedback360/feedback360.module';
+import { IDPModule } from './modules/idp/idp.module';
+import { LmsModule } from './modules/lms/lms.module';
+import { ProvincialWageModule } from './modules/provincial-wage/provincial-wage.module';
+import { DocumentManagementModule } from './modules/document-management/document-management.module';
+import { CommunicationsModule } from './modules/communications/communications.module';
+import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
 
 @Module({
   imports: [
@@ -27,6 +38,7 @@ import { PrismaModule } from './common/prisma/prisma.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -56,6 +68,16 @@ import { PrismaModule } from './common/prisma/prisma.module';
     AnalyticsModule,
     ResignationModule,
     LearningModule,
+    EmployeeRelationsModule,
+    EngagementSurveyModule,
+    Feedback360Module,
+    IDPModule,
+    LmsModule,
+    ManpowerPlanningModule,
+    ProvincialWageModule,
+    DocumentManagementModule,
+    CommunicationsModule,
+    SuccessionPlanningModule,
   ],
   providers: [
     {

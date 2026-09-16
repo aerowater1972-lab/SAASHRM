@@ -32,6 +32,7 @@ describe('AttendanceService', () => {
     },
     payrollPeriod: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
     },
     tenantEntity: {
@@ -55,6 +56,12 @@ describe('AttendanceService', () => {
     },
     user: {
       findMany: jest.fn().mockResolvedValue([]),
+    },
+    featureFlag: {
+      findFirst: jest.fn(),
+    },
+    ppeAssignment: {
+      findFirst: jest.fn(),
     },
     essNotification: {
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -110,6 +117,10 @@ describe('AttendanceService', () => {
     mockPrisma.user.findMany.mockResolvedValue([]);
     mockPrisma.essNotification.createMany.mockResolvedValue({ count: 0 });
     mockPrisma.tenant.findUnique.mockResolvedValue({ settings: {} });
+    // PPE gate default: feature flag OFF -> clockIn skips PPE checks
+    // (tests for the gate itself live in 'ppe mandatory clock-in gate').
+    mockPrisma.featureFlag.findFirst.mockResolvedValue(null);
+    mockPrisma.ppeAssignment.findFirst.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -555,6 +566,50 @@ describe('AttendanceService', () => {
     });
   });
 
+  describe('ppe mandatory clock-in gate', () => {
+    beforeEach(() => {
+      mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
+      mockPrisma.rosterEntry.findUnique.mockResolvedValue(null);
+      mockPrisma.employee.findUnique.mockResolvedValue({ workLocationId: null });
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
+      mockPrisma.attendanceRecord.upsert.mockResolvedValue({ ...baseRecord });
+      mockPrisma.featureFlag.findFirst.mockResolvedValue({ enabled: true });
+    });
+
+    const gpsDto = {
+      method: 'GPS' as any,
+      latitude: -6.2,
+      longitude: 106.8,
+      accuracy: 10,
+      clientTimestamp: new Date().toISOString(),
+    };
+
+    it('should block clock-in when PPE is expired', async () => {
+      mockPrisma.ppeAssignment.findFirst.mockResolvedValueOnce({
+        ppeType: 'HELMET',
+        expiryDate: new Date('2026-01-01'),
+      });
+      await expect(service.clockIn('default', 'emp-1', gpsDto as any)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should block clock-in when employee has no active PPE', async () => {
+      mockPrisma.ppeAssignment.findFirst.mockResolvedValue(null);
+      await expect(service.clockIn('default', 'emp-1', gpsDto as any)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should allow clock-in when active PPE exists', async () => {
+      mockPrisma.ppeAssignment.findFirst
+        .mockResolvedValueOnce(null) // no expired PPE
+        .mockResolvedValueOnce({ ppeType: 'HELMET', status: 'ACTIVE' });
+      const result = await service.clockIn('default', 'emp-1', gpsDto as any);
+      expect(result).toBeDefined();
+    });
+  });
+
   describe('notifyHrOfSuspicion (HR notification on flag)', () => {
     beforeEach(() => {
       mockPrisma.attendanceRecord.findUnique.mockResolvedValue(null);
@@ -604,6 +659,52 @@ describe('AttendanceService', () => {
       mockPrisma.essNotification.createMany.mockRejectedValue(new Error('db down'));
       const dto = { method: 'GPS' as any, latitude: -6.2, longitude: 106.8, accuracy: 999 };
       await expect(service.clockIn('default', 'emp-1', dto as any)).resolves.toBeDefined();
+    });
+  });
+
+  describe('autoCloseElapsedPeriods (scheduler)', () => {
+    it('should close every elapsed OPEN period', async () => {
+      mockPrisma.payrollPeriod.findMany.mockResolvedValue([
+        { id: 'period-1', tenantId: 'default' },
+        { id: 'period-2', tenantId: 'nusantara' },
+      ]);
+      const spy = jest.spyOn(service, 'closePeriod').mockResolvedValue({} as any);
+
+      const result = await service.autoCloseElapsedPeriods();
+
+      expect(result).toEqual(['period-1', 'period-2']);
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveBeenCalledWith('default', 'period-1', 'system');
+      expect(spy).toHaveBeenCalledWith('nusantara', 'period-2', 'system');
+      expect(mockPrisma.payrollPeriod.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: 'OPEN' }),
+        }),
+      );
+    });
+
+    it('should return empty when no period has elapsed', async () => {
+      mockPrisma.payrollPeriod.findMany.mockResolvedValue([]);
+      const spy = jest.spyOn(service, 'closePeriod').mockResolvedValue({} as any);
+
+      await expect(service.autoCloseElapsedPeriods()).resolves.toEqual([]);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('should isolate a single-period failure and continue with the rest', async () => {
+      mockPrisma.payrollPeriod.findMany.mockResolvedValue([
+        { id: 'period-bad', tenantId: 'default' },
+        { id: 'period-good', tenantId: 'default' },
+      ]);
+      const spy = jest
+        .spyOn(service, 'closePeriod')
+        .mockRejectedValueOnce(new Error('db down'))
+        .mockResolvedValue({} as any);
+
+      const result = await service.autoCloseElapsedPeriods();
+
+      expect(result).toEqual(['period-good']);
+      expect(spy).toHaveBeenCalledTimes(2);
     });
   });
 

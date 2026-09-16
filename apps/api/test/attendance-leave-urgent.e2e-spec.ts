@@ -17,7 +17,12 @@ describe('Sudden Leave Escalation (e2e, BR-04)', () => {
   let employeeId: string;
 
   beforeAll(async () => {
-    tenantId = (await prisma.tenantEntity.findFirst({ select: { id: true } }))!.id;
+    await prisma.tenantEntity.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default', tenantId: 'default', name: 'Default Entity', code: 'DEF' },
+    });
+    tenantId = 'default';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ envFilePath: '.env' }), AppModule],
@@ -30,18 +35,18 @@ describe('Sudden Leave Escalation (e2e, BR-04)', () => {
     const admin = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = admin.body?.accessToken;
 
     const emp = await request(app.getHttpServer())
       .post('/api/v1/employees')
       .set('x-tenant-id', tenantId)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ fullName: 'Urgent Emp', email: `urgent_${runId}@flexy.local` });
+      .send({ employeeId: `urg-${runId}`, fullName: 'Urgent Emp', email: `urgent_${runId}@flexy.local` });
     const empId = emp.body.id;
     employeeId = empId;
 
-    await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         tenantId,
         email: `urgent_${runId}@flexy.local`,
@@ -51,6 +56,11 @@ describe('Sudden Leave Escalation (e2e, BR-04)', () => {
         status: 'ACTIVE',
       },
     });
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: newUser.id, roleId: 'role-employee' } },
+      update: {},
+      create: { userId: newUser.id, roleId: 'role-employee' },
+    }).catch(() => {});
 
     const user = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
@@ -64,7 +74,8 @@ describe('Sudden Leave Escalation (e2e, BR-04)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: `UrgentLT ${runId}`, code: `URGENT_${runId}`, allowNegativeBalance: true });
     leaveTypeId = lt.body.id;
-  });
+    // Full-app boot + bcrypt seeding exceeds jest's 5s default hook timeout.
+  }, 120000);
 
   afterAll(async () => {
     if (requestId) await prisma.leaveRequest.deleteMany({ where: { id: requestId } });

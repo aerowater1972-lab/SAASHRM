@@ -62,7 +62,7 @@ export class TaxBracketDto {
 }
 export class TaxCalculationDto {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   employeeId!: string;
   @ApiProperty()
   @IsUUID()

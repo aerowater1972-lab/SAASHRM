@@ -1,17 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 import { RequestStatus } from '@prisma/client';
 import { PaginationQueryDto } from '@common/dto/pagination-query.dto';
 
 export class LeaveFilterDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   employeeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   leaveTypeId?: string;
 
   @ApiPropertyOptional({ enum: RequestStatus })

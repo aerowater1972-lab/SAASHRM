@@ -56,6 +56,33 @@ export class TaxService {
     return 'A';
   }
 
+  /**
+   * GapFix Epic 3 v1.3: baca status PTKP dari kolom employee.ptkpCategory
+   * (TK/0..TK/3, K/0..K/3) alih-alih konstanta hardcoded + dependents=0.
+   * Pengelompokan kategori TER mengikuti PMK 168/2023:
+   * A = TK/0, TK/1, K/0; B = TK/2, TK/3, K/1, K/2; C = K/3.
+   * Mengembalikan null bila format tak dikenal -> pemanggil fallback
+   * ke logika maritalStatus lama (kompatibilitas data lama).
+   */
+  parsePtkpCategory(ptkpCategory: string | null | undefined): {
+    terCategory: string;
+    married: boolean;
+    dependents: number;
+  } | null {
+    if (!ptkpCategory) return null;
+    const m = /^(TK|K)\/([0-3])$/.exec(ptkpCategory.trim().toUpperCase());
+    if (!m) return null;
+    const married = m[1] === 'K';
+    const dependents = parseInt(m[2], 10);
+    let terCategory: string;
+    if (!married) {
+      terCategory = dependents <= 1 ? 'A' : 'B';
+    } else {
+      terCategory = dependents <= 0 ? 'A' : dependents <= 2 ? 'B' : 'C';
+    }
+    return { terCategory, married, dependents };
+  }
+
   private getPtkp(maritalStatus: string, dependents: number): number {
     let ptkp = this.PTKP_BASIC;
     if (maritalStatus === 'MARRIED') {
@@ -109,8 +136,11 @@ export class TaxService {
     const netMonthly = grossIncome - bpjsDeduction - otherDeductions;
     const netAnnual = netMonthly * 12;
 
-    const maritalStatus = employee.maritalStatus ?? 'SINGLE';
-    const dependents = 0;
+    // GapFix Epic 3 v1.3: PTKP dari kolom karyawan; fallback ke
+    // maritalStatus bila kolom kosong/format tak dikenal.
+    const parsed = this.parsePtkpCategory((employee as any).ptkpCategory);
+    const maritalStatus = parsed ? (parsed.married ? 'MARRIED' : 'SINGLE') : (employee.maritalStatus ?? 'SINGLE');
+    const dependents = parsed ? parsed.dependents : 0;
 
     const config = dto.taxConfigId
       ? await this.prisma.taxConfig.findFirst({ where: { id: dto.taxConfigId, tenantId } })
@@ -121,7 +151,7 @@ export class TaxService {
     let result: any;
 
     if (taxMethod === 'TER') {
-      const terCategory = this.determineTerCategory(maritalStatus, dependents);
+      const terCategory = parsed ? parsed.terCategory : this.determineTerCategory(maritalStatus, dependents);
       const terResult = this.calculateTer(terCategory, netMonthly);
       const ptkp = this.getPtkp(maritalStatus, dependents);
       const netAnnualAfterPtkp = Math.max(0, netAnnual - ptkp);

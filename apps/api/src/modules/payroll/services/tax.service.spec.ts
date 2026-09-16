@@ -1,0 +1,89 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { TaxService } from './tax.service';
+import { PrismaService } from '@common/prisma/prisma.service';
+import { EmployeeService } from '@modules/employee/services/employee.service';
+
+/**
+ * TaxService — GapFix Epic 3 v1.3: PTKP dibaca dari kolom
+ * employee.ptkpCategory (TK/0..TK/3, K/0..K/3), bukan hardcoded.
+ * Pengelompokan kategori TER mengikuti PMK 168/2023
+ * (A = TK/0, TK/1, K/0; B = TK/2, TK/3, K/1, K/2; C = K/3).
+ */
+describe('TaxService - ptkpCategory (GapFix v1.3)', () => {
+  let service: TaxService;
+
+  const mockPrisma = { taxConfig: { findFirst: jest.fn().mockResolvedValue({ taxMethod: 'TER' }) } };
+  const mockEmployeeService = { findById: jest.fn() };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        TaxService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EmployeeService, useValue: mockEmployeeService },
+      ],
+    }).compile();
+
+    service = module.get<TaxService>(TaxService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['TK/0', 'A'],
+    ['TK/1', 'A'],
+    ['TK/2', 'B'],
+    ['TK/3', 'B'],
+    ['K/0', 'A'],
+    ['K/1', 'B'],
+    ['K/2', 'B'],
+    ['K/3', 'C'],
+  ])('memetakan %s ke kategori TER %s', (code, expected) => {
+    expect(service.parsePtkpCategory(code)?.terCategory).toBe(expected);
+  });
+
+  it('menolak format tak dikenal (fallback ke jalur lama)', () => {
+    expect(service.parsePtkpCategory('XX')).toBeNull();
+    expect(service.parsePtkpCategory(null)).toBeNull();
+    expect(service.parsePtkpCategory('')).toBeNull();
+  });
+
+  it('calculate() memakai kolom ptkpCategory (K/1 -> B, PTKP 63jt)', async () => {
+    mockEmployeeService.findById.mockResolvedValue({
+      id: 'emp-1',
+      fullName: 'Rina',
+      maritalStatus: 'MARRIED',
+      ptkpCategory: 'K/1',
+    });
+
+    const result = await service.calculate('t1', {
+      employeeId: 'emp-1',
+      grossIncome: 8000000,
+      bpjsDeduction: 0,
+      otherDeductions: 0,
+    } as any);
+
+    expect(result.terCategory).toBe('B');
+    expect(result.ptkp).toBe(63000000);
+    expect(result.monthlyPph21).toBe(0);
+  });
+
+  it('calculate() fallback ke maritalStatus bila kolom kosong (kompatibilitas)', async () => {
+    mockEmployeeService.findById.mockResolvedValue({
+      id: 'emp-1',
+      fullName: 'Lama',
+      maritalStatus: 'MARRIED',
+      ptkpCategory: null,
+    });
+
+    const result = await service.calculate('t1', {
+      employeeId: 'emp-1',
+      grossIncome: 8000000,
+      bpjsDeduction: 0,
+      otherDeductions: 0,
+    } as any);
+
+    expect(result.terCategory).toBe('B');
+    expect(result.ptkp).toBe(58500000);
+  });
+});

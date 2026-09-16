@@ -119,7 +119,7 @@ export class AuditService {
       log.userAgent || '',
     ]);
 
-    const escape = (val: string) => `"${val.replace(/"/g, '""')}"`;
+    const escape = (val: string | null) => `"${(val ?? '').replace(/"/g, '""')}"`;
     const csv = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))].join('\n');
 
     return csv;

@@ -1,9 +1,11 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
 import { ConfigService } from '@nestjs/config';
@@ -30,6 +32,7 @@ export interface AntiSpoofThresholds {
 
 @Injectable()
 export class AttendanceService {
+  private readonly logger = new Logger(AttendanceService.name);
   private readonly geofenceRadius: number;
   private readonly overtimeMinMinutes: number;
   private readonly maxGpsAccuracy: number;
@@ -78,6 +81,26 @@ export class AttendanceService {
       dto.accuracy,
       dto.clientTimestamp,
     );
+
+    const ppeFf = await this.prisma.featureFlag.findFirst({
+      where: { tenantId, feature: 'ppe_mandatory_clock_in' },
+    });
+    if (ppeFf?.enabled) {
+      const expiredPpe = await this.prisma.ppeAssignment.findFirst({
+        where: { tenantId, employeeId, status: 'ACTIVE', expiryDate: { not: null, lt: new Date() }, deletedAt: null },
+      });
+      if (expiredPpe) {
+        throw new ForbiddenException(
+          `APD ${expiredPpe.ppeType} sudah kedaluwarsa (${expiredPpe.expiryDate?.toISOString().split('T')[0]}) — clock-in diblokir`,
+        );
+      }
+      const hasActivePpe = await this.prisma.ppeAssignment.findFirst({
+        where: { tenantId, employeeId, status: 'ACTIVE', deletedAt: null },
+      });
+      if (!hasActivePpe) {
+        throw new ForbiddenException('Tidak memiliki APD aktif — clock-in diblokir');
+      }
+    }
 
     if (dto.method === ClockInMethod.FACE) {
       if (!dto.embedding) {
@@ -483,6 +506,37 @@ export class AttendanceService {
     });
 
     return { period: updated, summary };
+  }
+
+  /**
+   * Scheduler harian (01:00): menutup otomatis setiap payroll period
+   * yang masih OPEN tetapi endDate-nya sudah lewat, di semua tenant.
+   * Menutup backlog Epic 2 — sebelumnya closePeriod() hanya bisa dipanggil
+   * manual. Kegagalan pada satu periode tidak menghentikan periode lain.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async autoCloseElapsedPeriods(): Promise<string[]> {
+    const elapsed = await this.prisma.payrollPeriod.findMany({
+      where: { status: PayrollPeriodStatus.OPEN, endDate: { lt: new Date() } },
+      select: { id: true, tenantId: true },
+    });
+
+    const closed: string[] = [];
+    for (const period of elapsed) {
+      try {
+        await this.closePeriod(period.tenantId, period.id, 'system');
+        closed.push(period.id);
+      } catch (err) {
+        this.logger.warn(
+          `autoCloseElapsedPeriods: gagal menutup periode ${period.id} (tenant ${period.tenantId}): ${(err as Error).message}`,
+        );
+      }
+    }
+
+    if (closed.length > 0) {
+      this.logger.log(`autoCloseElapsedPeriods: menutup ${closed.length} periode: ${closed.join(', ')}`);
+    }
+    return closed;
   }
 
   async getToday(tenantId: string, employeeId: string) {

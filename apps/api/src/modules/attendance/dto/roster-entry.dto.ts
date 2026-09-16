@@ -3,7 +3,7 @@ import { IsArray, IsDateString, IsString, IsUUID, ValidateNested } from 'class-v
 import { Type } from 'class-transformer';
 export class RosterEntryItem {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   employeeId!: string;
   @ApiProperty()
   @IsUUID()

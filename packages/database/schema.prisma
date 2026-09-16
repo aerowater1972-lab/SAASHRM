@@ -23,13 +23,37 @@ model Tenant {
   updatedAt DateTime     @updatedAt
   deletedAt DateTime?
 
-  entities     TenantEntity[]
-  users        User[]
-  roles        Role[]
-  featureFlags FeatureFlag[]
-  workflows    WorkflowDefinition[]
-  integrations Integration[]
-  auditLogs    AuditLog[]
+  entities             TenantEntity[]
+  users                User[]
+  roles                Role[]
+  featureFlags         FeatureFlag[]
+  workflows            WorkflowDefinition[]
+  integrations         Integration[]
+  auditLogs            AuditLog[]
+  systemHealthSnapshots SystemHealthSnapshot[]
+  backupRecords        BackupRecord[]
+  maintenanceWindows   MaintenanceWindow[]
+  trainings            Training[]
+  courses              Course[]
+  feedback360s         Feedback360[]
+  idps                 IndividualDevelopmentPlan[]
+  provincialWages      ProvincialMinimumWage[]
+  violationCategories  ViolationCategory[]
+  disciplinaryCases    DisciplinaryCase[]
+  incidentReports      IncidentReport[]
+  ppeAssignments       PpeAssignment[]
+  tenantBranding       TenantBranding?
+  locationPings        LocationPing[]
+  fieldTerritories     FieldTerritory[]
+  liveTrackingSettings LiveTrackingSettings?
+  documents            Document[]
+  announcements        Announcement[]
+  documentCategories   DocumentCategory[]
+  talentPools          TalentPool[]
+  successionPlans      SuccessionPlan[]
+  territoryViolations  TerritoryViolation[]
+  engagementSurveys    EngagementSurvey[]
+  manpowerPlans        ManpowerPlan[]
 }
 
 model TenantEntity {
@@ -80,9 +104,21 @@ model User {
   employeeId String?   @unique
   employee   Employee? @relation(fields: [employeeId], references: [id])
 
-  userRoles     UserRole[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
+  userRoles                 UserRole[]
+  notifications             Notification[]
+  auditLogs                 AuditLog[]
+  approvedDisciplinaryCases  DisciplinaryCase[]  @relation("approved_disciplinary")
+  escalatedDisciplinaryCases DisciplinaryCase[]  @relation("escalated_disciplinary")
+  reportedIncidents          IncidentReport[]    @relation("reported_incidents")
+  documentsCreated           Document[]
+  documentVersionsCreated    DocumentVersion[]
+  documentPermissionsCreated DocumentPermission[]
+  documentSignatures         DocumentSignature[]
+  documentActivities         DocumentActivity[]
+  announcementsCreated       Announcement[]
+  talentPoolMembershipsAdded TalentPoolMember[]
+  successionPlansCreated     SuccessionPlan[]       @relation("succession_creator")
+  successionCandidatesAdded  SuccessionCandidate[]  @relation("succession_candidate_adder")
 
   @@unique([tenantId, email])
 }
@@ -270,15 +306,15 @@ model AuditLog {
   entity    String
   entityId  String
   action    String // CREATE, UPDATE, DELETE, APPROVE, REJECT
-  changedBy String
+  changedBy String?
   changedAt DateTime @default(now())
   oldValue  Json?
   newValue  Json?
   ipAddress String?
   userAgent String?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  user   User   @relation(fields: [changedBy], references: [id])
+  tenant Tenant   @relation(fields: [tenantId], references: [id])
+  user   User?    @relation(fields: [changedBy], references: [id])
 
   @@index([tenantId, module, entity, entityId])
   @@index([tenantId, changedAt])
@@ -301,6 +337,7 @@ model Employee {
   gender               Gender?
   religion             String?
   maritalStatus        MaritalStatus  @default(SINGLE)
+  ptkpCategory         String         @default("TK/0") @map("ptkp_category") // GapFix Epic 3 v1.3: kategori PTKP per karyawan (TK/0..TK/3, K/0..K/3); dipakai TaxService, bukan hardcoded
   unionStatus          UnionStatus    @default(NONE) // Addendum Serikat Pekerja (labor_union flag)
   idCardNumber         String? // NIK (encrypted)
   taxIdNumber          String? // NPWP (encrypted)
@@ -363,13 +400,32 @@ model Employee {
   salaryComponents               SalaryComponent[]
   payrollRunItems                PayrollRunItem[]
   jobRequisitionsApproved        JobRequisition[]          @relation("requisition_approver")
+  disciplinaryCases              DisciplinaryCase[]
+  incidentReports                IncidentReport[]
+  ppeAssignments                 PpeAssignment[]
+  // LMS
+  courseTrainees                 CourseTrainee[]
+  quizAttempts                   QuizAttempt[]
+  // 360° Feedback
+  feedback360sAsReviewee         Feedback360[]             @relation("feedback_reviewee")
+  feedback360sAsReviewer         Feedback360[]             @relation("feedback_reviewer")
+  // IDP
+  individualDevelopmentPlans     IndividualDevelopmentPlan[]
   workLocationId                 String?
   workLocation                   WorkLocation?             @relation(fields: [workLocationId], references: [id])
+  isFieldWorker                  Boolean                   @default(false)
+  locationPings                  LocationPing[]
+  fieldTerritory                 FieldTerritory?
+  territoryViolations            TerritoryViolation[]
+  talentPoolMemberships          TalentPoolMember[]
+  successionPlansIncumbent         SuccessionPlan[]            @relation("succession_incumbent")
+  successionCandidates            SuccessionCandidate[]
 
   @@unique([tenantId, employeeId])
   @@unique([tenantId, email])
   @@index([tenantId, status])
   @@index([workLocationId])
+  @@index([isFieldWorker])
 }
 
 model Employment {
@@ -489,6 +545,8 @@ model Department {
   requisitions            JobRequisition[]
   movementRequestsAsNew   MovementRequest[]        @relation("DeptMovementRequests")
   employments             Employment[]
+  documents               Document[]
+  successionPlans         SuccessionPlan[]
 
   @@unique([tenantId, code])
 }
@@ -511,6 +569,7 @@ model Position {
   grade                         Grade?            @relation(fields: [gradeId], references: [id])
   employments                   Employment[]
   movementRequestsAsNewPosition MovementRequest[]
+  successionPlans               SuccessionPlan[]
 
   @@unique([tenantId, code])
 }
@@ -522,6 +581,8 @@ model Grade {
   code        String
   level       Int
   description String?
+  minSalary   Float?    // FR-03: salary range lower bound for manpower cost estimation
+  maxSalary   Float?    // FR-03: salary range upper bound
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
@@ -835,7 +896,12 @@ model PayrollComponent {
   type        PayrollComponentType // ALLOWANCE, DEDUCTION, BPJS_KES, BPJS_KET, PPH21
   category    PayrollComponentCategory @default(FIXED)
   description String?
-  formula     String? // calculation formula
+  formula     String? // calculation formula (used when calculationMethod = FORMULA)
+  calculationMethod String? @map("calculation_method") // FIXED | PERCENTAGE | FORMULA (mirrors API DTO)
+  defaultValue Decimal? @map("default_value") @db.Decimal(18, 2) // used when calculationMethod = FIXED
+  percentage Decimal? @db.Decimal(5, 2) // used when calculationMethod = PERCENTAGE
+  maxCap     Decimal? @map("max_cap") @db.Decimal(18, 2)
+  sortOrder  Int?     @map("sort_order")
   isTaxable   Boolean                  @default(true)
   isProrated  Boolean                  @default(false)
   value       Decimal?                 @db.Decimal(18, 2)
@@ -1033,17 +1099,19 @@ model TaxConfig {
 // =======================================================================
 
 model JobRequisition {
-  id           String   @id @default(uuid())
-  tenantId     String
-  title        String
-  departmentId String
-  status       String   @default("pending_approval") // pending_approval, approved, rejected, closed
-  approvedBy   String?
-  createdAt    DateTime @default(now())
+  id                  String   @id @default(uuid())
+  tenantId            String
+  title               String
+  departmentId        String
+  status              String   @default("pending_approval") // pending_approval, approved, rejected, closed
+  approvedBy          String?
+  manpowerPlanItemId  String?  // Link to approved manpower plan item (FR-04)
+  createdAt           DateTime @default(now())
 
-  department Department   @relation(fields: [departmentId], references: [id])
-  approver   Employee?    @relation("requisition_approver", fields: [approvedBy], references: [id])
-  postings   JobPosting[]
+  department         Department          @relation(fields: [departmentId], references: [id])
+  approver           Employee?           @relation("requisition_approver", fields: [approvedBy], references: [id])
+  manpowerPlanItem   ManpowerPlanItem?   @relation(fields: [manpowerPlanItemId], references: [id])
+  postings           JobPosting[]
 
   @@index([tenantId, status])
 }
@@ -1388,20 +1456,22 @@ model EmployeeBenefitComponent {
 // =======================================================================
 
 model ReviewCycle {
-  id        String          @id @default(uuid())
-  tenantId  String
-  name      String
-  period    String // Q1_2026, H1_2026, YEARLY_2026
-  startDate DateTime
-  endDate   DateTime
-  type      ReviewCycleType // QUARTERLY, SEMI_ANNUAL, ANNUAL
-  status    CycleStatus     @default(UPCOMING)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id                String              @id @default(uuid())
+  tenantId          String
+  name              String
+  period            String // Q1_2026, H1_2026, YEARLY_2026
+  startDate         DateTime
+  endDate           DateTime
+  type              ReviewCycleType     // QUARTERLY, SEMI_ANNUAL, ANNUAL
+  status            CycleStatus         @default(UPCOMING)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   reviews             PerformanceReview[]
   calibrationSessions CalibrationSession[]
   finalScores         FinalScore[]
+  feedback360s        Feedback360[]
+  idps                IndividualDevelopmentPlan[]
 }
 
 model PerformanceReview {
@@ -1490,6 +1560,93 @@ model FinalScore {
 }
 
 // =======================================================================
+// SUCCESSION PLANNING
+// =======================================================================
+
+model TalentPool {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  criteria    String?
+  status      TalentPoolStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  tenant    Tenant               @relation(fields: [tenantId], references: [id])
+  members   TalentPoolMember[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+}
+
+model TalentPoolMember {
+  id              String       @id @default(uuid())
+  poolId          String
+  employeeId      String
+  performanceBand String? // HIGH, MID, LOW
+  potentialBand   String? // HIGH, MID, LOW
+  readiness       TalentReadiness @default(NOT_READY)
+  notes           String?
+  addedById       String
+  addedAt         DateTime     @default(now())
+
+  pool     TalentPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id])
+  addedBy  User       @relation(fields: [addedById], references: [id])
+
+  @@unique([poolId, employeeId])
+  @@index([poolId])
+}
+
+model SuccessionPlan {
+  id                 String          @id @default(uuid())
+  tenantId           String
+  positionId         String
+  departmentId       String?
+  currentEmployeeId  String? // incumbent
+  status             SuccessionPlanStatus @default(DRAFT)
+  riskCode          String? // LOW / MEDIUM / HIGH (vacancy risk)
+  targetReadyDate    DateTime?
+  notes              String?
+  createdById        String
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
+  position         Position             @relation(fields: [positionId], references: [id])
+  department       Department?          @relation(fields: [departmentId], references: [id])
+  currentHolder    Employee?            @relation("succession_incumbent", fields: [currentEmployeeId], references: [id])
+  createdBy        User                 @relation("succession_creator", fields: [createdById], references: [id])
+  candidates       SuccessionCandidate[]
+
+  @@unique([tenantId, positionId])
+  @@index([tenantId, status])
+}
+
+model SuccessionCandidate {
+  id              String           @id @default(uuid())
+  planId          String
+  employeeId      String
+  readiness       TalentReadiness  @default(NOT_READY)
+  rank            Int              @default(0)
+  assessmentNotes String?
+  decision        String? // PROMOTED / PENDING / NOT_SELECTED
+  addedById       String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  plan     SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  employee Employee       @relation(fields: [employeeId], references: [id])
+  addedBy  User           @relation("succession_candidate_adder", fields: [addedById], references: [id])
+
+  @@unique([planId, employeeId])
+  @@index([planId])
+}
+
+// =======================================================================
 // LEARNING MANAGEMENT
 // =======================================================================
 
@@ -1498,6 +1655,7 @@ model Training {
   tenantId    String
   title       String
   description String?
+  category    String?        @default("GENERAL") // GENERAL, K3, MANAGEMENT, COMPLIANCE
   type        TrainingType // INTERNAL, EXTERNAL, ONLINE, CERTIFICATION
   provider    String?
   startDate   DateTime
@@ -1507,8 +1665,219 @@ model Training {
   status      TrainingStatus @default(PLANNED)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
 
-  participants TrainingParticipant[]
+  participants                   TrainingParticipant[]
+  recommendedViolationCategory   ViolationCategory? @relation("recommended_k3_training", fields: [recommendedViolationCategoryId], references: [id])
+  recommendedViolationCategoryId String?
+
+  // LMS enhancements
+  courseId     String?
+  course       Course?          @relation(fields: [courseId], references: [id])
+}
+
+// LMS Course — structured learning path with modules and lessons
+model Course {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  category    String?  @default("GENERAL")
+  imageUrl    String?
+  duration    Int?     // duration in minutes
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  modules          CourseModule[]
+  trainees         CourseTrainee[]
+  trainings        Training[]
+}
+
+model CourseModule {
+  id          String   @id @default(uuid())
+  courseId    String
+  title       String
+  description String?
+  order       Int      @default(0)
+  duration    Int?     // minutes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course   Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons  Lesson[]
+}
+
+model Lesson {
+  id          String   @id @default(uuid())
+  moduleId    String
+  title       String
+  content     String?  // HTML/text content or URL to video/material
+  contentType String?  @default("TEXT") // TEXT, VIDEO, PDF, LINK
+  duration    Int?     // minutes
+  order       Int      @default(0)
+  isRequired  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  module     CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  quizzes    Quiz[]
+}
+
+model Quiz {
+  id          String   @id @default(uuid())
+  lessonId    String
+  title       String
+  description String?
+  maxScore    Int      @default(100)
+  passingScore Int     @default(70)
+  timeLimit   Int?     // minutes
+  attemptsAllowed Int @default(3)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lesson   Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+}
+
+model QuizQuestion {
+  id         String   @id @default(uuid())
+  quizId     String
+  question   String
+  questionType String @default("MULTIPLE_CHOICE") // MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER
+  options    String?  // JSON array for multiple choice
+  correctAnswer String
+  points     Int      @default(1)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id          String   @id @default(uuid())
+  quizId      String
+  traineeId   String
+  score       Int
+  passed      Boolean
+  answers     String   // JSON: { questionId: answer, ... }
+  submittedAt DateTime @default(now())
+  completedAt DateTime?
+
+  quiz  Quiz   @relation(fields: [quizId], references: [id])
+  trainee Employee @relation(fields: [traineeId], references: [id])
+
+  @@unique([quizId, traineeId])
+}
+
+model CourseTrainee {
+  id          String   @id @default(uuid())
+  courseId    String
+  employeeId  String
+  status      CourseEnrollmentStatus @default(ENROLLED) // ENROLLED, IN_PROGRESS, COMPLETED, DROPPED
+  progress    Int      @default(0) // percentage
+  score       Decimal? @db.Decimal(5, 2)
+  enrolledAt  DateTime @default(now())
+  completedAt DateTime?
+
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([courseId, employeeId])
+}
+
+// 360° Feedback
+model Feedback360 {
+  id             String   @id @default(uuid())
+  tenantId       String
+  reviewCycleId  String
+  revieweeId     String
+  reviewerId     String   // the person giving feedback
+  reviewerType   FeedbackReviewerType // SELF, MANAGER, PEER, DIRECT_REPORT, CUSTOM
+  status         FeedbackStatus @default(PENDING)
+  submittedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  cycle   ReviewCycle @relation(fields: [reviewCycleId], references: [id])
+  reviewee Employee   @relation("feedback_reviewee", fields: [revieweeId], references: [id])
+  reviewer Employee   @relation("feedback_reviewer", fields: [reviewerId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+
+  questions Feedback360Question[]
+  @@unique([reviewCycleId, revieweeId, reviewerId])
+}
+
+model Feedback360Question {
+  id              String   @id @default(uuid())
+  feedback360Id   String
+  questionText    String
+  questionType    String   @default("LIKERT_5") // LIKERT_5, NA, TEXT
+  rating          Int?     // 1-5 for Likert
+  comment         String?
+  order            Int     @default(0)
+  createdAt       DateTime @default(now())
+
+  feedback360 Feedback360 @relation(fields: [feedback360Id], references: [id], onDelete: Cascade)
+}
+
+// Individual Development Plan
+model IndividualDevelopmentPlan {
+  id              String   @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  reviewCycleId   String?
+  title           String
+  description     String?
+  skillsGap       String?  // JSON: identified skill gaps
+  objectives      String   // JSON array of development objectives
+  startDate       DateTime
+  endDate         DateTime
+  status          IDPStatus @default(DRAFT) // DRAFT, ACTIVE, COMPLETED, CANCELLED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+  cycle    ReviewCycle? @relation(fields: [reviewCycleId], references: [id])
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  activities IDPActivity[]
+  @@index([tenantId, employeeId])
+}
+
+model IDPActivity {
+  id              String   @id @default(uuid())
+  idpId           String
+  title           String
+  description     String?
+  type            IDPActivityType @default(TRAINING) // TRAINING, MENTORING, PROJECT, CERTIFICATION, SELF_STUDY, CROSS_TRAINING
+  targetDate      DateTime?
+  status          IDPActivityStatus @default(PENDING) // PENDING, IN_PROGRESS, COMPLETED
+  progress        Int @default(0) // percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  idp IndividualDevelopmentPlan @relation(fields: [idpId], references: [id], onDelete: Cascade)
+}
+
+// UMK/UMP Provincial Minimum Wage
+model ProvincialMinimumWage {
+  id              String   @id @default(uuid())
+  tenantId        String
+  province        String
+  year            Int
+  minimumWage     Decimal  @db.Decimal(18, 2)
+  effectiveDate   DateTime
+  source          String?  // government regulation reference
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, province, year])
+  @@index([tenantId, province])
 }
 
 model TrainingParticipant {
@@ -1765,9 +2134,12 @@ enum DocumentType {
 }
 
 enum DocumentStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
   ACTIVE
-  EXPIRED
   ARCHIVED
+  EXPIRED
 }
 
 enum OrgStatus {
@@ -1858,6 +2230,7 @@ enum PayrollRunStatus {
   PROCESSING
   COMPLETED
   APPROVED
+  LOCKED
   CANCELLED
 }
 
@@ -2022,6 +2395,25 @@ enum GoalStatus {
   CANCELLED
 }
 
+enum TalentPoolStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TalentReadiness {
+  NOT_READY
+  DEVELOPING
+  READY_IN_1_2_YEARS
+  READY_NOW
+}
+
+enum SuccessionPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 enum TrainingType {
   INTERNAL
   EXTERNAL
@@ -2041,6 +2433,50 @@ enum ParticipantStatus {
   ATTENDED
   COMPLETED
   DROPPED
+}
+
+enum CourseEnrollmentStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+  DROPPED
+}
+
+enum FeedbackReviewerType {
+  SELF
+  MANAGER
+  PEER
+  DIRECT_REPORT
+  CUSTOM
+}
+
+enum FeedbackStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  FINALIZED
+}
+
+enum IDPStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum IDPActivityType {
+  TRAINING
+  MENTORING
+  PROJECT
+  CERTIFICATION
+  SELF_STUDY
+  CROSS_TRAINING
+}
+
+enum IDPActivityStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
 }
 
 enum ResignationType {
@@ -2155,3 +2591,679 @@ enum JobStatus {
   FAILED
   CANCELLED
 }
+
+// =======================================================================
+// EMPLOYEE RELATIONS & SAFETY MANAGEMENT
+// Modul BARU — Surat Peringatan (SP1/SP2/SP3), Insiden Kerja & K3,
+// APD Tracking. Fase 2 Kepatuhan Hukum Ketenagakerjaan.
+// =======================================================================
+
+enum SpLevel {
+  SP1
+  SP2
+  SP3
+}
+
+enum DisciplinaryStatus {
+  DRAFT
+  APPROVED
+  ACKNOWLEDGED
+  EXPIRED
+  CANCELLED
+}
+
+enum IncidentSeverity {
+  MILD
+  MODERATE
+  SEVERE
+  CRITICAL
+}
+
+enum IncidentCategory {
+  ACCIDENT
+  NEAR_MISS
+}
+
+enum IncidentStatus {
+  REPORTED
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+}
+
+enum PpeStatus {
+  ACTIVE
+  EXPIRED
+  REPLACED
+}
+
+enum SurveyType {
+  ENPS
+  PULSE
+  CUSTOM
+}
+
+enum SurveyStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum QuestionType {
+  LIKERT_5
+  LIKERT_7
+  MULTIPLE_CHOICE
+  SINGLE_CHOICE
+  FREE_TEXT
+  NPS
+}
+
+enum ActionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ManpowerPlanStatus {
+  DRAFT
+  SUBMITTED
+  HR_REVIEW
+  FINANCE_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ManpowerType {
+  NEW
+  REPLACEMENT
+}
+
+model ViolationCategory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String
+  description String?
+  severity    Int      @default(1) // 1=MILD, 2=MODERATE, 3=SEVERE
+  canSkipSP1  Boolean  @default(false) // pelanggaran berat → langsung SP2/SP3
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  tenant               Tenant             @relation(fields: [tenantId], references: [id])
+  disciplinaryCases    DisciplinaryCase[]
+  recommendedTrainings Training[]         @relation("recommended_k3_training")
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+}
+
+model DisciplinaryCase {
+  id                  String             @id @default(uuid())
+  tenantId            String
+  employeeId          String
+  violationCategoryId String
+  spLevel             SpLevel
+  description         String
+  issuedDate          DateTime           @default(now())
+  validUntil          DateTime?
+  status              DisciplinaryStatus @default(DRAFT)
+  approvedById        String?
+  acknowledgedAt      DateTime?
+  escalatedAt         DateTime?         // BR-05: otomatis jika >3 hari tidak diakui
+  escalatedToId       String?           // atasan / HR yang dieskalasi
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deletedAt           DateTime?
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  employee         Employee         @relation(fields: [employeeId], references: [id])
+  violationCategory ViolationCategory @relation(fields: [violationCategoryId], references: [id])
+  approvedBy       User?            @relation("approved_disciplinary", fields: [approvedById], references: [id])
+  escalatedTo      User?            @relation("escalated_disciplinary", fields: [escalatedToId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, issuedDate])
+}
+
+model IncidentReport {
+  id                     String           @id @default(uuid())
+  tenantId               String
+  employeeId             String           // pelapor
+  location               String
+  incidentDate           DateTime
+  severity               IncidentSeverity
+  category               IncidentCategory
+  description            String
+  reportedById           String?
+  status                 IncidentStatus   @default(REPORTED)
+  authorityReportDeadline DateTime?
+  authorityReportedAt    DateTime?
+  resolutionNotes        String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  deletedAt              DateTime?
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  reportedBy User?      @relation("reported_incidents", fields: [reportedById], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, severity])
+  @@index([tenantId, incidentDate])
+}
+
+model PpeAssignment {
+  id           String    @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  ppeType      String
+  assignedDate DateTime  @default(now())
+  expiryDate   DateTime?
+  condition    String    @default("NEW") // NEW, GOOD, FAIR, WORN, DAMAGED
+  status       PpeStatus @default(ACTIVE)
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, expiryDate])
+}
+
+// =======================================================================
+// SYSTEM ADMINISTRATION — v1.2 Addendum: Tenant Branding
+// =======================================================================
+
+model TenantBranding {
+  id             String   @id @default(uuid())
+  tenantId       String   @unique
+  primaryColor   String   @default("#2563EB") // blue-600
+  secondaryColor String   @default("#7C3AED") // violet-600
+  logoUrl        String?
+  faviconUrl     String?
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// =======================================================================
+// DOCUMENT MANAGEMENT - Company Documents, SOPs, Contracts, Policies
+// =======================================================================
+
+model DocumentCategory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  icon        String?
+  color       String?  @default("#6366F1")
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  documents Document[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  tenantId    String
+  categoryId  String?
+  title       String
+  description String?
+  content     String?   // Markdown/HTML content
+  version     Int      @default(1)
+  status      DocumentStatus @default(DRAFT)
+  accessLevel DocumentAccessLevel @default(TENANT)
+  departmentId String?
+  tags        String[] @default([])
+  isTemplate  Boolean  @default(false)
+  templateId  String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  publishedAt DateTime?
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  category     DocumentCategory? @relation(fields: [categoryId], references: [id])
+  department   Department?      @relation(fields: [departmentId], references: [id])
+  creator      User             @relation(fields: [createdById], references: [id])
+  versions     DocumentVersion[]
+  signatures   DocumentSignature[]
+  permissions  DocumentPermission[]
+  activities   DocumentActivity[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, createdById])
+  @@index([tenantId, isTemplate])
+  @@index([tenantId, departmentId])
+}
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String
+  version    Int
+  content    String
+  title      String
+  changeLog  String?
+  createdById String
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  creator  User     @relation(fields: [createdById], references: [id])
+
+  @@unique([documentId, version])
+  @@index([documentId])
+}
+
+model DocumentPermission {
+  id            String   @id @default(uuid())
+  documentId    String
+  permissionType DocumentPermissionType // ROLE, USER, DEPARTMENT
+  targetId      String   // Role ID, User ID, Department ID
+  permission    DocumentPermissionLevel @default(VIEW)
+  createdAt     DateTime @default(now())
+  createdById   String
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  creator  User     @relation(fields: [createdById], references: [id])
+
+  @@unique([documentId, permissionType, targetId])
+  @@index([documentId])
+}
+
+model DocumentSignature {
+  id            String   @id @default(uuid())
+  documentId    String
+  documentVersion Int?
+  userId        String
+  status        SignatureStatus @default(PENDING)
+  signatureData String?
+  signedAt      DateTime?
+  expiresAt     DateTime?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([documentId, userId])
+  @@index([documentId, status])
+}
+
+model DocumentActivity {
+  id          String   @id @default(uuid())
+  documentId  String
+  userId      String
+  action      DocumentAction
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([documentId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Announcement {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  content     String
+  type        AnnouncementType @default(GENERAL)
+  priority    AnnouncementPriority @default(NORMAL)
+  status      AnnouncementStatus @default(DRAFT)
+  targetAudience AnnouncementAudience @default(ALL)
+  targetIds   String[] @default([])
+  publishAt   DateTime?
+  expireAt    DateTime?
+  attachmentUrls String[] @default([])
+  readReceiptRequired Boolean @default(false)
+  allowComments Boolean @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  creator      User               @relation(fields: [createdById], references: [id])
+  @@index([tenantId, status, publishAt(sort: Desc)])
+  @@index([tenantId, type])
+  @@index([tenantId, createdById])
+}
+
+// Add new enums
+enum DocumentPermissionLevel {
+  VIEW
+  EDIT
+  ADMIN
+}
+
+enum DocumentAccessLevel {
+  PRIVATE
+  DEPARTMENT
+  TENANT
+  PUBLIC
+}
+
+enum DocumentPermissionType {
+  ROLE
+  USER
+  DEPARTMENT
+}
+
+enum SignatureStatus {
+  PENDING
+  SIGNED
+  DECLINED
+  EXPIRED
+}
+
+enum DocumentAction {
+  CREATED
+  UPDATED
+  PUBLISHED
+  ARCHIVED
+  SIGNED
+  SHARED
+  COMMENTED
+  VERSION_CREATED
+}
+
+enum AnnouncementType {
+  GENERAL
+  URGENT
+  EVENT
+  POLICY
+  MAINTENANCE
+  CELEBRATION
+}
+
+enum AnnouncementPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum AnnouncementAudience {
+  ALL
+  DEPARTMENT
+  ROLE
+  USER
+  LOCATION
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+// =======================================================================
+// PLATFORM OPERATIONS - Multi-Tenant Monitoring
+// =======================================================================
+// PLATFORM OPERATIONS — Multi-Tenant Monitoring
+// NOTE: Full implementation deferred to final phase.
+// AuditLog + SystemHealthSnapshot usable now for operational dashboard.
+// =======================================================================
+
+model SystemHealthSnapshot {
+  id             String   @id @default(uuid())
+  tenantId       String
+  cpuUsage       Float?   // 0-100
+  memoryUsedMb   Float?
+  memoryTotalMb  Float?
+  diskUsedMb     Float?
+  diskTotalMb    Float?
+  uptimeSeconds  Int?
+  activeUsers    Int?     @default(0)
+  apiLatencyMs   Float?   // p95 in ms
+  errorRate      Float?   // percentage
+  snapshotAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, snapshotAt(sort: Desc)])
+}
+
+model BackupRecord {
+  id          String     @id @default(uuid())
+  tenantId    String
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+  sizeBytes   BigInt?
+  status      String     @default("RUNNING") // RUNNING, SUCCESS, FAILED
+  location    String?    // file path / S3 key
+  errorLog    String?
+  triggeredBy String?    // userId or "SCHEDULED"
+  createdAt   DateTime   @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, startedAt(sort: Desc)])
+}
+
+model MaintenanceWindow {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String   @default("SCHEDULED") // SCHEDULED, ACTIVE, COMPLETED, CANCELLED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, startsAt, endsAt])
+}
+
+model LocationPing {
+  id             String   @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  recordedAt     DateTime @default(now())
+  lat            Float
+  lng            Float
+  accuracyMeters Float?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId, recordedAt(sort: Desc)])
+  @@index([tenantId, recordedAt(sort: Desc)])
+}
+
+model FieldTerritory {
+  id            String   @id @default(uuid())
+  tenantId      String
+  employeeId    String   @unique
+  territoryName String
+  boundaryGeoJson String // GeoJSON Polygon/MultiPolygon
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  territoryViolations TerritoryViolation[]
+
+  @@index([tenantId])
+}
+
+model LiveTrackingSettings {
+  id                String   @id @default(uuid())
+  tenantId          String   @unique
+  pingIntervalMinutes Int     @default(15)
+  enabled           Boolean  @default(true)
+  retentionDays     Int      @default(90)
+  requireConsent    Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model TerritoryViolation {
+  id            String   @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  territoryId   String
+  lat           Float
+  lng           Float
+  distanceMeters Float
+  recordedAt    DateTime @default(now())
+  notified      Boolean  @default(false)
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  territory  FieldTerritory @relation(fields: [territoryId], references: [id])
+
+  @@index([tenantId, employeeId, recordedAt(sort: Desc)])
+}
+
+// =======================================================================
+// EMPLOYEE ENGAGEMENT SURVEY — v1.0
+// =======================================================================
+
+model EngagementSurvey {
+  id           String            @id @default(uuid())
+  tenantId     String
+  title        String
+  type         SurveyType        @default(PULSE)
+  isAnonymous  Boolean           @default(true)
+  targetScope  String?           // JSON: department_ids, grade_ids, etc.
+  startDate    DateTime
+  endDate      DateTime
+  status       SurveyStatus      @default(DRAFT)
+  createdBy    String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  questions   SurveyQuestion[]
+  responses   SurveyResponse[]
+  actionItems SurveyActionItem[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, startDate, endDate])
+}
+
+model SurveyQuestion {
+  id          String         @id @default(uuid())
+  surveyId    String
+  questionText String
+  questionType QuestionType
+  options     String?        // JSON array for multiple choice
+  isRequired  Boolean        @default(true)
+  order       Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses SurveyResponse[]
+
+  @@index([surveyId, order])
+}
+
+model SurveyResponse {
+  id           String       @id @default(uuid())
+  surveyId     String
+  questionId   String
+  employeeId   String?
+  respondentId String?      // Anonymous dedup token — UUID generated per submission (null for identified)
+  answerValue  String
+  submittedAt  DateTime     @default(now())
+
+  survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  question  SurveyQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId, employeeId])
+  @@index([surveyId, respondentId])
+  @@index([questionId])
+}
+
+model SurveyActionItem {
+  id          String        @id @default(uuid())
+  surveyId    String
+  title       String
+  description String?
+  assigneeId  String
+  dueDate     DateTime
+  status      ActionStatus  @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId, assigneeId])
+}
+
+// =======================================================================
+// MANPOWER PLANNING — v1.0
+// =======================================================================
+
+model ManpowerPlan {
+  id          String          @id @default(uuid())
+  tenantId    String
+  departmentId String
+  period      String          // e.g., "2026-H1", "2026-Q3"
+  version     Int             @default(1)
+  status      ManpowerPlanStatus @default(DRAFT)
+  submittedBy String
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  items       ManpowerPlanItem[]
+
+  @@index([tenantId, departmentId, period])
+  @@index([tenantId, status])
+}
+
+model ManpowerPlanItem {
+  id                String          @id @default(uuid())
+  manpowerPlanId    String
+  positionTitle     String
+  gradeId           String?
+  quantity          Int             @default(1)
+  type              ManpowerType    @default(NEW)
+  estimatedCost     Float?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  manpowerPlan  ManpowerPlan     @relation(fields: [manpowerPlanId], references: [id], onDelete: Cascade)
+  jobRequisitions JobRequisition[]
+
+  @@index([manpowerPlanId])
+}
+
+// Add relation to JobRequisition for manpower plan linkage

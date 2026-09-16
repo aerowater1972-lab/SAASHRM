@@ -69,8 +69,8 @@ export class BpjsService {
 
     results.push({
       bpjsType: 'KESEHATAN',
-      employerAmount: Math.round(cappedWage * (Number(kesehatanConfig?.jhtEmployerRate) ?? this.BPJS_KESEHATAN_EMPLOYER)),
-      employeeAmount: Math.round(cappedWage * (Number(kesehatanConfig?.jhtEmployeeRate) ?? this.BPJS_KESEHATAN_EMPLOYEE)),
+      employerAmount: Math.round(cappedWage * Number(kesehatanConfig?.jhtEmployerRate ?? this.BPJS_KESEHATAN_EMPLOYER)),
+      employeeAmount: Math.round(cappedWage * Number(kesehatanConfig?.jhtEmployeeRate ?? this.BPJS_KESEHATAN_EMPLOYEE)),
       wageBase: cappedWage,
     });
     totalEmployer += results[0].employerAmount;
@@ -102,8 +102,8 @@ export class BpjsService {
     const jhtConfig = configs.find((c: any) => c.type === 'KET');
     results.push({
       bpjsType: 'JHT',
-      employerAmount: Math.round(baseSalary * (Number(jhtConfig?.jhtEmployerRate) || this.JHT_EMPLOYER)),
-      employeeAmount: Math.round(baseSalary * (Number(jhtConfig?.jhtEmployeeRate) || this.JHT_EMPLOYEE)),
+      employerAmount: Math.round(baseSalary * Number(jhtConfig?.jhtEmployerRate ?? this.JHT_EMPLOYER)),
+      employeeAmount: Math.round(baseSalary * Number(jhtConfig?.jhtEmployeeRate ?? this.JHT_EMPLOYEE)),
       wageBase: baseSalary,
     });
     totalEmployer += results[results.length - 1].employerAmount;
@@ -114,8 +114,8 @@ export class BpjsService {
     const jpWage = Math.min(baseSalary, jpMaxWage);
     results.push({
       bpjsType: 'JP',
-      employerAmount: Math.round(jpWage * (Number(jpConfig?.pensionEmployerRate) || this.JP_EMPLOYER)),
-      employeeAmount: Math.round(jpWage * (Number(jpConfig?.pensionEmployeeRate) || this.JP_EMPLOYEE)),
+      employerAmount: Math.round(jpWage * Number(jpConfig?.pensionEmployerRate ?? this.JP_EMPLOYER)),
+      employeeAmount: Math.round(jpWage * Number(jpConfig?.pensionEmployeeRate ?? this.JP_EMPLOYEE)),
       wageBase: jpWage,
     });
     totalEmployer += results[results.length - 1].employerAmount;

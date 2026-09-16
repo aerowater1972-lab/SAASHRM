@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 import { HolidayType } from '@prisma/client';
 export class CreateHolidayDto {
   @ApiProperty()
@@ -22,6 +22,6 @@ export class CreateHolidayDto {
   description?: string;
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   entityId?: string;
 }

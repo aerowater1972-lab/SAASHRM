@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -164,10 +165,16 @@ async function main() {
     'attendance:correction:read',
     'attendance:biometric:enroll',
     'attendance:biometric:read',
+    'attendance:approve',
     'attendance:create',
     'attendance:delete',
     'attendance:read',
     'attendance:update',
+    'overtime:approve',
+    'overtime:create',
+    'leave:approve',
+    'leave:create',
+    'leave:read',
     'benefits:create',
     'benefits:delete',
     'benefits:enroll',
@@ -190,6 +197,13 @@ async function main() {
     'employee:organization:update',
     'employee:read',
     'employee:update',
+    'documents:manage',
+    'documents:sign',
+    'documents:view',
+    'announcements:manage',
+    'announcements:view',
+    'succession:manage',
+    'succession:view',
     'ess:attendance:clock',
     'ess:attendance:read',
     'ess:dashboard:read',
@@ -318,6 +332,56 @@ async function main() {
     'shifts:delete',
     'shifts:read',
     'shifts:update',
+    'disciplinary-cases:acknowledge',
+    'disciplinary-cases:approve',
+    'disciplinary-cases:create',
+    'disciplinary-cases:read',
+    'disciplinary-cases:update',
+    'incident-reports:create',
+    'incident-reports:read',
+    'incident-reports:update',
+    'k3:dashboard',
+    'ppe-assignments:create',
+    'ppe-assignments:read',
+    'ppe-assignments:update',
+    'admin:branding:read',
+    'admin:branding:update',
+    'admin:user:assign',
+    'admin:user:reset-password',
+    'attendance:correction:approve',
+    'attendance:live-tracking:read',
+    'attendance:live-tracking:settings',
+    'attendance:period:close',
+    'attendance:territory:create',
+    'attendance:territory:delete',
+    'attendance:territory:read',
+    'attendance:territory:update',
+    'engagement_survey:create',
+    'engagement_survey:delete',
+    'engagement_survey:manage_actions',
+    'engagement_survey:read',
+    'engagement_survey:update',
+    'ess:attendance:live-tracking',
+    'ess:engagement_survey:respond',
+    'feedback360:manage',
+    'feedback360:review',
+    'feedback360:submit',
+    'feedback360:view',
+    'idp:manage',
+    'idp:view',
+    'lms:manage',
+    'lms:view',
+    'manpower_planning:approve',
+    'manpower_planning:create',
+    'manpower_planning:delete',
+    'manpower_planning:link_requisition',
+    'manpower_planning:read',
+    'manpower_planning:submit',
+    'manpower_planning:update',
+    'manpower_planning:view_cost',
+    'recruitment:offer:update',
+    'wage:manage',
+    'wage:view',
   ];
 
   for (const perm of permissionStrings) {
@@ -337,7 +401,7 @@ async function main() {
     { id: 'role-sysadmin', name: 'System Administrator', description: 'Full system access', isSystem: true },
     { id: 'role-hr', name: 'HR Admin', description: 'HR module management', isSystem: true },
     { id: 'role-manager', name: 'Manager', description: 'Team management', isSystem: true },
-    { id: 'role-employee', name: 'Employee', description: 'Self service only', isSystem: true },
+    { id: 'role-employee', name: 'Employee', description: 'Self service only', isSystem: false },
   ];
 
   for (const role of roles) {
@@ -426,6 +490,13 @@ async function main() {
       'employee:organization:update',
       'employee:read',
       'employee:update',
+      'documents:manage',
+      'documents:sign',
+      'documents:view',
+      'announcements:manage',
+      'announcements:view',
+      'succession:manage',
+      'succession:view',
       'expense-claims:approve',
       'expense-claims:create',
       'expense-claims:pay',
@@ -582,6 +653,8 @@ async function main() {
       'resignations:read',
       'rosters:read',
       'shifts:read',
+      'announcements:view',
+      'documents:view',
     ],
     'role-employee': [
       'analytics:read',
@@ -622,6 +695,8 @@ async function main() {
       'performance:review:submit',
       'performance:review:update',
       'resignations:create',
+      'announcements:view',
+      'documents:view',
     ],
   };
 
@@ -645,15 +720,17 @@ async function main() {
   console.log('Performance permissions assigned to HR / Manager / Employee');
 
   // 10. Create Admin User
+  const adminPasswordHash = await bcrypt.hash('admin123', 12);
   const adminUser = await prisma.user.upsert({
     where: { id: 'user-admin' },
-    update: {},
+    update: { passwordHash: adminPasswordHash },
     create: {
       id: 'user-admin',
       tenantId: 'default',
       email: 'admin@flexy-hrms.com',
       fullName: 'System Administrator',
       status: 'ACTIVE',
+      passwordHash: adminPasswordHash,
     },
   });
 
@@ -818,6 +895,18 @@ async function main() {
     },
   });
   console.log(`Tax config created: ${taxConfig.taxMethod}`);
+
+  // 19. Create Tenant Branding
+  await prisma.tenantBranding.upsert({
+    where: { tenantId: 'default' },
+    update: {},
+    create: {
+      tenantId: 'default',
+      primaryColor: '#2563EB',
+      secondaryColor: '#7C3AED',
+    },
+  });
+  console.log('Tenant branding created for default tenant');
 
   console.log('\n✅ Seeding completed successfully!');
 }

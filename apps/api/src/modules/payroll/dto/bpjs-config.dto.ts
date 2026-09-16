@@ -70,7 +70,7 @@ export class CreateBpjsConfigDto {
 }
 export class BpjsCalculationDto {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   employeeId!: string;
   @ApiProperty()
   @IsUUID()
@@ -87,6 +87,6 @@ export class BpjsReportDto {
   periodId!: string;
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   employeeId?: string;
 }

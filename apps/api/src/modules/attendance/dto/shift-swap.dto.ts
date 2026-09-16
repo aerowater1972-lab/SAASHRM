@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsOptional, IsString } from 'class-validator';
 export class ShiftSwapDto {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   targetEmployeeId!: string;
   @ApiProperty()
   @IsDateString()
