@@ -391,6 +391,7 @@ model Employee {
   calibrationSessionsFacilitated CalibrationSession[]      @relation("calibration_facilitator")
   finalScoresCalibrated          FinalScore[]              @relation("final_score_calibrator")
   payrollAdjustments             PayrollAdjustment[]
+  thrRecords                   ThrRecord[]
   finalScores                    FinalScore[]
   movementRequests               MovementRequest[]
   essNotifications               EssNotification[]
@@ -1094,6 +1095,53 @@ model TaxConfig {
   updatedAt     DateTime        @updatedAt
 
   @@unique([tenantId, taxMethod, effectiveDate])
+}
+
+// THR Keagamaan (Permenaker 6/2016): 1 bulan upah bila masa kerja >= 12
+// bulan dalam 12 bulan sebelum hari raya, proporsional bila kurang,
+// minimum 1 bulan masa kerja. Upah = gaji pokok + tunjangan tetap.
+model ThrRun {
+  id          String       @id @default(uuid())
+  tenantId    String
+  name        String
+  holidayName String
+  holidayDate DateTime
+  dueDate     DateTime // H-7 hari raya
+  status      ThrRunStatus @default(DRAFT)
+  createdBy   String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  records ThrRecord[]
+
+  @@index([tenantId, holidayDate])
+}
+
+model ThrRecord {
+  id           String   @id @default(uuid())
+  runId        String
+  employeeId   String
+  monthsWorked Int // 1..12 (0 = tidak eligible, tidak dibuat)
+  wageBase     Decimal  @db.Decimal(18, 2)
+  amount       Decimal  @db.Decimal(18, 2)
+  status       String   @default("calculated") // calculated | approved | paid
+  paidAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  run      ThrRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([runId, employeeId])
+  @@index([employeeId])
+}
+
+enum ThrRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
 }
 
 // =======================================================================
