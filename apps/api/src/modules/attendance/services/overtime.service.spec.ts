@@ -28,6 +28,9 @@ describe('OvertimeService', () => {
     featureFlag: {
       findFirst: jest.fn(),
     },
+    rosterEntry: {
+      findFirst: jest.fn(),
+    },
   };
 
   const mockConfig = { get: jest.fn((key: string, def?: any) => def) };
@@ -137,6 +140,64 @@ describe('OvertimeService', () => {
     it('throws NotFound when missing', async () => {
       mockPrisma.overtimeRequest.findFirst.mockResolvedValue(null);
       await expect(service.findOneRequest('default', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('createRequest caps (UU 13/2003: 3 jam/hari, 14 jam/minggu)', () => {
+    // Pekan Senin 2026-09-14 s.d. Minggu 2026-09-20.
+    const dtoFor = (date: string, minutes: number) => ({
+      date,
+      startTime: date + 'T18:00:00+07:00',
+      endTime: date + 'T20:00:00+07:00',
+      reason: 'Uji cap',
+      totalMinutes: minutes,
+    });
+
+    beforeEach(() => {
+      mockPrisma.rosterEntry.findFirst.mockResolvedValue(null);
+      mockPrisma.overtimeRequest.create.mockResolvedValue({ id: 'req-new' });
+    });
+
+    it('menolak bila total hari melebihi 180 menit', async () => {
+      mockPrisma.overtimeRequest.findMany.mockResolvedValue([
+        { date: new Date('2026-09-16T00:00:00Z'), totalMinutes: 120 },
+      ]);
+      await expect(service.createRequest('t1', 'emp-1', dtoFor('2026-09-16', 90))).rejects.toThrow(
+        /3 jam\/hari/,
+      );
+      expect(mockPrisma.overtimeRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('mengizinkan tepat 180 menit sehari', async () => {
+      mockPrisma.overtimeRequest.findMany.mockResolvedValue([
+        { date: new Date('2026-09-16T00:00:00Z'), totalMinutes: 60 },
+      ]);
+      const res = await service.createRequest('t1', 'emp-1', dtoFor('2026-09-16', 120));
+      expect(res).toBeDefined();
+      expect(mockPrisma.overtimeRequest.create).toHaveBeenCalled();
+    });
+
+    it('menolak bila total pekan melebihi 840 menit', async () => {
+      // 130 mnt x 6 hari (Senin-Sabtu) = 780; tambah Minggu 120 -> 900.
+      mockPrisma.overtimeRequest.findMany.mockResolvedValue(
+        ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19'].map((d) => ({
+          date: new Date(d + 'T00:00:00Z'),
+          totalMinutes: 130,
+        })),
+      );
+      await expect(service.createRequest('t1', 'emp-1', dtoFor('2026-09-20', 120))).rejects.toThrow(
+        /14 jam\/minggu/,
+      );
+    });
+
+    it('hanya menghitung PENDING + APPROVED (filter di query)', async () => {
+      mockPrisma.overtimeRequest.findMany.mockResolvedValue([]);
+      await service.createRequest('t1', 'emp-1', dtoFor('2026-09-16', 60));
+      expect(mockPrisma.overtimeRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: { in: ['PENDING', 'APPROVED'] } }),
+        }),
+      );
     });
   });
 });

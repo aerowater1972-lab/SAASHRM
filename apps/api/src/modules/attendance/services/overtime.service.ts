@@ -48,11 +48,15 @@ export class OvertimeService {
       throw new BadRequestException(`Overtime minimum is ${this.overtimeMinMinutes} minutes`);
     }
 
+    // UU 13/2003 Art 78: batas lembur MAKSIMAL 3 jam/hari dan 14 jam/minggu.
+    // Menghitung request PENDING + APPROVED (rejected/cancelled tidak makan kuota).
+    const day = new Date(dto.date);
+    day.setUTCHours(0, 0, 0, 0);
+    await this.assertOvertimeCaps(tenantId, employeeId, day, totalMinutes);
+
     // FR-16 / Flow 3.1 step 2: validate no roster/shift clash on the same date.
     // An employee already scheduled via a roster entry cannot be double-booked
     // with an overtime plan for the same day.
-    const day = new Date(dto.date);
-    day.setUTCHours(0, 0, 0, 0);
     const clash = await this.prisma.rosterEntry.findFirst({
       where: { employeeId, date: day },
     });
@@ -266,6 +270,52 @@ export class OvertimeService {
    * hari_libur_resmi if the date is a recorded holiday, istirahat_mingguan if
    * Sunday, otherwise hari_kerja.
    */
+  private async assertOvertimeCaps(
+    tenantId: string,
+    employeeId: string,
+    day: Date,
+    newMinutes: number,
+  ): Promise<void> {
+    const MAX_DAILY_MINUTES = 180; // 3 jam/hari
+    const MAX_WEEKLY_MINUTES = 840; // 14 jam/minggu
+
+    // Awal pekan (Senin) dari tanggal yang diajukan.
+    const weekStart = new Date(day);
+    weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+    weekEnd.setUTCHours(23, 59, 59, 999); // akhir Minggu, bukan awal hari
+
+    const existing = await this.prisma.overtimeRequest.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        date: { gte: weekStart, lte: weekEnd },
+        status: { in: [RequestStatus.PENDING, RequestStatus.APPROVED] },
+      },
+      select: { date: true, totalMinutes: true },
+    });
+
+    const sameDay = (d: Date) =>
+      d.getUTCFullYear() === day.getUTCFullYear() &&
+      d.getUTCMonth() === day.getUTCMonth() &&
+      d.getUTCDate() === day.getUTCDate();
+
+    const dayTotal = existing.filter((r) => sameDay(new Date(r.date))).reduce((s, r) => s + r.totalMinutes, 0);
+    if (dayTotal + newMinutes > MAX_DAILY_MINUTES) {
+      throw new BadRequestException(
+        `Melebihi batas lembur harian (maks 3 jam/hari, UU 13/2003): sudah ada ${dayTotal} menit pada tanggal ini.`,
+      );
+    }
+
+    const weekTotal = existing.reduce((s, r) => s + r.totalMinutes, 0);
+    if (weekTotal + newMinutes > MAX_WEEKLY_MINUTES) {
+      throw new BadRequestException(
+        `Melebihi batas lembur mingguan (maks 14 jam/minggu, UU 13/2003): sudah ada ${weekTotal} menit pada pekan ini.`,
+      );
+    }
+  }
+
   private async classifyDayType(tenantId: string, date: Date): Promise<OvertimeDayType> {
     const day = new Date(date);
     day.setUTCHours(0, 0, 0, 0);
