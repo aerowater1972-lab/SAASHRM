@@ -9,6 +9,7 @@ import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
+import { calendarMonthsBetween } from '@modules/shared/utils/wage-base.util';
 import { CreateLeaveTypeDto } from '../dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from '../dto/create-leave-request.dto';
 import { LeaveFilterDto } from '../dto/leave-filter.dto';
@@ -68,8 +69,7 @@ export class LeaveService {
     });
   }
 
-  async getBalances(tenantId: string, employeeId: string, year?: number) {
-    const targetYear = year ?? new Date().getFullYear();
+  async getBalances(tenantId: string, employeeId: string, year?: number) {    const targetYear = year ?? new Date().getFullYear();
 
     const balances = await this.prisma.leaveBalance.findMany({
       where: { tenantId, employeeId, year: targetYear },
@@ -93,6 +93,62 @@ export class LeaveService {
     });
 
     return result;
+  }
+
+  /**
+   * Cuti panjang / cuti besar (UU 13/2003 Art 79): masa kerja terus-menerus
+   * >= 6 tahun -> hak istirahat >= 2 bulan (diambil 2 x 30 hari kalender).
+   * Mengembalikan status kelayakan + sisa hak (terpakai = request APPROVED
+   * pada jenis cuti berkode LONG). Bila tenant belum mengonfigurasi jenis
+   * LONG, kelayakan tetap dilaporkan agar HR tahu langkah berikutnya.
+   */
+  async getLongLeaveStatus(tenantId: string, employeeId: string, asOf?: Date) {
+    const LONG_LEAVE_CODE = 'LONG';
+    const ENTITLED_DAYS = 60;
+
+    const employee = await this.employeeService.findById(tenantId, employeeId);
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+    const refDate = asOf ?? new Date();
+    if (!employee.startDate) {
+      return { employeeId, eligible: false, reason: 'NO_START_DATE' as const };
+    }
+
+    const months = calendarMonthsBetween(new Date(employee.startDate), refDate);
+    const yearsOfService = Math.floor(months / 12);
+    if (yearsOfService < 6) {
+      return { employeeId, eligible: false, yearsOfService, reason: 'UNDER_6_YEARS' as const };
+    }
+
+    const longType = await this.prisma.leaveType.findFirst({
+      where: { tenantId, code: LONG_LEAVE_CODE, isActive: true },
+    });
+    if (!longType) {
+      return {
+        employeeId,
+        eligible: true,
+        yearsOfService,
+        entitledDays: ENTITLED_DAYS,
+        reason: 'TYPE_NOT_CONFIGURED' as const,
+      };
+    }
+
+    const used = await this.prisma.leaveRequest.findMany({
+      where: { tenantId, employeeId, leaveTypeId: longType.id, status: RequestStatus.APPROVED },
+      select: { totalDays: true },
+    });
+    const usedDays = used.reduce((s, r) => s + Number(r.totalDays), 0);
+
+    return {
+      employeeId,
+      eligible: true,
+      yearsOfService,
+      leaveTypeId: longType.id,
+      entitledDays: ENTITLED_DAYS,
+      usedDays,
+      remainingDays: Math.max(0, ENTITLED_DAYS - usedDays),
+    };
   }
 
   async applyCarryForward(tenantId: string, fromYear: number, toYear: number) {

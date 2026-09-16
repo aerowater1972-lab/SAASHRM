@@ -11,7 +11,7 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
 
   const mockPrisma = {
     leaveType: { findFirst: jest.fn() },
-    leaveRequest: { findFirst: jest.fn(), create: jest.fn() },
+    leaveRequest: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     leaveBalance: { findUnique: jest.fn(), update: jest.fn() },
     featureFlag: { findFirst: jest.fn() },
   };
@@ -114,5 +114,39 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
 
     expect(mockPrisma.featureFlag.findFirst).not.toHaveBeenCalled();
     expect(mockEmployeeService.findById).not.toHaveBeenCalled();
+  });
+
+  describe('getLongLeaveStatus (UU 13/2003 Art 79)', () => {
+    it('eligible bila masa kerja >= 6 tahun, sisa = 60 - terpakai', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', startDate: new Date('2016-02-01') });
+      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-long' });
+      mockPrisma.leaveRequest.findMany.mockResolvedValue([{ totalDays: 30 }]);
+
+      const r = await service.getLongLeaveStatus('nusantara', 'emp-1');
+
+      expect(r.eligible).toBe(true);
+      expect(r).toEqual(expect.objectContaining({ yearsOfService: expect.any(Number), entitledDays: 60, usedDays: 30, remainingDays: 30 }));
+      expect(r.yearsOfService).toBeGreaterThanOrEqual(6);
+    });
+
+    it('tidak eligible bila < 6 tahun', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-2', startDate: new Date('2024-01-15') });
+
+      const r = await service.getLongLeaveStatus('nusantara', 'emp-2');
+
+      expect(r.eligible).toBe(false);
+      expect((r as any).reason).toBe('UNDER_6_YEARS');
+      expect(mockPrisma.leaveType.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('eligible tapi beri tahu bila jenis LONG belum dikonfigurasi', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', startDate: new Date('2016-02-01') });
+      mockPrisma.leaveType.findFirst.mockResolvedValue(null);
+
+      const r = await service.getLongLeaveStatus('nusantara', 'emp-1');
+
+      expect(r.eligible).toBe(true);
+      expect((r as any).reason).toBe('TYPE_NOT_CONFIGURED');
+    });
   });
 });

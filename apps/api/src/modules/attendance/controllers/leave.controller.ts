@@ -76,6 +76,14 @@ export class LeaveController {
     return this.leaveService.applyCarryForward(tenantId, dto.fromYear, dto.toYear);
   }
 
+  @Get('long-leave/status')
+  @Permissions('leave-requests:read')
+  @ApiOperation({ summary: 'Kelayakan + sisa cuti panjang 6 tahun (UU 13/2003 Art 79)' })
+  @ApiQuery({ name: 'employeeId', required: true })
+  getLongLeaveStatus(@TenantId() tenantId: string, @Query('employeeId') employeeId: string) {
+    return this.leaveService.getLongLeaveStatus(tenantId, employeeId);
+  }
+
   @Post('leave-requests')
   @Permissions('leave-requests:create')
   @ApiOperation({ summary: 'Create leave request' })
