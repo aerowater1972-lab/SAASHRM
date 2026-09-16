@@ -32,7 +32,7 @@ export async function rejectLeaveRequest(id: string, reason: string): Promise<Le
 }
 
 export async function cancelLeaveRequest(id: string): Promise<void> {
-  return api.put(`/attendance/leave-requests/${id}/cancel`, {});
+  return api.put(`/attendance/leave-requests/${id}`, {});
 }
 
 export async function fetchLeaveTypes(): Promise<LeaveType[]> {

@@ -11,7 +11,7 @@ export async function createCalibration(data: any): Promise<CalibrationSession> 
 }
 
 export async function finalizeCalibration(id: string): Promise<CalibrationSession> {
-  return api.put(`/performance/calibrations/${id}/finalize`, {});
+  return api.post(`/performance/calibrations/${id}/finalize`, {});
 }
 
 export async function fetchCyclesLookup(): Promise<any[]> {

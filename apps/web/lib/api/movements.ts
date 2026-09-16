@@ -11,20 +11,20 @@ export async function createMovement(data: any): Promise<MovementRequest> {
 }
 
 export async function approveMovement(id: string): Promise<MovementRequest> {
-  return api.put(`/employees/movements/${id}/approve`, {});
+  return api.post(`/employees/movements/${id}/approve`, {});
 }
 
 export async function rejectMovement(id: string): Promise<MovementRequest> {
-  return api.put(`/employees/movements/${id}/reject`, {});
+  return api.post(`/employees/movements/${id}/reject`, {});
 }
 
 export async function fetchDepartments(): Promise<any[]> {
-  const res: any = await api.get('/employees/organization/departments');
+  const res: any = await api.get('/departments');
   return Array.isArray(res) ? res : (res.data ?? []);
 }
 
 export async function fetchPositions(): Promise<any[]> {
-  const res: any = await api.get('/employees/organization/positions');
+  const res: any = await api.get('/positions');
   return Array.isArray(res) ? res : (res.data ?? []);
 }
 

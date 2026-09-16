@@ -52,7 +52,7 @@ export async function createRequisition(data: any): Promise<any> {
 }
 
 export async function updateRequisitionStatus(id: string, status: string): Promise<any> {
-  return api.put(`/recruitment/requisitions/${id}`, { status });
+  return api.put(`/recruitment/requisitions/${id}/status`, { status });
 }
 
 export async function getPipeline(): Promise<Record<string, Application[]>> {

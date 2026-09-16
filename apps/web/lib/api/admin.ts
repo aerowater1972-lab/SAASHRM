@@ -49,17 +49,36 @@ export async function updateTenant(id: string, data: Partial<CreateTenantInput>)
   return api.put<Tenant>(`/admin/tenants/${id}`, data);
 }
 
-export async function fetchUsers(): Promise<User[]> {
-  const res = await api.get<any>('/admin/users');
-  return Array.isArray(res) ? res : (res.data ?? []);
+export async function fetchUsers(params?: { page?: number; limit?: number; status?: string; search?: string }): Promise<{ data: User[]; total: number; page: number; pageSize: number }> {
+  const res = await api.get<any>('/admin/users', { params });
+  if (Array.isArray(res)) return { data: res, total: res.length, page: 1, pageSize: res.length };
+  return res;
 }
 
 export async function createUser(data: CreateUserInput): Promise<User> {
   return api.post<User>('/admin/users', data);
 }
 
-export async function fetchAuditLogs(): Promise<AuditLog[]> {
-  return api.get<AuditLog[]>('/admin/audit-logs');
+export async function updateUser(id: string, data: Partial<CreateUserInput>): Promise<User> {
+  return api.patch<User>(`/admin/users/${id}`, data);
+}
+
+export async function deactivateUser(id: string): Promise<User> {
+  return api.post<User>(`/admin/users/${id}/deactivate`);
+}
+
+export async function activateUser(id: string): Promise<User> {
+  return api.post<User>(`/admin/users/${id}/activate`);
+}
+
+export async function resetUserPassword(id: string, password?: string): Promise<User> {
+  return api.post<User>(`/admin/users/${id}/reset-password`, password ? { password } : undefined);
+}
+
+export async function fetchAuditLogs(params?: { page?: number; limit?: number; module?: string; entity?: string; action?: string }): Promise<{ data: AuditLog[]; total: number; page: number; pageSize: number }> {
+  const res = await api.get<any>('/admin/audit-logs', { params });
+  if (Array.isArray(res)) return { data: res, total: res.length, page: 1, pageSize: res.length };
+  return res;
 }
 
 export async function fetchWorkflows(): Promise<WorkflowDefinition[]> {
@@ -68,6 +87,10 @@ export async function fetchWorkflows(): Promise<WorkflowDefinition[]> {
 
 export async function createWorkflow(data: CreateWorkflowInput): Promise<WorkflowDefinition> {
   return api.post<WorkflowDefinition>('/admin/workflows', data);
+}
+
+export async function updateWorkflow(id: string, data: Partial<CreateWorkflowInput>): Promise<WorkflowDefinition> {
+  return api.put<WorkflowDefinition>(`/admin/workflows/${id}`, data);
 }
 
 export async function fetchFeatureFlags(): Promise<FeatureFlag[]> {
@@ -80,4 +103,8 @@ export async function toggleFeatureFlag(id: string, enabled: boolean): Promise<F
 
 export async function fetchIntegrations(): Promise<Integration[]> {
   return api.get<Integration[]>('/admin/integrations');
+}
+
+export async function bulkImportEmployees(data: { rows: Record<string, string>[] }): Promise<any> {
+  return api.post('/admin/import/employees', data);
 }
