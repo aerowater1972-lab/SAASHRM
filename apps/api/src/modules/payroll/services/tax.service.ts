@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { CreateTaxConfigDto, TaxCalculationDto } from '../dto/tax-config.dto';
+import { AnnualMonthInput } from '../dto/annual-tax.dto';
 
 @Injectable()
 export class TaxService {
@@ -223,5 +224,161 @@ export class TaxService {
       periodId: dto.periodId,
       ...result,
     };
+  }
+
+  /**
+   * Rekonsiliasi PPh21 tahunan (wajib tiap Desember / akhir masa kerja):
+   *   bruto setahun - biaya jabatan (5%, maks 500rb x n bulan)
+   *   - iuran karyawan - potongan lain = neto setahun
+   *   PKP = floor(neto - PTKP, ribuan) -> tarif progresif UU HPP
+   *   adjustment Desember = terutang setahun - sudah dipotong (TER).
+   * Negatif berarti lebih bayar -> dikompensasi ke karyawan.
+   * Menerima entri bulanan eksplisit (auditable); tidak menebak dari slip.
+   */
+  async calculateAnnual(
+    tenantId: string,
+    dto: { employeeId: string; year: number; months: AnnualMonthInput[] },
+  ) {
+    const employee = await this.employeeService.findById(tenantId, dto.employeeId);
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (!dto.months || dto.months.length === 0) {
+      throw new BadRequestException('months wajib diisi minimal 1 bulan');
+    }
+
+    const grossAnnual = this.round2(dto.months.reduce((s, m) => s + Number(m.gross || 0), 0));
+    const bpjsAnnual = this.round2(dto.months.reduce((s, m) => s + Number(m.bpjsEmployee || 0), 0));
+    const otherDeductions = this.round2(dto.months.reduce((s, m) => s + Number(m.otherDeductions || 0), 0));
+    const totalWithheld = this.round2(dto.months.reduce((s, m) => s + Number(m.terWithheld || 0), 0));
+
+    const biayaJabatan = Math.min(this.round2(grossAnnual * 0.05), 500000 * dto.months.length);
+    const netAnnual = this.round2(grossAnnual - biayaJabatan - bpjsAnnual - otherDeductions);
+
+    const parsed = this.parsePtkpCategory((employee as any).ptkpCategory);
+    const ptkpCategory = parsed
+      ? (parsed.married ? `K/${parsed.dependents}` : `TK/${parsed.dependents}`)
+      : 'TK/0';
+    const ptkp = this.getPtkp(
+      parsed ? (parsed.married ? 'MARRIED' : 'SINGLE') : (employee.maritalStatus ?? 'SINGLE'),
+      parsed ? parsed.dependents : 0,
+    );
+
+    const pkp = Math.max(0, Math.floor((netAnnual - ptkp) / 1000) * 1000);
+    const { tax: annualTax, brackets } = this.calculateProgressive(pkp);
+    const adjustment = this.round2(annualTax - totalWithheld);
+
+    return {
+      employeeId: dto.employeeId,
+      employeeName: employee.fullName,
+      year: dto.year,
+      ptkpCategory,
+      months: dto.months.length,
+      grossAnnual,
+      biayaJabatan,
+      bpjsAnnual,
+      otherDeductions,
+      netAnnual,
+      ptkp,
+      pkp,
+      annualTax: this.round2(annualTax),
+      totalWithheld,
+      adjustment,
+      brackets,
+      note: adjustment < 0
+        ? 'Lebih bayar: kompensasikan ke karyawan (restitusi/kompensasi masa berikutnya)'
+        : 'Kurang bayar: potongkan pada masa pajak Desember',
+    };
+  }
+
+  async finalizeAnnual(
+    tenantId: string,
+    dto: { employeeId: string; year: number; months: AnnualMonthInput[] },
+    userId?: string,
+  ) {
+    const calc: any = await this.calculateAnnual(tenantId, dto);
+    return (this.prisma as any).annualTaxRecord.upsert({
+      where: { tenantId_employeeId_year: { tenantId, employeeId: dto.employeeId, year: dto.year } },
+      update: {
+        grossAnnual: calc.grossAnnual,
+        biayaJabatan: calc.biayaJabatan,
+        bpjsAnnual: calc.bpjsAnnual,
+        otherDeductions: calc.otherDeductions,
+        netAnnual: calc.netAnnual,
+        ptkpCategory: calc.ptkpCategory,
+        ptkp: calc.ptkp,
+        pkp: calc.pkp,
+        annualTax: calc.annualTax,
+        totalWithheld: calc.totalWithheld,
+        adjustment: calc.adjustment,
+        status: 'FINAL',
+        finalizedBy: userId,
+        finalizedAt: new Date(),
+        monthly: dto.months as any,
+      },
+      create: {
+        tenantId,
+        employeeId: dto.employeeId,
+        year: dto.year,
+        grossAnnual: calc.grossAnnual,
+        biayaJabatan: calc.biayaJabatan,
+        bpjsAnnual: calc.bpjsAnnual,
+        otherDeductions: calc.otherDeductions,
+        netAnnual: calc.netAnnual,
+        ptkpCategory: calc.ptkpCategory,
+        ptkp: calc.ptkp,
+        pkp: calc.pkp,
+        annualTax: calc.annualTax,
+        totalWithheld: calc.totalWithheld,
+        adjustment: calc.adjustment,
+        status: 'FINAL',
+        finalizedBy: userId,
+        finalizedAt: new Date(),
+        monthly: dto.months as any,
+      },
+    });
+  }
+
+  /**
+   * Payload data bukti potong 1721-A1 dari record FINAL (representasi
+   * data terstruktur; rendering PDF formulir mengikuti pola slip teks).
+   */
+  async generateA1(tenantId: string, employeeId: string, year: number) {
+    const record = await (this.prisma as any).annualTaxRecord.findUnique({
+      where: { tenantId_employeeId_year: { tenantId, employeeId, year } },
+    });
+    if (!record) throw new NotFoundException('Belum ada rekonsiliasi FINAL untuk karyawan/tahun ini');
+    const employee: any = await this.employeeService.findById(tenantId, employeeId);
+    const monthly: any[] = Array.isArray(record.monthly) ? record.monthly : [];
+    return {
+      form: '1721-A1',
+      year,
+      employee: {
+        name: employee?.fullName,
+        taxIdNumber: employee?.taxIdNumber ?? null,
+        address: employee?.address ?? null,
+      },
+      ptkpCategory: record.ptkpCategory,
+      totals: {
+        grossAnnual: Number(record.grossAnnual),
+        biayaJabatan: Number(record.biayaJabatan),
+        bpjsAnnual: Number(record.bpjsAnnual),
+        netAnnual: Number(record.netAnnual),
+        ptkp: Number(record.ptkp),
+        pkp: Number(record.pkp),
+        annualTax: Number(record.annualTax),
+        totalWithheld: Number(record.totalWithheld),
+        adjustment: Number(record.adjustment),
+      },
+      monthly: monthly.map((m: any) => ({
+        month: m.month,
+        gross: Number(m.gross || 0),
+        terWithheld: Number(m.terWithheld || 0),
+      })),
+      status: record.status,
+      finalizedAt: record.finalizedAt,
+    };
+  }
+
+  private round2(n: number): number {
+    return Math.round(n * 100) / 100;
   }
 }

@@ -4,8 +4,10 @@ import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { TaxService } from '../services/tax.service';
 import { CreateTaxConfigDto, TaxCalculationDto } from '../dto/tax-config.dto';
+import { AnnualReconcileDto } from '../dto/annual-tax.dto';
 
 @ApiTags('Payroll - Tax (PPh 21)')
 @ApiBearerAuth()
@@ -44,5 +46,34 @@ export class TaxController {
   @ApiOperation({ summary: 'Calculate PPh 21 for an employee in a period' })
   calculate(@TenantId() tenantId: string, @Body() dto: TaxCalculationDto) {
     return this.taxService.calculate(tenantId, dto);
+  }
+
+  @Post('annual-reconcile')
+  @Permissions('payroll:tax:read')
+  @ApiOperation({ summary: 'Preview rekonsiliasi PPh21 tahunan (tanpa simpan)' })
+  reconcilePreview(@TenantId() tenantId: string, @Body() dto: AnnualReconcileDto) {
+    return this.taxService.calculateAnnual(tenantId, dto);
+  }
+
+  @Post('annual-finalize')
+  @Permissions('payroll:tax:update')
+  @ApiOperation({ summary: 'Finalisasi rekonsiliasi tahunan (simpan record FINAL)' })
+  finalize(
+    @TenantId() tenantId: string,
+    @Body() dto: AnnualReconcileDto,
+    @CurrentUser('sub') userId?: string,
+  ) {
+    return this.taxService.finalizeAnnual(tenantId, dto, userId);
+  }
+
+  @Get('annual-a1/:employeeId/:year')
+  @Permissions('payroll:tax:read')
+  @ApiOperation({ summary: 'Data bukti potong 1721-A1 dari record FINAL' })
+  generateA1(
+    @TenantId() tenantId: string,
+    @Param('employeeId') employeeId: string,
+    @Param('year') year: string,
+  ) {
+    return this.taxService.generateA1(tenantId, employeeId, Number(year));
   }
 }

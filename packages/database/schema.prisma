@@ -392,6 +392,7 @@ model Employee {
   finalScoresCalibrated          FinalScore[]              @relation("final_score_calibrator")
   payrollAdjustments             PayrollAdjustment[]
   thrRecords                   ThrRecord[]
+  annualTaxRecords             AnnualTaxRecord[]
   finalScores                    FinalScore[]
   movementRequests               MovementRequest[]
   essNotifications               EssNotification[]
@@ -1095,6 +1096,38 @@ model TaxConfig {
   updatedAt     DateTime        @updatedAt
 
   @@unique([tenantId, taxMethod, effectiveDate])
+}
+
+// Rekonsiliasi PPh21 tahunan + bukti potong 1721-A1.
+// monthly: gema 12 entri {month, gross, bpjsEmployee, otherDeductions, terWithheld}.
+// adjustment = annualTax - totalWithheld (negatif = lebih bayar, dikompensasi).
+model AnnualTaxRecord {
+  id              String   @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  year            Int
+  grossAnnual     Decimal  @db.Decimal(18, 2)
+  biayaJabatan    Decimal  @db.Decimal(18, 2)
+  bpjsAnnual      Decimal  @db.Decimal(18, 2)
+  otherDeductions Decimal  @default(0) @db.Decimal(18, 2)
+  netAnnual       Decimal  @db.Decimal(18, 2)
+  ptkpCategory    String
+  ptkp            Decimal  @db.Decimal(18, 2)
+  pkp             Decimal  @db.Decimal(18, 2)
+  annualTax       Decimal  @db.Decimal(18, 2)
+  totalWithheld   Decimal  @db.Decimal(18, 2)
+  adjustment      Decimal  @db.Decimal(18, 2)
+  status          String   @default("DRAFT") // DRAFT | FINAL
+  finalizedBy     String?
+  finalizedAt     DateTime?
+  monthly         Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([tenantId, employeeId, year])
+  @@index([tenantId, year])
 }
 
 // THR Keagamaan (Permenaker 6/2016): 1 bulan upah bila masa kerja >= 12
