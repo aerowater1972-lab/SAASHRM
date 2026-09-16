@@ -39,12 +39,20 @@ export default function LeavesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Cuti</h1>
           <p className="text-sm text-muted-foreground">Kelola pengajuan cuti dan saldo cuti karyawan</p>
         </div>
-        <Link href="/leaves/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Ajukan Cuti
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/leaves/team-calendar">
+            <Button variant="outline">
+              <CalendarDays className="mr-2 h-4 w-4" />
+              Kalender Tim
+            </Button>
+          </Link>
+          <Link href="/leaves/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Ajukan Cuti
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {errorMessage && (

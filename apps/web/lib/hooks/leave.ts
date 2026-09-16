@@ -11,6 +11,7 @@ import {
   createLeaveType,
   updateLeaveType,
   fetchLeaveBalances,
+  fetchTeamCalendar,
   type LeaveListParams,
 } from '@/lib/api/leave';
 import type { LeaveRequestInput, LeaveTypeInput } from '@/lib/schemas/leave';
@@ -97,5 +98,12 @@ export function useLeaveBalances() {
   return useQuery({
     queryKey: ['leave-balances'],
     queryFn: fetchLeaveBalances,
+  });
+}
+
+export function useTeamCalendar(startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['team-calendar', startDate, endDate],
+    queryFn: () => fetchTeamCalendar(startDate, endDate),
   });
 }

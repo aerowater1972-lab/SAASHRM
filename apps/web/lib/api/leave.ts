@@ -54,3 +54,16 @@ export async function updateLeaveType(id: string, data: Partial<LeaveTypeInput>)
 export async function fetchLeaveBalances(): Promise<LeaveBalance[]> {
   return api.get<LeaveBalance[]>('/attendance/balances');
 }
+
+export interface TeamCalendarDay {
+  date: string;
+  leaves: Array<{ employeeName: string; leaveType: string }>;
+  holiday?: string;
+}
+
+export async function fetchTeamCalendar(startDate?: string, endDate?: string): Promise<{ leaves: any[]; holidays: any[] }> {
+  const params: Record<string, unknown> = {};
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  return api.get('/attendance/team-calendar', { params });
+}
