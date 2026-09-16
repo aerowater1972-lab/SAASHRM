@@ -393,6 +393,7 @@ model Employee {
   payrollAdjustments             PayrollAdjustment[]
   thrRecords                   ThrRecord[]
   annualTaxRecords             AnnualTaxRecord[]
+  severanceCases               SeveranceCase[]
   finalScores                    FinalScore[]
   movementRequests               MovementRequest[]
   essNotifications               EssNotification[]
@@ -1175,6 +1176,39 @@ enum ThrRunStatus {
   APPROVED
   PAID
   CANCELLED
+}
+
+// Pesangon & kompensasi akhir hubungan kerja (PP 35/2021):
+// UP = Uang Pesangon (masa kerja), UPMK = penghargaan masa kerja,
+// UPH = penggantian hak 15% x (UP+UPMK). Pengali per sebab PHK mengikuti
+// matriks PP 35/2021 (lihat komentar di SeveranceService — wajib review
+// biro hukum sebelum dipakai untuk kasus sengketa).
+// CONTRACT_END = kompensasi PKWT (1 bln upah per 12 bln, proporsional).
+model SeveranceCase {
+  id             String   @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  cause          String // RESIGNATION | TERMINATION | EFFICIENCY | RETIREMENT | DEATH | MISCONDUCT | ILLNESS | CONTRACT_END
+  terminationDate DateTime @map("termination_date") @db.Date
+  tenureMonths   Int      @map("tenure_months")
+  wageBase       Decimal  @db.Decimal(18, 2)
+  upAmount       Decimal  @default(0) @map("up_amount") @db.Decimal(18, 2)
+  upmkAmount     Decimal  @default(0) @map("upmk_amount") @db.Decimal(18, 2)
+  uphAmount      Decimal  @default(0) @map("uph_amount") @db.Decimal(18, 2)
+  pisahAmount    Decimal  @default(0) @map("pisah_amount") @db.Decimal(18, 2)
+  totalAmount    Decimal  @db.Decimal(18, 2)
+  status         String   @default("DRAFT") // DRAFT | APPROVED | PAID | CANCELLED
+  decidedBy      String?  @map("decided_by")
+  decidedAt      DateTime? @map("decided_at")
+  paidAt         DateTime? @map("paid_at")
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([employeeId])
 }
 
 // =======================================================================

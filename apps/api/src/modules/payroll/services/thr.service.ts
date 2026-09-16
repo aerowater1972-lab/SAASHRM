@@ -3,6 +3,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { PayrollAdjustmentService } from './payroll-adjustment.service';
 import { CreateThrRunDto } from '../dto/thr.dto';
+import { calendarMonthsBetween, computeWageBase } from './wage-base.util';
 
 /**
  * THR Keagamaan (Permenaker 6/2016):
@@ -130,23 +131,11 @@ export class ThrService {
   /** Bulan kalender penuh startDate -> holidayDate, dibatasi 0..12. */
   monthsWorked(startDate: Date | null, holiday: Date): number {
     if (!startDate || Number.isNaN(+startDate)) return 0;
-    let months = (holiday.getFullYear() - startDate.getFullYear()) * 12 + (holiday.getMonth() - startDate.getMonth());
-    if (holiday.getDate() < startDate.getDate()) months -= 1;
-    return Math.max(0, Math.min(12, months));
+    return Math.max(0, Math.min(12, calendarMonthsBetween(startDate, holiday)));
   }
 
-  /** Upah THR = gaji pokok (grade) + komponen FIXED earning aktif. */
+  /** Upah THR = gaji pokok (grade) + tunjangan TETAP aktif (definisi bersama). */
   private async wageBase(tenantId: string, employee: any): Promise<number> {
-    const baseSalary = Number(employee?.employments?.[0]?.grade?.level || 0) * 1000000 || 0;
-    const fixed = await this.prisma.payrollComponent.findMany({
-      where: {
-        tenantId,
-        isActive: true,
-        calculationMethod: 'FIXED',
-        type: { in: ['EARNING', 'ALLOWANCE'] as any },
-      } as any,
-    });
-    const allowances = (fixed as any[]).reduce((s, c) => s + Number(c.defaultValue ?? c.value ?? 0), 0);
-    return baseSalary + allowances;
+    return computeWageBase(this.prisma, tenantId, employee);
   }
 }

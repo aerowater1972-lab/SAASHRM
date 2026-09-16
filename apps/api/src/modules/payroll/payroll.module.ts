@@ -10,6 +10,7 @@ import { SalaryComponentController } from './controllers/salary-component.contro
 import { BankTransferController } from './controllers/bank-transfer.controller';
 import { PayrollAdjustmentController } from './controllers/payroll-adjustment.controller';
 import { ThrController } from './controllers/thr.controller';
+import { SeveranceController } from './controllers/severance.controller';
 import { ComponentService } from './services/component.service';
 import { PeriodService } from './services/period.service';
 import { RunService } from './services/run.service';
@@ -18,6 +19,7 @@ import { BpjsService } from './services/bpjs.service';
 import { TaxService } from './services/tax.service';
 import { PayrollAdjustmentService } from './services/payroll-adjustment.service';
 import { ThrService } from './services/thr.service';
+import { SeveranceService } from './services/severance.service';
 import { PayrollEventConsumer } from './services/payroll-event.consumer';
 
 @Module({
@@ -33,6 +35,7 @@ import { PayrollEventConsumer } from './services/payroll-event.consumer';
     BankTransferController,
     PayrollAdjustmentController,
     ThrController,
+    SeveranceController,
   ],
   providers: [
     ComponentService,
@@ -43,6 +46,7 @@ import { PayrollEventConsumer } from './services/payroll-event.consumer';
     TaxService,
     PayrollAdjustmentService,
     ThrService,
+    SeveranceService,
     PayrollEventConsumer,
   ],
   exports: [
@@ -54,6 +58,7 @@ import { PayrollEventConsumer } from './services/payroll-event.consumer';
     TaxService,
     PayrollAdjustmentService,
     ThrService,
+    SeveranceService,
   ],
 })
 export class PayrollModule {}
