@@ -401,6 +401,7 @@ export interface LeaveRequest {
   approvedBy?: string;
   approvedAt?: string;
   isUrgent: boolean;
+  escalated: boolean;
   employee?: Employee;
   leaveType?: LeaveType;
 }
@@ -831,6 +832,7 @@ export interface Training {
   title: string;
   description?: string;
   type: string;
+  category?: string;
   provider?: string;
   startDate: string;
   endDate: string;
@@ -838,6 +840,8 @@ export interface Training {
   capacity?: number;
   status: string;
   participants?: TrainingParticipant[];
+  recommendedViolationCategory?: { id: string; name: string; code: string };
+  recommendedViolationCategoryId?: string;
 }
 
 export interface TrainingParticipant {
@@ -912,4 +916,423 @@ export interface FinalSettlement {
   loanDeduction: number;
   netPayout: number;
   status: string;
+}
+
+// =======================================================================
+// Employee Engagement Survey
+// =======================================================================
+
+export type SurveyType = 'ENPS' | 'PULSE' | 'CUSTOM';
+export type SurveyStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
+export type QuestionType = 'LIKERT_5' | 'LIKERT_7' | 'MULTIPLE_CHOICE' | 'SINGLE_CHOICE' | 'FREE_TEXT' | 'NPS';
+export type ActionItemStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface EngagementSurvey {
+  id: string;
+  tenantId: string;
+  title: string;
+  type: SurveyType;
+  isAnonymous: boolean;
+  targetScope?: string;
+  startDate: string;
+  endDate: string;
+  status: SurveyStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  questions?: SurveyQuestion[];
+  actionItems?: SurveyActionItem[];
+  _count?: { responses: number; actionItems: number };
+}
+
+export interface SurveyQuestion {
+  id: string;
+  surveyId: string;
+  questionText: string;
+  questionType: QuestionType;
+  options?: string;
+  isRequired: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyId: string;
+  questionId: string;
+  employeeId?: string;
+  answerValue: string;
+  submittedAt: string;
+}
+
+export interface SurveyActionItem {
+  id: string;
+  surveyId: string;
+  title: string;
+  description?: string;
+  assigneeId: string;
+  dueDate: string;
+  status: ActionItemStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SurveyResults {
+  survey: EngagementSurvey;
+  totalResponses: number;
+  totalRespondents: number;
+  minThreshold: number;
+  thresholdMet: boolean;
+  questions: SurveyQuestionResult[];
+  departmentBreakdown?: DepartmentSurveyResult[];
+}
+
+export interface SurveyQuestionResult {
+  id: string;
+  questionText: string;
+  questionType: QuestionType;
+  isRequired: boolean;
+  order: number;
+  stats: QuestionStats;
+}
+
+export interface QuestionStats {
+  count: number;
+  respondentCount: number;
+  thresholdMet: boolean;
+  average?: number;
+  enps?: number;
+  promoters?: number;
+  passives?: number;
+  detractors?: number;
+  distribution?: { option?: string; value?: number; count: number }[];
+  textAnswers?: string[];
+}
+
+export interface DepartmentSurveyResult {
+  departmentId: string;
+  departmentName: string;
+  respondentCount: number;
+  questions: SurveyQuestionResult[];
+}
+
+export interface EnpsTrend {
+  period: string;
+  enpsScore: number;
+  totalResponses: number;
+}
+
+// =======================================================================
+// Manpower Planning
+// =======================================================================
+
+export type ManpowerPlanStatus = 'DRAFT' | 'SUBMITTED' | 'HR_REVIEW' | 'FINANCE_REVIEW' | 'APPROVED' | 'REJECTED';
+export type ManpowerType = 'NEW' | 'REPLACEMENT';
+
+export interface ManpowerPlan {
+  id: string;
+  tenantId: string;
+  departmentId: string;
+  period: string;
+  version: number;
+  status: ManpowerPlanStatus;
+  submittedBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  items?: ManpowerPlanItem[];
+  department?: Department;
+  approvalHistory?: ManpowerPlanApproval[];
+  _count?: { items: number };
+}
+
+export interface ManpowerPlanItem {
+  id: string;
+  manpowerPlanId: string;
+  positionTitle: string;
+  gradeId?: string;
+  quantity: number;
+  type: ManpowerType;
+  estimatedCost?: number;
+  createdAt: string;
+  updatedAt: string;
+  jobRequisitions?: { id: string; title: string; status: string }[];
+  grade?: Grade;
+}
+
+export interface ManpowerPlanApproval {
+  id: string;
+  planId: string;
+  action: 'APPROVE' | 'REJECT';
+  reason?: string;
+  actedBy: string;
+  actedAt: string;
+  actor?: { id: string; fullName: string };
+}
+
+export interface PlanVsActualItem {
+  departmentId: string;
+  departmentName: string;
+  period: string;
+  plannedHeadcount: number;
+  actualHeadcount: number;
+  plannedCost: number;
+  actualCost: number;
+  varianceHeadcount: number;
+  varianceCost: number;
+  fulfillmentRate: number;
+}
+
+export interface DepartmentCompilation {
+  departmentId: string;
+  departmentName: string;
+  planned: number;
+  cost: number;
+}
+
+export interface CompilationDashboardItem {
+  period: string;
+  totalPlanned: number;
+  totalCost: number;
+  approvedCost: number;
+  departmentBreakdown: DepartmentCompilation[];
+}
+
+// =======================================================================
+// LMS (Learning Management System)
+// =======================================================================
+
+export interface Course {
+  id: string;
+  tenantId: string;
+  title: string;
+  description?: string;
+  category?: string;
+  imageUrl?: string;
+  duration?: number;
+  status: CourseEnrollmentStatus;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  modules?: CourseModule[];
+  courseTrainees?: CourseTrainee[];
+  _count?: { courseTrainees: number };
+}
+
+export interface CourseModule {
+  id: string;
+  courseId: string;
+  title: string;
+  description?: string;
+  order: number;
+  createdAt: string;
+  lessons?: Lesson[];
+  quizzes?: Quiz[];
+}
+
+export interface Lesson {
+  id: string;
+  courseModuleId: string;
+  title: string;
+  content?: string;
+  order: number;
+  duration?: number;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface Quiz {
+  id: string;
+  courseModuleId: string;
+  title: string;
+  description?: string;
+  createdAt: string;
+  quizQuestions?: QuizQuestion[];
+}
+
+export interface QuizQuestion {
+  id: string;
+  quizId: string;
+  question: string;
+  options?: string[];
+  correctAnswer?: string;
+  order: number;
+  createdAt: string;
+}
+
+export interface QuizAttempt {
+  id: string;
+  courseTraineeId: string;
+  quizId: string;
+  score?: number;
+  maxScore?: number;
+  startedAt: string;
+  completedAt?: string;
+  createdAt: string;
+}
+
+export interface CourseTrainee {
+  id: string;
+  courseId: string;
+  employeeId: string;
+  status: CourseEnrollmentStatus;
+  enrolledAt: string;
+  completedAt?: string;
+  createdAt: string;
+  employee?: { id: string; fullName: string; employeeId: string };
+}
+
+export enum CourseEnrollmentStatus {
+  ENROLLED = 'ENROLLED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  DROPPED = 'DROPPED',
+}
+
+// =======================================================================
+// 360 Feedback
+// =======================================================================
+
+export interface Feedback360 {
+  id: string;
+  tenantId: string;
+  revieweeId: string;
+  reviewerId?: string;
+  reviewerType: FeedbackReviewerType;
+  status: FeedbackStatus;
+  allowAnonymous: boolean;
+  dueDate?: string;
+  createdAt: string;
+  updatedAt: string;
+  reviewee?: { id: string; fullName: string; employeeId: string };
+  reviewer?: { id: string; fullName: string; employeeId: string };
+  questions?: Feedback360Question[];
+  responses?: Feedback360Response[];
+}
+
+export enum FeedbackReviewerType {
+  SELF = 'SELF',
+  MANAGER = 'MANAGER',
+  PEER = 'PEER',
+  DIRECT_REPORT = 'DIRECT_REPORT',
+  CUSTOM = 'CUSTOM',
+}
+
+export enum FeedbackStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  REVIEWED = 'REVIEWED',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export interface Feedback360Question {
+  id: string;
+  feedback360Id: string;
+  question: string;
+  order: number;
+  createdAt: string;
+}
+
+export interface Feedback360Response {
+  id: string;
+  feedback360Id: string;
+  questionId: string;
+  reviewerId: string;
+  score: number;
+  comment?: string;
+  createdAt: string;
+  reviewer?: { fullName: string };
+}
+
+export interface Feedback360Summary {
+  employeeId: string;
+  totalSessions: number;
+  averageScore: number;
+  topStrengths: Array<[string, number]>;
+  topImprovements: Array<[string, number]>;
+}
+
+export interface FeedbackResults {
+  feedbackId: string;
+  averageScore: number;
+  totalResponses: number;
+  responses: Feedback360Response[];
+}
+
+// =======================================================================
+// IDP (Individual Development Plan)
+// =======================================================================
+
+export interface IndividualDevelopmentPlan {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  title: string;
+  description?: string;
+  targetDate?: string;
+  status: IDPStatus;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  employee?: { id: string; fullName: string; employeeId: string };
+  activities?: IDPActivity[];
+}
+
+export enum IDPStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export interface IDPActivity {
+  id: string;
+  idpId: string;
+  title: string;
+  description?: string;
+  activityType: IDPActivityType;
+  dueDate?: string;
+  estimatedHours?: number;
+  status: IDPActivityStatus;
+  completionNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export enum IDPActivityType {
+  TRAINING = 'TRAINING',
+  CERTIFICATION = 'CERTIFICATION',
+  MENTORING = 'MENTORING',
+  PROJECT = 'PROJECT',
+  SELF_STUDY = 'SELF_STUDY',
+  OTHER = 'OTHER',
+}
+
+export enum IDPActivityStatus {
+  NOT_STARTED = 'NOT_STARTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+// =======================================================================
+// Provincial Wage (UMK/UMP)
+// =======================================================================
+
+export interface ProvincialMinimumWage {
+  id: string;
+  tenantId: string;
+  province: string;
+  year: number;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WageListParams {
+  province?: string;
+  year?: number;
 }

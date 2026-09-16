@@ -20,10 +20,15 @@ import { ApproveOvertimeDto, RejectOvertimeDto, RetroactiveApproveOvertimeDto } 
 import { ReconcileOvertimeDto } from '../dto/reconcile-overtime.dto';
 import { RequestStatus } from '@prisma/client';
 
-@ApiTags('Overtime')
+@ApiTags('Overtime (deprecated — gunakan Overtime v1.1)')
 @ApiBearerAuth()
 @UseGuards(AuthGuard, PermissionGuard)
 @Controller('attendance/overtime')
+/**
+ * @deprecated Duplikat dari OvertimeApiController (/overtime-requests).
+ * Dipertahankan agar klien lama tidak rusak; JANGAN tambah endpoint baru
+ * di sini. Lihat hasil audit integrasi frontend-backend.
+ */
 export class OvertimeController {
   constructor(private readonly overtimeService: OvertimeService) {}
 

@@ -52,6 +52,20 @@ jobs:
       - name: Build frontend
         run: npm run build -w apps/web
 
+  contract:
+    name: Frontend-Backend API contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - name: Check API contract
+        run: npm run contract
+
   e2e:
     name: Backend E2E (PostgreSQL)
     runs-on: ubuntu-latest

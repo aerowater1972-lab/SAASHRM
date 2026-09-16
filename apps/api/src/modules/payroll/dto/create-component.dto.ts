@@ -38,6 +38,12 @@ export class CreateComponentDto {
   @Min(0)
   @Type(() => Number)
   defaultValue?: number;
+  @ApiPropertyOptional({ description: 'Alias lama milik UI untuk defaultValue (FIXED). Bila defaultValue kosong, nilai ini dipakai.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  value?: number;
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

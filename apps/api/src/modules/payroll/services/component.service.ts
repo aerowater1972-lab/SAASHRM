@@ -14,7 +14,7 @@ export class ComponentService {
       throw new ConflictException(`Payroll component with code ${dto.code} already exists`);
     }
     return this.prisma.payrollComponent.create({
-      data: { tenantId, ...dto } as any,
+      data: { tenantId, ...this.toPersistence(dto) } as any,
     });
   }
 
@@ -50,8 +50,21 @@ export class ComponentService {
     }
     return this.prisma.payrollComponent.update({
       where: { id },
-      data: dto as any,
+      data: this.toPersistence(dto) as any,
     });
+  }
+
+  /**
+   * Petakan field API ke kolom Prisma: `value` (kontrak lama UI) menjadi
+   * `defaultValue` bila yang terakhir kosong; field non-kolom dibuang
+   * agar tidak bocor ke Prisma.
+   */
+  private toPersistence(dto: Partial<CreateComponentDto>): Record<string, unknown> {
+    const { value, ...rest } = dto as Partial<CreateComponentDto> & { value?: number };
+    return {
+      ...rest,
+      defaultValue: rest.defaultValue ?? value ?? undefined,
+    };
   }
 
   async remove(tenantId: string, id: string) {

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { hasPermission } from '@/lib/api';
-import { useLeaveRequest, useApproveLeaveRequest, useRejectLeaveRequest, useCancelLeaveRequest } from '@/lib/hooks/leave';
+import { useLeaveRequest, useApproveLeaveRequest, useRejectLeaveRequest, useCancelLeaveRequest, useEscalateLeaveRequest } from '@/lib/hooks/leave';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,8 @@ interface LeaveDetail {
   endDate: string;
   totalDays: number;
   status: string;
+  isUrgent?: boolean;
+  escalated?: boolean;
   reason?: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -41,6 +43,7 @@ export default function LeaveDetailPage() {
   const approveLeave = useApproveLeaveRequest();
   const rejectLeave = useRejectLeaveRequest();
   const cancelLeave = useCancelLeaveRequest();
+  const escalateLeave = useEscalateLeaveRequest();
   const [actioning, setActioning] = useState(false);
   const [notes, setNotes] = useState('');
   const [actionError, setActionError] = useState('');
@@ -82,6 +85,17 @@ export default function LeaveDetailPage() {
     } catch (e: any) { setActionError(e.message); }
     finally { setActioning(false); }
   }
+
+  async function handleEscalate() {
+    setActioning(true); setActionError('');
+    try {
+      await escalateLeave.mutateAsync(id);
+      refetch();
+    } catch (e: any) { setActionError(e.message); }
+    finally { setActioning(false); }
+  }
+
+  const needsEscalation = isPending && request?.isUrgent && !request?.escalated;
 
   return (
     <div className="space-y-6">
@@ -144,6 +158,14 @@ export default function LeaveDetailPage() {
           <CardContent className="space-y-4">
             {(canApprove) && (
               <>
+                {needsEscalation && (
+                  <div className="rounded-md bg-orange-500/10 p-3 text-sm">
+                    <p className="font-medium">Pengajuan mendesak (H-1/hari-H) — wajib dieskalasi sebelum dapat disetujui (BR-04).</p>
+                    <Button variant="outline" size="sm" className="mt-2" onClick={handleEscalate} disabled={actioning}>
+                      {actioning ? 'Memproses…' : 'Eskalasi ke Atasan'}
+                    </Button>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Catatan / Alasan</Label>
                   <textarea

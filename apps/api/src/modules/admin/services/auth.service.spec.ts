@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException, ConflictException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { PrismaService } from '@common/prisma/prisma.service';
@@ -109,6 +109,16 @@ describe('AuthService', () => {
       const dto = { email: 'test@example.com', password: 'password123', fullName: 'Test User' };
       await expect(service.register('default', dto)).rejects.toThrow(ConflictException);
       expect(mockPrisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException when ALLOW_PUBLIC_REGISTER=false', async () => {
+      (configService.get as jest.Mock).mockImplementationOnce((key: string) =>
+        key === 'ALLOW_PUBLIC_REGISTER' ? 'false' : undefined,
+      );
+
+      const dto = { email: 'new@example.com', password: 'password123', fullName: 'New User' };
+      await expect(service.register('default', dto)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
     });
   });
 

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@common/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -17,6 +17,14 @@ export class AuthService {
     tenantId: string,
     dto: { email: string; password: string; fullName: string },
   ) {
+    // Kill-switch operasional: set ALLOW_PUBLIC_REGISTER=false untuk
+    // menutup pendaftaran mandiri (default TERBUKA agar kompatibel
+    // dengan perilaku saat ini; ubah di environment produksi).
+    const allowPublicRegister =
+      (this.configService.get<string>('ALLOW_PUBLIC_REGISTER') ?? 'true').toLowerCase() !== 'false';
+    if (!allowPublicRegister) {
+      throw new ForbiddenException('Self-registration is disabled by administrator');
+    }
     const existing = await this.prisma.user.findUnique({
       where: { tenantId_email: { tenantId, email: dto.email } },
     });

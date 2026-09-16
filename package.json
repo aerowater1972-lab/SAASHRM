@@ -18,6 +18,7 @@
     "db:push": "prisma db push --schema=packages/database/schema.prisma",
     "db:seed": "node scripts/seed.js",
     "db:studio": "prisma studio --schema=packages/database/schema.prisma",
+    "contract": "node scripts/check-api-contract.js",
     "postinstall": "npm run db:generate"
   },
   "engines": {

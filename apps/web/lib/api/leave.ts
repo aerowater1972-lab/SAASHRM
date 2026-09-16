@@ -35,6 +35,10 @@ export async function cancelLeaveRequest(id: string): Promise<void> {
   return api.put(`/attendance/leave-requests/${id}`, {});
 }
 
+export async function escalateLeaveRequest(id: string): Promise<LeaveRequest> {
+  return api.post<LeaveRequest>(`/attendance/leave-requests/${id}/escalate`, {});
+}
+
 export async function fetchLeaveTypes(): Promise<LeaveType[]> {
   return api.get<LeaveType[]>('/attendance/leave-types');
 }

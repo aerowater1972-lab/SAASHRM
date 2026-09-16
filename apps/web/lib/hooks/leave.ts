@@ -6,6 +6,7 @@ import {
   approveLeaveRequest,
   rejectLeaveRequest,
   cancelLeaveRequest,
+  escalateLeaveRequest,
   fetchLeaveTypes,
   createLeaveType,
   updateLeaveType,
@@ -57,6 +58,14 @@ export function useCancelLeaveRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => cancelLeaveRequest(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-requests'] }),
+  });
+}
+
+export function useEscalateLeaveRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => escalateLeaveRequest(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-requests'] }),
   });
 }
