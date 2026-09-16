@@ -1065,6 +1065,8 @@ model BpjsConfig {
   id                  String           @id @default(uuid())
   tenantId            String
   type                BpjsType // KES, KET
+  kesEmployerRate     Decimal?         @map("kes_employer_rate") @db.Decimal(5, 4) // BPJS Kesehatan perusahaan (4%)
+  kesEmployeeRate     Decimal?         @map("kes_employee_rate") @db.Decimal(5, 4) // BPJS Kesehatan karyawan (1%)
   jkmRate             Decimal          @db.Decimal(5, 4) // e.g. 0.003 (0.3%)
   jkkRate             Decimal          @db.Decimal(5, 4) // risk-based
   jhtEmployerRate     Decimal          @db.Decimal(5, 4)
@@ -2202,6 +2204,7 @@ enum RequestStatus {
 }
 
 enum PayrollComponentType {
+  EARNING
   ALLOWANCE
   DEDUCTION
   BPJS_KES

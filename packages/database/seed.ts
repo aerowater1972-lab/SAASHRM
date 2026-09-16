@@ -870,6 +870,8 @@ async function main() {
       id: 'bpjs-kes-2026',
       tenantId: 'default',
       type: 'KES',
+      kesEmployerRate: 0.04,
+      kesEmployeeRate: 0.01,
       jkmRate: 0.003,
       jkkRate: 0.0024,
       jhtEmployerRate: 0.037,

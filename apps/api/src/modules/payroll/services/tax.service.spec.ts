@@ -12,7 +12,10 @@ import { EmployeeService } from '@modules/employee/services/employee.service';
 describe('TaxService - ptkpCategory (GapFix v1.3)', () => {
   let service: TaxService;
 
-  const mockPrisma = { taxConfig: { findFirst: jest.fn().mockResolvedValue({ taxMethod: 'TER' }) } };
+  const mockPrisma = {
+    taxConfig: { findFirst: jest.fn().mockResolvedValue({ taxMethod: 'TER' }) },
+    payrollPeriod: { findFirst: jest.fn() },
+  };
   const mockEmployeeService = { findById: jest.fn() };
 
   beforeEach(async () => {
@@ -85,5 +88,35 @@ describe('TaxService - ptkpCategory (GapFix v1.3)', () => {
 
     expect(result.terCategory).toBe('B');
     expect(result.ptkp).toBe(58500000);
+  });
+
+  it('memakai config pajak terbaru yang efektif pada tanggal periode', async () => {
+    mockEmployeeService.findById.mockResolvedValue({
+      id: 'emp-1',
+      fullName: 'Rina',
+      maritalStatus: 'SINGLE',
+      ptkpCategory: 'TK/0',
+    });
+    mockPrisma.payrollPeriod.findFirst.mockResolvedValue({ endDate: new Date('2026-08-31') });
+    mockPrisma.taxConfig.findFirst.mockResolvedValue({ taxMethod: 'PROGRESSIVE' });
+
+    const result = await service.calculate('t1', {
+      employeeId: 'emp-1',
+      grossIncome: 8000000,
+      bpjsDeduction: 0,
+      otherDeductions: 0,
+      periodId: 'period-1',
+    } as any);
+
+    expect(mockPrisma.taxConfig.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ACTIVE',
+          effectiveDate: { lte: new Date('2026-08-31') },
+        }),
+        orderBy: { effectiveDate: 'desc' },
+      }),
+    );
+    expect(result.method).toBe('PROGRESSIVE');
   });
 });

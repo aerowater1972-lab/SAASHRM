@@ -55,9 +55,7 @@ export class BpjsService {
 
     const baseSalary = dto.baseSalary || Number((employee as any).employments[0]?.grade?.baseSalary) || 0;
 
-    const configs = await this.prisma.bpjsConfig.findMany({
-      where: { tenantId } as any,
-    });
+    const configs = await this.getEffectiveConfigs(tenantId, await this.resolvePeriodDate(tenantId, dto.periodId));
 
     const results: any[] = [];
     let totalEmployer = 0;
@@ -69,8 +67,8 @@ export class BpjsService {
 
     results.push({
       bpjsType: 'KESEHATAN',
-      employerAmount: Math.round(cappedWage * Number(kesehatanConfig?.jhtEmployerRate ?? this.BPJS_KESEHATAN_EMPLOYER)),
-      employeeAmount: Math.round(cappedWage * Number(kesehatanConfig?.jhtEmployeeRate ?? this.BPJS_KESEHATAN_EMPLOYEE)),
+      employerAmount: Math.round(cappedWage * Number(kesehatanConfig?.kesEmployerRate ?? this.BPJS_KESEHATAN_EMPLOYER)),
+      employeeAmount: Math.round(cappedWage * Number(kesehatanConfig?.kesEmployeeRate ?? this.BPJS_KESEHATAN_EMPLOYEE)),
       wageBase: cappedWage,
     });
     totalEmployer += results[0].employerAmount;
@@ -133,6 +131,35 @@ export class BpjsService {
         combined: totalEmployer + totalEmployee,
       },
     };
+  }
+
+  /**
+   * Config efektif per tanggal periode: hanya baris ACTIVE dengan
+   * effectiveDate <= tanggal yang dipakai, terbaru per tipe.
+   * Menutup nondeterminisme pemilihan config (dulu: baris pertama
+   * sembarang dari findMany tanpa order).
+   */
+  private async getEffectiveConfigs(tenantId: string, atDate: Date): Promise<any[]> {
+    const rows: any[] = await this.prisma.bpjsConfig.findMany({
+      where: { tenantId, status: 'ACTIVE', effectiveDate: { lte: atDate } } as any,
+      orderBy: { effectiveDate: 'desc' } as any,
+    });
+    // Sort ulang di kode agar deterministik walau urutan DB/mock berbeda.
+    rows.sort((a, b) => +new Date(b.effectiveDate) - +new Date(a.effectiveDate));
+    const seen = new Set<string>();
+    return rows.filter((c) => {
+      if (seen.has(c.type)) return false;
+      seen.add(c.type);
+      return true;
+    });
+  }
+
+  private async resolvePeriodDate(tenantId: string, periodId?: string): Promise<Date> {
+    if (!periodId) return new Date();
+    const period = await this.prisma.payrollPeriod.findFirst({
+      where: { id: periodId, tenantId },
+    });
+    return period?.endDate ?? new Date();
   }
 
   async generateReport(tenantId: string, dto: BpjsReportDto) {

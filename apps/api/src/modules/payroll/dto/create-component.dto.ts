@@ -6,15 +6,9 @@ export enum ComponentType {
   DEDUCTION = 'DEDUCTION',
 }
 export enum ComponentCategory {
-  ALLOWANCE = 'ALLOWANCE',
-  DEDUCTION = 'DEDUCTION',
-  BPJS = 'BPJS',
-  TAX = 'TAX',
-  LOAN = 'LOAN',
-  OVERTIME = 'OVERTIME',
-  THR = 'THR',
-  BONUS = 'BONUS',
-  OTHER = 'OTHER',
+  FIXED = 'FIXED',
+  VARIABLE = 'VARIABLE',
+  ONE_TIME = 'ONE_TIME',
 }
 export enum ComponentCalculationMethod {
   FIXED = 'FIXED',
@@ -31,9 +25,10 @@ export class CreateComponentDto {
   @ApiProperty({ enum: ComponentType })
   @IsEnum(ComponentType)
   type!: ComponentType;
-  @ApiProperty({ enum: ComponentCategory })
+  @ApiPropertyOptional({ enum: ComponentCategory })
+  @IsOptional()
   @IsEnum(ComponentCategory)
-  category!: ComponentCategory;
+  category?: ComponentCategory;
   @ApiProperty({ enum: ComponentCalculationMethod })
   @IsEnum(ComponentCalculationMethod)
   calculationMethod!: ComponentCalculationMethod;

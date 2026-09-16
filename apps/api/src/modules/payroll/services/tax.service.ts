@@ -125,6 +125,25 @@ export class TaxService {
     return { terRate, tax: Math.round(grossMonthly * terRate / 100) };
   }
 
+  /**
+   * Config pajak efektif per tanggal periode (ACTIVE + effectiveDate <=
+   * tanggal, terbaru). Menutup nondeterminisme findFirst tanpa order.
+   */
+  private async getEffectiveConfig(tenantId: string, atDate: Date): Promise<any | null> {
+    return this.prisma.taxConfig.findFirst({
+      where: { tenantId, status: 'ACTIVE', effectiveDate: { lte: atDate } },
+      orderBy: { effectiveDate: 'desc' },
+    });
+  }
+
+  private async resolvePeriodDate(tenantId: string, periodId?: string): Promise<Date> {
+    if (!periodId) return new Date();
+    const period = await this.prisma.payrollPeriod.findFirst({
+      where: { id: periodId, tenantId },
+    });
+    return period?.endDate ?? new Date();
+  }
+
   async calculate(tenantId: string, dto: TaxCalculationDto) {
     const employee = await this.employeeService.findById(tenantId, dto.employeeId);
     if (!employee) throw new NotFoundException('Employee not found');
@@ -144,7 +163,7 @@ export class TaxService {
 
     const config = dto.taxConfigId
       ? await this.prisma.taxConfig.findFirst({ where: { id: dto.taxConfigId, tenantId } })
-      : await this.prisma.taxConfig.findFirst({ where: { tenantId } });
+      : await this.getEffectiveConfig(tenantId, await this.resolvePeriodDate(tenantId, dto.periodId));
 
     const taxMethod = (config as any)?.taxMethod === 'PROGRESSIVE' ? 'PROGRESSIVE' : 'TER';
 
