@@ -56,6 +56,7 @@ describe('AttendanceService', () => {
     },
     user: {
       findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn(),
     },
     featureFlag: {
       findFirst: jest.fn(),
@@ -115,6 +116,7 @@ describe('AttendanceService', () => {
     prisma = module.get(PrismaService);
 
     mockPrisma.user.findMany.mockResolvedValue([]);
+    mockPrisma.user.findUnique.mockResolvedValue(null);
     mockPrisma.essNotification.createMany.mockResolvedValue({ count: 0 });
     mockPrisma.tenant.findUnique.mockResolvedValue({ settings: {} });
     // PPE gate default: feature flag OFF -> clockIn skips PPE checks
@@ -222,6 +224,31 @@ describe('AttendanceService', () => {
       await expect(
         service.approveCorrection('default', 'corr-1', 'approver-1', true),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('approveCorrection segregation of duties', () => {
+    const base = {
+      id: 'corr-1',
+      status: 'PENDING',
+      requestedBy: 'emp-1',
+      attendance: { id: 'att-1', tenantId: 'default', date: new Date() },
+    };
+    beforeEach(() => {
+      mockPrisma.attendanceCorrection.findUnique.mockResolvedValue(base);
+      mockPrisma.payrollPeriod.findFirst.mockResolvedValue(null);
+      mockPrisma.attendanceRecord.update.mockResolvedValue({});
+      mockPrisma.attendanceCorrection.update.mockImplementation(({ data }) => Promise.resolve({ ...base, ...data }));
+    });
+    it('menolak bila pengaju menyetujui sendiri', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: 'emp-1' });
+      await expect(service.approveCorrection('default', 'corr-1', 'user-1', true)).rejects.toThrow('sendiri');
+      expect(mockPrisma.attendanceCorrection.update).not.toHaveBeenCalled();
+    });
+    it('mengizinkan approver berbeda', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: 'emp-2' });
+      const res = await service.approveCorrection('default', 'corr-1', 'user-2', true);
+      expect(res.status).toBe('APPROVED');
     });
   });
 

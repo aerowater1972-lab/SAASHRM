@@ -35,6 +35,17 @@ export class ResignationService {
       throw new BadRequestException('Only active employees can submit a resignation');
     }
 
+    // UU 13/2003 Art 162(3): pengunduran diri sukarela wajib pemberitahuan
+    // tertulis >= 30 hari sebelum tanggal efektif berhenti.
+    if (dto.type === 'RESIGNATION') {
+      const noticeMs = new Date(dto.effectiveDate).getTime() - new Date(dto.resignationDate).getTime();
+      if (Number.isNaN(noticeMs) || noticeMs < 30 * 86400000) {
+        throw new BadRequestException(
+          'Pengunduran diri wajib diajukan minimal 30 hari sebelum tanggal efektif (UU 13/2003).',
+        );
+      }
+    }
+
     const request = await this.prisma.resignationRequest.create({
       data: {
         tenantId,

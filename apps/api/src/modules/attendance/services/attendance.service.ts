@@ -398,6 +398,15 @@ export class AttendanceService {
       throw new BadRequestException(`Correction is already ${correction.status}`);
     }
 
+    // Segregation of duties: pengaju koreksi tak boleh menyetujui sendiri.
+    const approver = await this.prisma.user.findUnique({
+      where: { id: approverId },
+      select: { employeeId: true },
+    });
+    if (approver?.employeeId && approver.employeeId === correction.requestedBy) {
+      throw new ForbiddenException('Tidak dapat menyetujui koreksi sendiri (segregation of duties)');
+    }
+
     if (!approve) {
       return this.prisma.attendanceCorrection.update({
         where: { id: correctionId },

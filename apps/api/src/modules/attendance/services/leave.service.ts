@@ -3,7 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
@@ -529,6 +531,8 @@ export class LeaveService {
       );
     }
 
+    await this.assertNotSelfApproval(approverId, request.employeeId);
+
     const transition = this.workflow.transition('leave', request.status, 'APPROVE');
 
     const updated = await this.prisma.leaveRequest.update({
@@ -715,6 +719,20 @@ export class LeaveService {
     return Boolean(flag?.enabled);
   }
 
+  /**
+   * Segregation of duties: penolakan/approval oleh pemilik pengajuan
+   * sendiri dilarang. Dilewati bila akun approver tak tertaut karyawan.
+   */
+  private async assertNotSelfApproval(approverId: string, employeeId: string): Promise<void> {
+    const approver = await this.prisma.user.findUnique({
+      where: { id: approverId },
+      select: { employeeId: true },
+    });
+    if (approver?.employeeId && approver.employeeId === employeeId) {
+      throw new ForbiddenException('Tidak dapat menyetujui pengajuan sendiri (segregation of duties)');
+    }
+  }
+
   private async validateBalance(tenantId: string, employeeId: string, leaveTypeId: string, totalDays: number, allowNegative: boolean) {
     const year = new Date().getFullYear();
     const balance = await this.prisma.leaveBalance.findUnique({
@@ -765,5 +783,72 @@ export class LeaveService {
 
   private monthDiff(start: Date, end: Date): number {
     return (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+  }
+
+  /**
+   * Akrual cuti tahunan: karyawan AKTIF dengan masa kerja >= 12 bulan yang
+   * belum punya baris saldo tahun berjalan untuk jenis tahunan (kode AL)
+   * otomatis mendapat jatah 12 hari. Idempoten (unique constraint).
+   * Dijadwalkan harian 03:00 untuk semua tenant.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async accrueAnnualScheduled(): Promise<{ granted: number; skipped: number }> {
+    let granted = 0;
+    let skipped = 0;
+    const tenants = await this.prisma.tenant.findMany({ select: { id: true } });
+    for (const t of tenants) {
+      const r = await this.accrueAnnualEntitlement(t.id);
+      granted += r.granted;
+      skipped += r.skipped;
+    }
+    return { granted, skipped };
+  }
+
+  async accrueAnnualEntitlement(tenantId: string, asOf?: Date): Promise<{ granted: number; skipped: number }> {
+    const refDate = asOf ?? new Date();
+    const year = refDate.getFullYear();
+
+    const annualType = await this.prisma.leaveType.findFirst({
+      where: { tenantId, code: 'AL', isActive: true },
+    });
+    if (!annualType) return { granted: 0, skipped: 0 };
+
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, deletedAt: null, status: 'ACTIVE' as any, startDate: { not: null } },
+      select: { id: true, startDate: true },
+    });
+
+    let granted = 0;
+    let skipped = 0;
+    for (const emp of employees) {
+      const months = calendarMonthsBetween(new Date(emp.startDate as any), refDate);
+      if (months < 12) {
+        skipped++;
+        continue;
+      }
+      const existing = await this.prisma.leaveBalance.findUnique({
+        where: {
+          employeeId_leaveTypeId_year: { employeeId: emp.id, leaveTypeId: annualType.id, year },
+        },
+      });
+      if (existing) {
+        skipped++;
+        continue;
+      }
+      await this.prisma.leaveBalance.create({
+        data: {
+          tenantId,
+          employeeId: emp.id,
+          leaveTypeId: annualType.id,
+          year,
+          totalEntitled: 12,
+          totalUsed: 0,
+          totalPending: 0,
+          carryForward: 0,
+        },
+      });
+      granted++;
+    }
+    return { granted, skipped };
   }
 }

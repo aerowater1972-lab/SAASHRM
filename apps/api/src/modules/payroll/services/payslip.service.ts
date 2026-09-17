@@ -1,43 +1,48 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+
+export interface PayslipViewer {
+  employeeId?: string | null;
+  permissions?: string[];
+}
 
 @Injectable()
 export class PayslipService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private maskForRole(data: any, role?: string): any {
-    if (role === 'role-hr' || role === 'role-sysadmin') return data;
-
-    const masked = { ...data };
-
-    if (role === 'role-manager') {
-      masked.items = masked.items?.map((item: any) => ({
-        ...item,
-        amount: '****',
-      }));
-      return masked;
-    }
-
-    if (role === 'role-employee') {
-      masked.baseSalary = '****';
-      masked.grossPay = '****';
-      masked.totalDeductions = '****';
-      masked.bankTransferCode = '****';
-      masked.items = masked.items?.map((item: any) => ({
-        ...item,
-        amount: '****',
-      }));
-      return masked;
-    }
-
-    return data;
+  /**
+   * Cakupan baca slip (privasi gaji): hanya pemegang payroll:run:read
+   * (HR/admin/manager) boleh query lintas karyawan. Selain itu employeeId
+   * dipaksa ke milik token — query orang lain tidak mungkin lolos.
+   * (Penyempitan manager ke departemennya dicatat sebagai lanjutan.)
+   */
+  private viewerScope(viewer?: PayslipViewer): { canSeeAll: boolean; employeeId: string | null } {
+    const permissions = viewer?.permissions ?? [];
+    const canSeeAll = permissions.includes('payroll:run:read');
+    return { canSeeAll, employeeId: viewer?.employeeId ?? null };
   }
 
-  async findAll(tenantId: string, role?: string, employeeId?: string, runId?: string, periodId?: string) {
+  /**
+   * Kontrol privasi = pembatasan cakupan di findAll/findOne (bukan
+   * penyamaran): penyamaran lama berbasis ID role tidak pernah aktif
+   * (JWT tak membawa klaim role) sehingga dihapus agar tak menipu.
+   */
+
+  async findAll(
+    tenantId: string,
+    viewer?: PayslipViewer,
+    filters?: { employeeId?: string; runId?: string; periodId?: string },
+  ) {
+    const { canSeeAll, employeeId: ownId } = this.viewerScope(viewer);
+    // Tanpa cakupan penuh, paksa ke slip milik sendiri (abaikan query).
+    const employeeId = canSeeAll ? filters?.employeeId : ownId;
+    if (!canSeeAll && !employeeId) {
+      throw new ForbiddenException('Akun ini tidak tertaut ke karyawan');
+    }
     const where: any = { tenantId };
     if (employeeId) where.employeeId = employeeId;
-    if (runId) where.runId = runId;
-    if (periodId) where.run = { periodId };
+    if (filters?.runId) where.runId = filters.runId;
+    if (filters?.periodId) where.run = { periodId: filters.periodId };
 
     const data = await this.prisma.payslip.findMany({
       where: where as any,
@@ -51,10 +56,11 @@ export class PayslipService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return data.map((p) => this.maskForRole(p, role));
+    // Slip sendiri selalu penuh; lintasan lain butuh cakupan penuh.
+    return data;
   }
 
-  async findOne(tenantId: string, id: string, role?: string) {
+  async findOne(tenantId: string, id: string, viewer?: PayslipViewer) {
     const payslip = await this.prisma.payslip.findFirst({
       where: { id, tenantId },
       include: {
@@ -68,11 +74,15 @@ export class PayslipService {
       } as any,
     });
     if (!payslip) throw new NotFoundException(`Payslip ${id} not found`);
-    return this.maskForRole(payslip, role);
+    const { canSeeAll, employeeId: ownId } = this.viewerScope(viewer);
+    if (!canSeeAll && payslip.employeeId !== ownId) {
+      throw new ForbiddenException('Slip ini bukan milik Anda');
+    }
+    return payslip;
   }
 
-  async generatePdf(tenantId: string, id: string, role?: string) {
-    const payslip = await this.findOne(tenantId, id, role);
+  async generatePdf(tenantId: string, id: string, viewer?: PayslipViewer) {
+    const payslip = await this.findOne(tenantId, id, viewer);
     const p = payslip as any;
     const header = {
       title: 'PAYSLIP',

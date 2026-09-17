@@ -94,6 +94,40 @@ describe('ResignationService', () => {
       mockEmployeeService.findById.mockResolvedValue(null);
       await expect(service.create('default', 'emp-1', {} as any)).rejects.toThrow(NotFoundException);
     });
+
+    it('should reject voluntary resignation with < 30 days notice (UU 13/2003)', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', status: 'ACTIVE' as any });
+      await expect(
+        service.create('default', 'emp-1', {
+          type: 'RESIGNATION',
+          resignationDate: '2026-09-01',
+          effectiveDate: '2026-09-11',
+        } as any),
+      ).rejects.toThrow(/30 hari/);
+      expect(mockPrisma.resignationRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('should accept exactly 30 days notice', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', status: 'ACTIVE' as any });
+      mockPrisma.resignationRequest.create.mockResolvedValue({ status: 'PENDING' });
+      const result = await service.create('default', 'emp-1', {
+        type: 'RESIGNATION',
+        resignationDate: '2026-09-01',
+        effectiveDate: '2026-10-01',
+      } as any);
+      expect(result.status).toBe('PENDING');
+    });
+
+    it('should not apply notice rule to non-voluntary types', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', status: 'ACTIVE' as any });
+      mockPrisma.resignationRequest.create.mockResolvedValue({ status: 'PENDING' });
+      const result = await service.create('default', 'emp-1', {
+        type: 'RETIREMENT',
+        resignationDate: '2026-09-01',
+        effectiveDate: '2026-09-11',
+      } as any);
+      expect(result.status).toBe('PENDING');
+    });
   });
 
   describe('findOne', () => {

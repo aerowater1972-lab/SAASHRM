@@ -4,8 +4,8 @@ import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
-import { CurrentUser } from '@common/decorators/current-user.decorator';
-import { PayslipService } from '../services/payslip.service';
+import { CurrentUser, JwtUser } from '@common/decorators/current-user.decorator';
+import { PayslipService, PayslipViewer } from '../services/payslip.service';
 
 @ApiTags('Payroll - Payslips')
 @ApiBearerAuth()
@@ -13,6 +13,10 @@ import { PayslipService } from '../services/payslip.service';
 @Controller('payroll/payslips')
 export class PayslipController {
   constructor(private readonly payslipService: PayslipService) {}
+
+  private viewerOf(user?: JwtUser): PayslipViewer {
+    return { employeeId: user?.employeeId ?? null, permissions: user?.permissions ?? [] };
+  }
 
   @Get()
   @Permissions('payroll:payslip:read')
@@ -25,9 +29,9 @@ export class PayslipController {
     @Query('employeeId') employeeId?: string,
     @Query('runId') runId?: string,
     @Query('periodId') periodId?: string,
-    @CurrentUser('role') role?: string,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.payslipService.findAll(tenantId, role, employeeId, runId, periodId);
+    return this.payslipService.findAll(tenantId, this.viewerOf(user), { employeeId, runId, periodId });
   }
 
   @Get(':id')
@@ -36,9 +40,9 @@ export class PayslipController {
   findOne(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @CurrentUser('role') role?: string,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.payslipService.findOne(tenantId, id, role);
+    return this.payslipService.findOne(tenantId, id, this.viewerOf(user));
   }
 
   @Get(':id/pdf')
@@ -47,9 +51,9 @@ export class PayslipController {
   generatePdf(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @CurrentUser('role') role?: string,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.payslipService.generatePdf(tenantId, id, role);
+    return this.payslipService.generatePdf(tenantId, id, this.viewerOf(user));
   }
 
   @Put(':id/acknowledge')

@@ -152,8 +152,25 @@ export class OvertimeService {
     return request;
   }
 
+  /**
+   * Segregation of duties: approver (user id) tidak boleh menyetujui
+   * pengajuan miliknya sendiri (dipetakan via user.employeeId).
+   * Dilewati bila akun approver tak tertaut ke karyawan (mis. sysadmin).
+   */
+  private async assertNotSelfApproval(approverId: string, employeeId: string): Promise<void> {
+    const approver = await this.prisma.user.findUnique({
+      where: { id: approverId },
+      select: { employeeId: true },
+    });
+    if (approver?.employeeId && approver.employeeId === employeeId) {
+      throw new ForbiddenException('Tidak dapat menyetujui pengajuan sendiri (segregation of duties)');
+    }
+  }
+
   async approveRequest(tenantId: string, id: string, approverId: string, notes?: string) {
     const request = await this.findOneRequest(tenantId, id);
+
+    await this.assertNotSelfApproval(approverId, request.employeeId);
 
     const transition = this.workflow.transition('overtime', request.status, 'APPROVE');
 
@@ -234,6 +251,8 @@ export class OvertimeService {
     if (request.status !== RequestStatus.PENDING) {
       throw new BadRequestException(`Cannot retroactively approve a ${request.status} overtime request`);
     }
+
+    await this.assertNotSelfApproval(approverId, request.employeeId);
 
     const transition = this.workflow.transition('overtime', request.status, 'APPROVE');
 

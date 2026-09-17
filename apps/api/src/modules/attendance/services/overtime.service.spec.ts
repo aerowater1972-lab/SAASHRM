@@ -28,6 +28,9 @@ describe('OvertimeService', () => {
     featureFlag: {
       findFirst: jest.fn(),
     },
+    user: {
+      findUnique: jest.fn(),
+    },
     rosterEntry: {
       findFirst: jest.fn(),
     },
@@ -133,6 +136,23 @@ describe('OvertimeService', () => {
       const res = await service.retroactiveApprove('default', 'req-1', 'approver-1', 'darurat');
       expect(res.status).toBe('APPROVED');
       expect(mockEventBus.publish).toHaveBeenCalled();
+    });
+  });
+
+  describe('approveRequest segregation of duties', () => {
+    beforeEach(() => {
+      mockPrisma.overtimeRequest.findFirst.mockResolvedValue({ id: 'req-1', employeeId: 'emp-1', status: 'PENDING', date: new Date(), totalMinutes: 60 });
+      mockPrisma.overtimeRequest.update.mockImplementation(({ data }) => Promise.resolve({ id: 'req-1', ...data }));
+    });
+    it('menolak bila pengaju menyetujui sendiri', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: 'emp-1' });
+      await expect(service.approveRequest('t1', 'req-1', 'user-1')).rejects.toThrow('sendiri');
+      expect(mockPrisma.overtimeRequest.update).not.toHaveBeenCalled();
+    });
+    it('mengizinkan approver tanpa tautan karyawan (mis. sysadmin)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: null });
+      const res = await service.approveRequest('t1', 'req-1', 'admin-1');
+      expect(res.status).toBe('APPROVED');
     });
   });
 

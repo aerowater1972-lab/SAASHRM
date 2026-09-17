@@ -12,9 +12,12 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
   const mockPrisma = {
     leaveType: { findFirst: jest.fn() },
     leaveRequest: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
-    leaveBalance: { findUnique: jest.fn(), update: jest.fn() },
+    leaveBalance: { findUnique: jest.fn(), update: jest.fn(), create: jest.fn() },
     featureFlag: { findFirst: jest.fn() },
+    user: { findUnique: jest.fn() },
     attendanceRecord: { upsert: jest.fn() },
+    employee: { findMany: jest.fn() },
+    tenant: { findMany: jest.fn() },
   };
 
   const mockEmployeeService = { findById: jest.fn() };
@@ -234,6 +237,74 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       mockPrisma.attendanceRecord.upsert.mockResolvedValue({});
       await service.approveRequest('t1', 'req-ck', 'mgr-1');
       expect(mockPrisma.leaveBalance.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('approveRequest segregation of duties', () => {
+    const req = {
+      id: 'req-1', employeeId: 'emp-1', leaveTypeId: 'lt-annual',
+      startDate: new Date('2026-10-05'), endDate: new Date('2026-10-06'),
+      totalDays: 2, reason: 'x', isUrgent: false, escalated: false, status: 'PENDING',
+      leaveType: { isBalanceDeducting: true },
+    };
+    beforeEach(() => {
+      mockPrisma.leaveRequest.findFirst.mockResolvedValue(req);
+      mockPrisma.leaveBalance.findUnique.mockResolvedValue({ id: 'bal-1' });
+      mockWorkflow.transition.mockReturnValue({ to: 'APPROVED' });
+      mockPrisma.leaveRequest.update.mockImplementation(({ data }) => Promise.resolve({ ...req, ...data }));
+      mockPrisma.attendanceRecord.upsert.mockResolvedValue({});
+    });
+    it('menolak bila pengaju menyetujui sendiri', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: 'emp-1' });
+      await expect(service.approveRequest('t1', 'req-1', 'user-1')).rejects.toThrow('sendiri');
+      expect(mockPrisma.leaveRequest.update).not.toHaveBeenCalled();
+    });
+    it('mengizinkan approver berbeda dan memindahkan saldo', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: 'mgr-1' });
+      const res = await service.approveRequest('t1', 'req-1', 'user-2');
+      expect(res.status).toBe('APPROVED');
+      expect(mockPrisma.leaveBalance.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('accrueAnnualEntitlement', () => {
+    const asOf = new Date('2026-09-15T00:00:00Z');
+    beforeEach(() => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-al' });
+    });
+    it('memberi 12 hari pada yang >= 12 bulan dan belum punya saldo', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([
+        { id: 'emp-old', startDate: new Date('2020-01-10') },
+      ]);
+      mockPrisma.leaveBalance.findUnique.mockResolvedValue(null);
+      mockPrisma.leaveBalance.create.mockResolvedValue({ id: 'bal-1' });
+      const r = await service.accrueAnnualEntitlement('t1', asOf);
+      expect(r).toEqual({ granted: 1, skipped: 0 });
+      expect(mockPrisma.leaveBalance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ totalEntitled: 12, year: 2026 }),
+        }),
+      );
+    });
+    it('melewatkan yang < 12 bulan dan yang sudah punya saldo', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([
+        { id: 'emp-new', startDate: new Date('2026-03-01') },
+        { id: 'emp-has', startDate: new Date('2020-01-10') },
+      ]);
+      mockPrisma.leaveBalance.findUnique.mockImplementation(({ where }) =>
+        where.employeeId_leaveTypeId_year.employeeId === 'emp-has'
+          ? Promise.resolve({ id: 'bal-x' })
+          : Promise.resolve(null),
+      );
+      const r = await service.accrueAnnualEntitlement('t1', asOf);
+      expect(r).toEqual({ granted: 0, skipped: 2 });
+      expect(mockPrisma.leaveBalance.create).not.toHaveBeenCalled();
+    });
+    it('tidak melakukan apa-apa tanpa jenis AL', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue(null);
+      const r = await service.accrueAnnualEntitlement('t1', asOf);
+      expect(r).toEqual({ granted: 0, skipped: 0 });
+      expect(mockPrisma.employee.findMany).not.toHaveBeenCalled();
     });
   });
 });

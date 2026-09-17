@@ -22,15 +22,19 @@ export class PayslipEssController {
   @Permissions('ess:payslip:read')
   @ApiOperation({ summary: 'My payslips list (BR-04: approved runs only)' })
   async getPayslips(@TenantId() tenantId: string, @CurrentUser('employeeId') employeeId: string) {
-    const payslips = await this.payslipService.findAll(tenantId, 'role-employee', employeeId);
+    const payslips = await this.payslipService.findAll(tenantId, { employeeId, permissions: [] }, {});
     return (payslips as any[]).filter((p) => VISIBLE_RUN_STATUSES.includes(p.run?.status));
   }
 
   @Get(':id')
   @Permissions('ess:payslip:read')
   @ApiOperation({ summary: 'Payslip detail (BR-04: approved runs only)' })
-  async getPayslip(@TenantId() tenantId: string, @Param('id') id: string) {
-    const payslip = await this.payslipService.findOne(tenantId, id, 'role-employee');
+  async getPayslip(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('employeeId') employeeId: string,
+  ) {
+    const payslip = await this.payslipService.findOne(tenantId, id, { employeeId, permissions: [] });
     if (!VISIBLE_RUN_STATUSES.includes((payslip as any)?.run?.status)) {
       throw new NotFoundException('Payslip not available');
     }
