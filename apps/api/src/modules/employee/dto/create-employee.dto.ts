@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsEnum, IsOptional, IsString, IsDateString, IsUUID } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, IsDateString, IsUUID, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
 export enum Gender {
   MALE = 'MALE',
   FEMALE = 'FEMALE',
@@ -54,6 +55,12 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsEnum(MaritalStatus)
   maritalStatus?: MaritalStatus;
+  @ApiPropertyOptional({ example: 'K/1', description: 'Kategori PTKP: TK/0..TK/3, K/0..K/3 (GapFix v1.3 — wajib ditinjau HR)' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @Matches(/^(TK|K)\/[0-3]$/, { message: 'ptkpCategory harus TK/0..TK/3 atau K/0..K/3' })
+  ptkpCategory?: string;
   @ApiPropertyOptional({ enum: UnionStatus, description: 'Addendum Serikat Pekerja: status keanggotaan serikat (feature-flagged labor_union)' })
   @IsOptional()
   @IsEnum(UnionStatus)

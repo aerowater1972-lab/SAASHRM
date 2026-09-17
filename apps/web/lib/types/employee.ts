@@ -11,6 +11,7 @@ export interface Employee {
   religion?: string;
   maritalStatus?: 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
   unionStatus?: 'NONE' | 'MEMBER' | 'OFFICER';
+  ptkpCategory?: 'TK/0' | 'TK/1' | 'TK/2' | 'TK/3' | 'K/0' | 'K/1' | 'K/2' | 'K/3';
   idCardNumber?: string;
   taxIdNumber?: string;
   socialSecurityNumber?: string;

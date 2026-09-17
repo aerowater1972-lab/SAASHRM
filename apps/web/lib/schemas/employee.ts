@@ -9,6 +9,9 @@ export type MaritalStatus = z.infer<typeof MaritalStatus>;
 export const UnionStatus = z.enum(['NONE', 'MEMBER', 'OFFICER']);
 export type UnionStatus = z.infer<typeof UnionStatus>;
 
+export const PtkpCategory = z.enum(['TK/0', 'TK/1', 'TK/2', 'TK/3', 'K/0', 'K/1', 'K/2', 'K/3']);
+export type PtkpCategory = z.infer<typeof PtkpCategory>;
+
 export const EmployeeStatus = z.enum(['ACTIVE', 'INACTIVE', 'PENDING_ACTIVATION']);
 export type EmployeeStatus = z.infer<typeof EmployeeStatus>;
 
@@ -24,6 +27,7 @@ export const createEmployeeSchema = z.object({
   religion: z.string().optional(),
   maritalStatus: MaritalStatus.optional(),
   unionStatus: UnionStatus.optional(),
+  ptkpCategory: PtkpCategory.optional(),
   idCardNumber: z.string().optional(),
   taxIdNumber: z.string().optional(),
   socialSecurityNumber: z.string().optional(),

@@ -44,6 +44,7 @@ export default function EditEmployeePage() {
       religion: '',
       maritalStatus: undefined,
       unionStatus: undefined,
+      ptkpCategory: undefined,
       idCardNumber: '',
       taxIdNumber: '',
       address: '',
@@ -69,6 +70,7 @@ export default function EditEmployeePage() {
         religion: employee.religion ?? '',
         maritalStatus: (employee.maritalStatus as CreateEmployeeInput['maritalStatus']) ?? undefined,
         unionStatus: (employee.unionStatus as CreateEmployeeInput['unionStatus']) ?? undefined,
+        ptkpCategory: (employee.ptkpCategory as CreateEmployeeInput['ptkpCategory']) ?? undefined,
         idCardNumber: employee.idCardNumber ?? '',
         taxIdNumber: employee.taxIdNumber ?? '',
         address: employee.address ?? '',
@@ -86,7 +88,7 @@ export default function EditEmployeePage() {
   const { register, handleSubmit, formState: { errors, isSubmitting }, trigger } = form;
 
   const stepFields: Record<number, (keyof CreateEmployeeInput)[]> = {
-    0: ['fullName', 'email', 'birthDate', 'birthPlace', 'gender', 'religion', 'maritalStatus', 'unionStatus'],
+    0: ['fullName', 'email', 'birthDate', 'birthPlace', 'gender', 'religion', 'maritalStatus', 'unionStatus', 'ptkpCategory'],
     1: ['phone', 'address', 'city', 'province', 'postalCode', 'emergencyContact', 'emergencyPhone'],
     2: ['idCardNumber', 'taxIdNumber'],
     3: ['bloodType', 'allergies', 'medicalNotes'],
@@ -226,6 +228,25 @@ export default function EditEmployeePage() {
                   <option value="MEMBER">Anggota</option>
                   <option value="OFFICER">Pengurus</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ptkpCategory">Kategori PTKP (PPh 21)</Label>
+                <select
+                  id="ptkpCategory"
+                  {...register('ptkpCategory')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">—</option>
+                  <option value="TK/0">TK/0</option>
+                  <option value="TK/1">TK/1</option>
+                  <option value="TK/2">TK/2</option>
+                  <option value="TK/3">TK/3</option>
+                  <option value="K/0">K/0</option>
+                  <option value="K/1">K/1</option>
+                  <option value="K/2">K/2</option>
+                  <option value="K/3">K/3</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">Wajib ditinjau HR — menentukan tarif TER & PTKP.</p>
               </div>
             </div>
           )}
