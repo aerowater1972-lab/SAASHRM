@@ -557,6 +557,40 @@ async function main() {
       });
     }
   }
+  // Manager: ESS self-service (seperti employee) + approval bawahan,
+  // selaras kebijakan role-manager tenant default (approve cuti, lembur,
+  // expense, loan, resign, requisition — termasuk jalur mobile ess:leave).
+  const mgrPerms = [
+    'employee:read',
+    'ess:attendance:clock', 'ess:attendance:read', 'ess:dashboard:read',
+    'ess:leave:create', 'ess:leave:read', 'ess:leave:approve',
+    'ess:notification:read', 'ess:notification:update',
+    'ess:onboarding:complete', 'ess:onboarding:read',
+    'ess:payslip:acknowledge', 'ess:payslip:read',
+    'ess:profile:read', 'ess:profile:update',
+    'attendance:read', 'attendance:correction:read',
+    'rosters:read', 'shifts:read', 'holidays:read',
+    'leave-balances:read', 'leave-requests:approve', 'leave-requests:create', 'leave-requests:read',
+    'leave-types:read', 'overtime:approve', 'overtime:read',
+    'expense-claims:approve', 'expense-claims:read',
+    'loans:approve', 'loans:read',
+    'resignations:approve', 'resignations:read',
+    'recruitment:requisition:approve', 'recruitment:requisition:read',
+    'announcements:view', 'documents:view',
+  ];
+  for (const p of mgrPerms) {
+    const lastColon = p.lastIndexOf(':');
+    const module = p.slice(0, lastColon);
+    const action = p.slice(lastColon + 1);
+    const perm = await prisma.permission.findUnique({ where: { module_action: { module, action } } });
+    if (perm) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: 'nsm-role-manager', permissionId: perm.id } },
+        update: {},
+        create: { roleId: 'nsm-role-manager', permissionId: perm.id, scope: 'ALL' },
+      });
+    }
+  }
   console.log('Demo roles + permissions created');
 
   // Leave types (Addendum v1.2 FR-18 + BR-11): katalog jenis cuti/izin Indonesia
