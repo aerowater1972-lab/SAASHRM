@@ -76,6 +76,13 @@ export class LeaveController {
     return this.leaveService.applyCarryForward(tenantId, dto.fromYear, dto.toYear);
   }
 
+  @Post('balances/accrue-annual')
+  @Permissions('leave-balances:update')
+  @ApiOperation({ summary: 'Berikan jatah 12 hari pada yang >= 12 bulan masa kerja dan belum punya saldo (manual trigger cron)' })
+  accrueAnnual(@TenantId() tenantId: string) {
+    return this.leaveService.accrueAnnualEntitlement(tenantId);
+  }
+
   @Get('long-leave/status')
   @Permissions('leave-requests:read')
   @ApiOperation({ summary: 'Kelayakan + sisa cuti panjang 6 tahun (UU 13/2003 Art 79)' })

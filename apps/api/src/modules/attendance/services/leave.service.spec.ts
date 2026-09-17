@@ -307,4 +307,45 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       expect(mockPrisma.employee.findMany).not.toHaveBeenCalled();
     });
   });
+
+  describe('accrueAnnualEntitlement', () => {
+    const asOf = new Date('2026-09-15T00:00:00Z');
+    beforeEach(() => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-al' });
+    });
+    it('memberi 12 hari pada yang >= 12 bulan dan belum punya saldo', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([
+        { id: 'emp-old', startDate: new Date('2020-01-10') },
+      ]);
+      mockPrisma.leaveBalance.findUnique.mockResolvedValue(null);
+      mockPrisma.leaveBalance.create.mockResolvedValue({ id: 'bal-1' });
+      const r = await service.accrueAnnualEntitlement('t1', asOf);
+      expect(r).toEqual({ granted: 1, skipped: 0 });
+      expect(mockPrisma.leaveBalance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ totalEntitled: 12, year: 2026 }),
+        }),
+      );
+    });
+    it('melewatkan yang < 12 bulan dan yang sudah punya saldo', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([
+        { id: 'emp-new', startDate: new Date('2026-03-01') },
+        { id: 'emp-has', startDate: new Date('2020-01-10') },
+      ]);
+      mockPrisma.leaveBalance.findUnique.mockImplementation(({ where }) =>
+        where.employeeId_leaveTypeId_year.employeeId === 'emp-has'
+          ? Promise.resolve({ id: 'bal-x' })
+          : Promise.resolve(null),
+      );
+      const r = await service.accrueAnnualEntitlement('t1', asOf);
+      expect(r).toEqual({ granted: 0, skipped: 2 });
+      expect(mockPrisma.leaveBalance.create).not.toHaveBeenCalled();
+    });
+    it('tidak melakukan apa-apa tanpa jenis AL', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue(null);
+      const r = await service.accrueAnnualEntitlement('t1', asOf);
+      expect(r).toEqual({ granted: 0, skipped: 0 });
+      expect(mockPrisma.employee.findMany).not.toHaveBeenCalled();
+    });
+  });
 });

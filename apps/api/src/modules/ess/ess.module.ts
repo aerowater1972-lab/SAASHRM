@@ -4,12 +4,13 @@ import { memoryStorage } from 'multer';
 import { PrismaModule } from '@common/prisma/prisma.module';
 import { EmployeeModule } from '@modules/employee/employee.module';
 import { AttendanceModule } from '@modules/attendance/attendance.module';
-import { ProfileController } from './controllers/profile.controller';
+import { ProfileController, EssK3Controller } from './controllers/profile.controller';
 import { ProfileChangeRequestController } from './controllers/profile-change-request.controller';
 import { DashboardController } from './controllers/dashboard.controller';
 import { AttendanceEssController } from './controllers/attendance-ess.controller';
 import { LeaveEssController } from './controllers/leave-ess.controller';
 import { PayslipEssController } from './controllers/payslip-ess.controller';
+import { PayrollEssController } from './controllers/payroll-ess.controller';
 import { NotificationEssController } from './controllers/notification-ess.controller';
 import { PreferenceEssController } from './controllers/preference-ess.controller';
 import { EssOnboardingController } from './controllers/onboarding.controller';
@@ -34,11 +35,13 @@ const NOTIFICATION_SWEEP_MS = 60 * 60 * 1000; // BR-05: hourly archive sweep
   ],
   controllers: [
     ProfileController,
+    EssK3Controller,
     ProfileChangeRequestController,
     DashboardController,
     AttendanceEssController,
     LeaveEssController,
     PayslipEssController,
+    PayrollEssController,
     NotificationEssController,
     PreferenceEssController,
     EssOnboardingController,
