@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
-import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { CurrentUser, JwtUser } from '@common/decorators/current-user.decorator';
 import { Permissions } from '@common/decorators/permissions.decorator';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
@@ -27,6 +27,10 @@ import { ExpenseFilterDto } from '../dto/expense-filter.dto';
 @Controller('expense')
 export class ExpenseController {
   constructor(private readonly expenseService: ExpenseService) {}
+
+  private viewerOf(user?: JwtUser) {
+    return { employeeId: user?.employeeId ?? null, permissions: user?.permissions ?? [] };
+  }
 
   @Post('claims')
   @Permissions('expense-claims:create')
@@ -45,15 +49,16 @@ export class ExpenseController {
   findAll(
     @TenantId() tenantId: string,
     @Query() filters: ExpenseFilterDto,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.expenseService.findAll(tenantId, filters);
+    return this.expenseService.findAll(tenantId, filters, this.viewerOf(user));
   }
 
   @Get('claims/:id')
   @Permissions('expense-claims:read')
   @ApiOperation({ summary: 'Get expense claim by ID' })
-  findOne(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.expenseService.findOne(tenantId, id);
+  findOne(@TenantId() tenantId: string, @Param('id') id: string, @CurrentUser() user?: JwtUser) {
+    return this.expenseService.findOne(tenantId, id, this.viewerOf(user));
   }
 
   @Put('claims/:id')
@@ -63,8 +68,9 @@ export class ExpenseController {
     @TenantId() tenantId: string,
     @Param('id') id: string,
     @Body() dto: Partial<CreateExpenseClaimDto>,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.expenseService.update(tenantId, id, dto);
+    return this.expenseService.update(tenantId, id, dto, this.viewerOf(user));
   }
 
   @Post('claims/:id/submit')
@@ -74,8 +80,9 @@ export class ExpenseController {
   submit(
     @TenantId() tenantId: string,
     @Param('id') id: string,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.expenseService.submit(tenantId, id);
+    return this.expenseService.submit(tenantId, id, this.viewerOf(user));
   }
 
   @Put('claims/:id/approve')
@@ -121,8 +128,9 @@ export class ExpenseController {
   getItems(
     @TenantId() tenantId: string,
     @Param('id') id: string,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.expenseService.getItems(tenantId, id);
+    return this.expenseService.getItems(tenantId, id, this.viewerOf(user));
   }
 
   @Post('claims/:id/items')
@@ -132,7 +140,8 @@ export class ExpenseController {
     @TenantId() tenantId: string,
     @Param('id') id: string,
     @Body() dto: CreateExpenseItemDto,
+    @CurrentUser() user?: JwtUser,
   ) {
-    return this.expenseService.addItem(tenantId, id, dto);
+    return this.expenseService.addItem(tenantId, id, dto, this.viewerOf(user));
   }
 }

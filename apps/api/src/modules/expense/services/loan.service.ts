@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { assertNotSelfApproval } from '@common/util/approval.util';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
@@ -95,6 +96,8 @@ export class LoanService {
   async approve(tenantId: string, id: string, approverId: string, notes?: string) {
     const loan = await this.findOne(tenantId, id);
 
+    await assertNotSelfApproval(this.prisma, approverId, loan.employeeId);
+
     const transition = this.workflow.transition('loan', loan.status, 'APPROVE');
 
     // FR-05 / BR-02: validate installment capacity against net salary before approval.
@@ -179,6 +182,8 @@ export class LoanService {
 
   async reject(tenantId: string, id: string, approverId: string, reason: string) {
     const loan = await this.findOne(tenantId, id);
+
+    await assertNotSelfApproval(this.prisma, approverId, loan.employeeId);
 
     if (!reason) {
       throw new BadRequestException('Rejection reason is required');

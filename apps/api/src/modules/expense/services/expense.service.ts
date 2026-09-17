@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { assertNotSelfApproval, assertOwnerOrApprover } from '@common/util/approval.util';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
@@ -12,6 +14,11 @@ import { Prisma, RequestStatus, ExpenseClaim } from '@prisma/client';
 import { CreateExpenseClaimDto, ExpenseClaimStatus } from '../dto/create-expense-claim.dto';
 import { CreateExpenseItemDto } from '../dto/create-expense-item.dto';
 import { ExpenseFilterDto } from '../dto/expense-filter.dto';
+
+export interface ExpenseViewer {
+  employeeId?: string | null;
+  permissions?: string[];
+}
 
 @Injectable()
 export class ExpenseService {
@@ -47,10 +54,20 @@ export class ExpenseService {
     return this.enrichStatus(claim);
   }
 
-  async findAll(tenantId: string, filters: ExpenseFilterDto): Promise<ExpenseClaim[] | Paginated<ExpenseClaim>> {
+  async findAll(
+    tenantId: string,
+    filters: ExpenseFilterDto,
+    viewer?: ExpenseViewer,
+  ): Promise<ExpenseClaim[] | Paginated<ExpenseClaim>> {
     const where: Prisma.ExpenseClaimWhereInput = { tenantId };
 
-    if (filters.employeeId) {
+    // Tanpa expense-claims:approve, paksa ke milik token (privasi klaim).
+    if (viewer && !(viewer.permissions ?? []).includes('expense-claims:approve')) {
+      if (!viewer.employeeId) {
+        throw new ForbiddenException('Akun ini tidak tertaut ke karyawan');
+      }
+      where.employeeId = viewer.employeeId;
+    } else if (filters.employeeId) {
       where.employeeId = filters.employeeId;
     }
 
@@ -92,7 +109,7 @@ export class ExpenseService {
     return { ...result, data: result.data.map((c) => this.enrichStatus(c) as ExpenseClaim) };
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, viewer?: ExpenseViewer) {
     const claim = await this.prisma.expenseClaim.findFirst({
       where: { id, tenantId },
       include: {
@@ -105,11 +122,29 @@ export class ExpenseService {
       throw new NotFoundException('Expense claim not found');
     }
 
+    if (viewer && !(viewer.permissions ?? []).includes('expense-claims:approve')) {
+      if (!viewer.employeeId || claim.employeeId !== viewer.employeeId) {
+        throw new ForbiddenException('Klaim ini bukan milik Anda');
+      }
+    }
+
     return this.enrichStatus(claim);
   }
 
-  async update(tenantId: string, id: string, dto: Partial<CreateExpenseClaimDto>) {
+  async update(
+    tenantId: string,
+    id: string,
+    dto: Partial<CreateExpenseClaimDto>,
+    requester: ExpenseViewer,
+  ) {
     const claim = await this.findOne(tenantId, id);
+    assertOwnerOrApprover(
+      claim.employeeId,
+      requester?.employeeId,
+      requester?.permissions ?? [],
+      'expense-claims:approve',
+      'Klaim',
+    );
 
     if (this.resolveStatus(claim) !== ExpenseClaimStatus.DRAFT) {
       throw new BadRequestException('Only draft claims can be edited');
@@ -142,8 +177,15 @@ export class ExpenseService {
     return this.enrichStatus(updated);
   }
 
-  async submit(tenantId: string, id: string) {
+  async submit(tenantId: string, id: string, requester: ExpenseViewer) {
     const claim = await this.findOne(tenantId, id);
+    assertOwnerOrApprover(
+      claim.employeeId,
+      requester?.employeeId,
+      requester?.permissions ?? [],
+      'expense-claims:approve',
+      'Klaim',
+    );
     const status = this.resolveStatus(claim);
 
     if (status !== ExpenseClaimStatus.DRAFT) {
@@ -173,6 +215,8 @@ export class ExpenseService {
   async approve(tenantId: string, id: string, approverId: string, notes?: string) {
     const claim = await this.findOne(tenantId, id);
 
+    await assertNotSelfApproval(this.prisma, approverId, claim.employeeId);
+
     const transition = this.workflow.transition('expense', claim.status, 'APPROVE');
 
     const updated = await this.prisma.expenseClaim.update({
@@ -201,6 +245,8 @@ export class ExpenseService {
 
   async reject(tenantId: string, id: string, approverId: string, reason: string) {
     const claim = await this.findOne(tenantId, id);
+
+    await assertNotSelfApproval(this.prisma, approverId, claim.employeeId);
 
     if (!reason) {
       throw new BadRequestException('Rejection reason is required');
@@ -236,13 +282,20 @@ export class ExpenseService {
     return this.enrichStatus(updated);
   }
 
-  async getItems(tenantId: string, id: string) {
-    const claim = await this.findOne(tenantId, id);
+  async getItems(tenantId: string, id: string, viewer?: ExpenseViewer) {
+    const claim = await this.findOne(tenantId, id, viewer);
     return this.prisma.expenseItem.findMany({ where: { claimId: claim.id } });
   }
 
-  async addItem(tenantId: string, id: string, dto: CreateExpenseItemDto) {
-    const claim = await this.findOne(tenantId, id);
+  async addItem(tenantId: string, id: string, dto: CreateExpenseItemDto, requester?: ExpenseViewer) {
+    const claim = await this.findOne(tenantId, id, requester);
+    assertOwnerOrApprover(
+      claim.employeeId,
+      requester?.employeeId,
+      requester?.permissions ?? [],
+      'expense-claims:approve',
+      'Klaim',
+    );
 
     if (this.resolveStatus(claim) !== ExpenseClaimStatus.DRAFT) {
       throw new BadRequestException('Cannot add items to a non-draft claim');

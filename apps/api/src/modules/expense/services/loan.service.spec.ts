@@ -67,6 +67,7 @@ describe('LoanService', () => {
     employee: {
       findUnique: jest.fn(),
     },
+    user: { findUnique: jest.fn() },
   };
 
   const mockLoan = {
@@ -168,6 +169,13 @@ describe('LoanService', () => {
       mockPrisma.loan.findMany.mockResolvedValue([]);
       // installmentAmount = 250, maxInstallment = 150 (30% of 500) => should fail
       await expect(service.approve('default', 'loan-1', 'approver-1')).rejects.toThrow('BR-02');
+    });
+
+    it('should reject self-approval of own loan', async () => {
+      mockPrisma.loan.findFirst.mockResolvedValue({ ...mockLoan, status: RequestStatus.PENDING });
+      mockPrisma.user.findUnique.mockResolvedValue({ employeeId: 'emp-1' });
+      await expect(service.approve('default', 'loan-1', 'user-1')).rejects.toThrow('sendiri');
+      expect(mockTx.loan.update).not.toHaveBeenCalled();
     });
   });
 
