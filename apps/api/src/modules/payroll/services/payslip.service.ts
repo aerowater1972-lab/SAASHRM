@@ -11,15 +11,31 @@ export class PayslipService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Cakupan baca slip (privasi gaji): hanya pemegang payroll:run:read
-   * (HR/admin/manager) boleh query lintas karyawan. Selain itu employeeId
-   * dipaksa ke milik token — query orang lain tidak mungkin lolos.
-   * (Penyempitan manager ke departemennya dicatat sebagai lanjutan.)
+   * Cakupan baca slip (privasi gaji), tiga tingkat berbasis permission:
+   * - FULL (payroll:run:approve: HR/admin): query apa pun.
+   * - DEPARTMENT (payroll:run:read saja: manager): hanya karyawan yang
+   *   berbagi departemen aktif dengannya.
+   * - OWN (selain itu): dipaksa ke milik token; tanpa tautan -> Forbidden.
    */
-  private viewerScope(viewer?: PayslipViewer): { canSeeAll: boolean; employeeId: string | null } {
+  private async resolveScope(
+    viewer?: PayslipViewer,
+  ): Promise<
+    | { level: 'FULL' }
+    | { level: 'DEPARTMENT'; departmentIds: string[] }
+    | { level: 'OWN'; employeeId: string }
+  > {
     const permissions = viewer?.permissions ?? [];
-    const canSeeAll = permissions.includes('payroll:run:read');
-    return { canSeeAll, employeeId: viewer?.employeeId ?? null };
+    if (permissions.includes('payroll:run:approve')) return { level: 'FULL' };
+    if (viewer?.employeeId && permissions.includes('payroll:run:read')) {
+      const employments = await this.prisma.employment.findMany({
+        where: { employeeId: viewer.employeeId, isActive: true },
+        select: { departmentId: true },
+      });
+      const departmentIds = [...new Set(employments.map((e) => e.departmentId).filter(Boolean))] as string[];
+      return { level: 'DEPARTMENT', departmentIds };
+    }
+    if (viewer?.employeeId) return { level: 'OWN', employeeId: viewer.employeeId };
+    throw new ForbiddenException('Akun ini tidak tertaut ke karyawan');
   }
 
   /**
@@ -33,14 +49,18 @@ export class PayslipService {
     viewer?: PayslipViewer,
     filters?: { employeeId?: string; runId?: string; periodId?: string },
   ) {
-    const { canSeeAll, employeeId: ownId } = this.viewerScope(viewer);
-    // Tanpa cakupan penuh, paksa ke slip milik sendiri (abaikan query).
-    const employeeId = canSeeAll ? filters?.employeeId : ownId;
-    if (!canSeeAll && !employeeId) {
-      throw new ForbiddenException('Akun ini tidak tertaut ke karyawan');
-    }
+    const scope = await this.resolveScope(viewer);
     const where: any = { tenantId };
-    if (employeeId) where.employeeId = employeeId;
+    if (scope.level === 'OWN') {
+      where.employeeId = scope.employeeId;
+    } else if (scope.level === 'DEPARTMENT') {
+      where.employee = {
+        employments: { some: { departmentId: { in: scope.departmentIds }, isActive: true } },
+      };
+      if (filters?.employeeId) where.employeeId = filters.employeeId;
+    } else if (filters?.employeeId) {
+      where.employeeId = filters.employeeId;
+    }
     if (filters?.runId) where.runId = filters.runId;
     if (filters?.periodId) where.run = { periodId: filters.periodId };
 
@@ -74,9 +94,18 @@ export class PayslipService {
       } as any,
     });
     if (!payslip) throw new NotFoundException(`Payslip ${id} not found`);
-    const { canSeeAll, employeeId: ownId } = this.viewerScope(viewer);
-    if (!canSeeAll && payslip.employeeId !== ownId) {
+    const scope = await this.resolveScope(viewer);
+    if (scope.level === 'OWN' && payslip.employeeId !== scope.employeeId) {
       throw new ForbiddenException('Slip ini bukan milik Anda');
+    }
+    if (scope.level === 'DEPARTMENT') {
+      const depts = ((payslip as any).employee?.employments ?? [])
+        .filter((e: any) => e.isActive !== false)
+        .map((e: any) => e.departmentId)
+        .filter(Boolean);
+      if (!depts.some((d: string) => scope.departmentIds.includes(d))) {
+        throw new ForbiddenException('Slip ini di luar departemen Anda');
+      }
     }
     return payslip;
   }

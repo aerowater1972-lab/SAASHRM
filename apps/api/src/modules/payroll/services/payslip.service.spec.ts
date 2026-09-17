@@ -11,10 +11,11 @@ import { PrismaService } from '@common/prisma/prisma.service';
 describe('PayslipService - viewer scoping', () => {
   let service: PayslipService;
 
-  const mockPrisma = { payslip: { findMany: jest.fn(), findFirst: jest.fn() } };
+  const mockPrisma = { payslip: { findMany: jest.fn(), findFirst: jest.fn() }, employment: { findMany: jest.fn() } };
 
   const empViewer = { employeeId: 'emp-1', permissions: ['payroll:payslip:read'] };
-  const hrViewer = { employeeId: 'hr-1', permissions: ['payroll:payslip:read', 'payroll:run:read'] };
+  const hrViewer = { employeeId: 'hr-1', permissions: ['payroll:payslip:read', 'payroll:run:read', 'payroll:run:approve'] };
+  const mgrViewer = { employeeId: 'mgr-1', permissions: ['payroll:payslip:read', 'payroll:run:read'] };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -41,6 +42,35 @@ describe('PayslipService - viewer scoping', () => {
       service.findAll('t1', { employeeId: null, permissions: ['payroll:payslip:read'] }, {}),
     ).rejects.toThrow(ForbiddenException);
     expect(mockPrisma.payslip.findMany).not.toHaveBeenCalled();
+  });
+
+  it('manager: daftar dibatasi departemennya', async () => {
+    mockPrisma.employment.findMany.mockResolvedValue([{ departmentId: 'dept-1' }]);
+    mockPrisma.payslip.findMany.mockResolvedValue([]);
+
+    await service.findAll('t1', mgrViewer, {});
+
+    expect(mockPrisma.payslip.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          employee: { employments: { some: { departmentId: { in: ['dept-1'] }, isActive: true } } },
+        }),
+      }),
+    );
+  });
+
+  it('manager: slip luar departemen -> Forbidden; dalam departemen -> lolos', async () => {
+    mockPrisma.employment.findMany.mockResolvedValue([{ departmentId: 'dept-1' }]);
+    mockPrisma.payslip.findFirst.mockResolvedValue({
+      id: 'p-x', employeeId: 'emp-9', employee: { employments: [{ departmentId: 'dept-9', isActive: true }] },
+    });
+    await expect(service.findOne('t1', 'p-x', mgrViewer)).rejects.toThrow('departemen');
+
+    mockPrisma.payslip.findFirst.mockResolvedValue({
+      id: 'p-y', employeeId: 'emp-2', employee: { employments: [{ departmentId: 'dept-1', isActive: true }] },
+    });
+    const res = await service.findOne('t1', 'p-y', mgrViewer);
+    expect(res.id).toBe('p-y');
   });
 
   it('HR (payroll:run:read): filter dihormati', async () => {
