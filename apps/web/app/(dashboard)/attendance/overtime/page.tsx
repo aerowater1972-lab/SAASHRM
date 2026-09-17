@@ -55,6 +55,7 @@ export default function OvertimePage() {
           { href: '/attendance', label: 'Absensi' },
           { href: '/attendance/overtime', label: 'Lembur' },
           { href: '/attendance/shifts', label: 'Shift' },
+          { href: '/attendance/rosters', label: 'Roster' },
         ].map((tab) => (
           <Link
             key={tab.href}

@@ -16,6 +16,10 @@ import {
   rejectOvertime,
   retroactiveApproveOvertime,
   fetchOvertimeRecords,
+  fetchRosters,
+  createRoster,
+  fetchRoster,
+  addRosterEntries,
   type AttendanceListParams,
 } from '@/lib/api/attendance';
 import type { ClockInInput, ClockOutInput } from '@/lib/schemas/attendance';
@@ -138,5 +142,37 @@ export function useOvertimeRecords(params?: { employeeId?: string; startDate?: s
   return useQuery({
     queryKey: ['attendance', 'overtime', 'records', params],
     queryFn: () => fetchOvertimeRecords(params),
+  });
+}
+
+export function useRosters() {
+  return useQuery({
+    queryKey: ['attendance', 'rosters'],
+    queryFn: fetchRosters,
+  });
+}
+
+export function useCreateRoster() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string; startDate: string; endDate: string }) => createRoster(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'rosters'] }),
+  });
+}
+
+export function useRoster(id: string | null) {
+  return useQuery({
+    queryKey: ['attendance', 'rosters', id],
+    queryFn: () => fetchRoster(id!),
+    enabled: !!id,
+  });
+}
+
+export function useAddRosterEntries() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ rosterId, entries }: { rosterId: string; entries: Array<{ employeeId: string; shiftId: string; date: string }> }) =>
+      addRosterEntries(rosterId, entries),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['attendance', 'rosters', v.rosterId] }),
   });
 }

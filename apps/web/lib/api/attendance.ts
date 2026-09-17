@@ -61,6 +61,22 @@ export async function deleteShift(id: string): Promise<void> {
   return api.delete(`/attendance/shifts/${id}`);
 }
 
+export async function fetchRosters(): Promise<any[]> {
+  return api.get<any[]>('/attendance/rosters');
+}
+
+export async function createRoster(data: { name: string; description?: string; startDate: string; endDate: string }): Promise<any> {
+  return api.post<any>('/attendance/rosters', data);
+}
+
+export async function fetchRoster(id: string): Promise<any> {
+  return api.get<any>(`/attendance/rosters/${id}`);
+}
+
+export async function addRosterEntries(rosterId: string, entries: Array<{ employeeId: string; shiftId: string; date: string }>): Promise<any[]> {
+  return api.post<any[]>(`/attendance/rosters/${rosterId}/entries`, { entries });
+}
+
 export async function fetchOvertimeRequests(): Promise<OvertimeRequest[]> {
   return api.get<OvertimeRequest[]>('/overtime-requests');
 }

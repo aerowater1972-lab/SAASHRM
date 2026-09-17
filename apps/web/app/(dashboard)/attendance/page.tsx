@@ -3,14 +3,16 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { useTodayStatus, useAttendanceRecords, useClockIn, useClockOut } from '@/lib/hooks/attendance';
+import { fetchMyPpeCompliance } from '@/lib/api/employee-relations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { TableSkeleton, ErrorState, EmptyState } from '@/components/ui/data-states';
-import { Clock, MapPin, Search, ShieldAlert } from 'lucide-react';
+import { Clock, MapPin, Search, ShieldAlert, ShieldOff } from 'lucide-react';
 
 const formatTime = (iso?: string) =>
   iso ? new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -38,6 +40,13 @@ export default function AttendancePage() {
 
   const clockInMutation = useClockIn();
   const clockOutMutation = useClockOut();
+
+  const { data: ppeCheck } = useQuery({
+    queryKey: ['ppe-compliance', 'me'],
+    queryFn: fetchMyPpeCompliance,
+    enabled: !today?.isClockedIn && !today?.isClockedOut,
+    refetchInterval: 30_000,
+  });
 
   const records = recordsData?.data ?? [];
   const total = recordsData?.meta?.total ?? 0;
@@ -78,6 +87,7 @@ export default function AttendancePage() {
           { href: '/attendance', label: 'Absensi' },
           { href: '/attendance/overtime', label: 'Lembur' },
           { href: '/attendance/shifts', label: 'Shift' },
+          { href: '/attendance/rosters', label: 'Roster' },
         ].map((tab) => (
           <Link
             key={tab.href}
@@ -115,6 +125,12 @@ export default function AttendancePage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!today?.isClockedIn && !today?.isClockedOut && ppeCheck?.blocked && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
+              <ShieldOff className="h-5 w-5 shrink-0 mt-0.5" />
+              <span>{ppeCheck.reason}</span>
+            </div>
+          )}
           <Input
             placeholder="Catatan (opsional)"
             value={notes}
@@ -125,10 +141,13 @@ export default function AttendancePage() {
             size="lg"
             variant={today?.isClockedIn ? 'destructive' : 'default'}
             onClick={handleClock}
-            disabled={isClocking || !!today?.isClockedOut}
+            disabled={isClocking || !!today?.isClockedOut || (!today?.isClockedIn && !!ppeCheck?.blocked)}
           >
-            <Clock className="mr-2 h-5 w-5" />
-            {isClocking ? 'Memproses…' : today?.isClockedIn ? 'Clock Out' : 'Clock In'}
+            {!today?.isClockedIn && !today?.isClockedOut && ppeCheck?.blocked ? (
+              <><ShieldOff className="mr-2 h-5 w-5" />APD Tidak Memenuhi</>
+            ) : (
+              <><Clock className="mr-2 h-5 w-5" />{isClocking ? 'Memproses…' : today?.isClockedIn ? 'Clock Out' : 'Clock In'}</>
+            )}
           </Button>
         </CardContent>
       </Card>

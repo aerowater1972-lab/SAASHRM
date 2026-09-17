@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsDateString, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 export class RosterEntryItem {
   @ApiProperty()
   @IsString()
   employeeId!: string;
   @ApiProperty()
-  @IsUUID()
+  @IsString()
   shiftId!: string;
   @ApiProperty()
   @IsDateString()

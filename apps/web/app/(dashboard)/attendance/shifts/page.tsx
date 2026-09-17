@@ -74,6 +74,7 @@ export default function ShiftsPage() {
           { href: '/attendance', label: 'Absensi' },
           { href: '/attendance/overtime', label: 'Lembur' },
           { href: '/attendance/shifts', label: 'Shift' },
+          { href: '/attendance/rosters', label: 'Roster' },
         ].map((tab) => (
           <Link key={tab.href} href={tab.href}
             className={`px-3 py-1.5 text-sm font-medium rounded-t-md no-underline transition-colors ${
