@@ -677,7 +677,6 @@ async function main() {
       'ess:attendance:clock',
       'ess:attendance:read',
       'ess:dashboard:read',
-      'ess:leave:approve',
       'ess:leave:create',
       'ess:leave:read',
       'ess:notification:read',

@@ -348,4 +348,20 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       expect(mockPrisma.employee.findMany).not.toHaveBeenCalled();
     });
   });
+
+  describe('findOneRequestScoped (ESS privacy)', () => {
+    it('pemilik boleh buka detailnya', async () => {
+      mockPrisma.leaveRequest.findFirst.mockResolvedValue({
+        id: 'req-1', employeeId: 'emp-1', leaveType: {},
+      });
+      const r = await service.findOneRequestScoped('t1', 'req-1', 'emp-1');
+      expect(r.id).toBe('req-1');
+    });
+    it('orang lain -> Forbidden', async () => {
+      mockPrisma.leaveRequest.findFirst.mockResolvedValue({
+        id: 'req-1', employeeId: 'emp-1', leaveType: {},
+      });
+      await expect(service.findOneRequestScoped('t1', 'req-1', 'emp-9')).rejects.toThrow('milik Anda');
+    });
+  });
 });

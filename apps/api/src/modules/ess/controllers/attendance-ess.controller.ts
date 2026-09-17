@@ -80,13 +80,15 @@ export class AttendanceEssController {
   }
 
   // US-06 / BR-03: manager approval on-the-go — same source logic as web.
+  // approverId WAJIB user id (sub) agar guard segregation-of-duties
+  // dan audit approvedBy konsisten; permission dinaikkan ke approve.
   @Post('approvals/correction/:id')
-  @Permissions('ess:attendance:read')
+  @Permissions('attendance:correction:approve')
   @ApiOperation({ summary: 'Approve/reject a team attendance correction (mobile)' })
   reviewCorrection(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @CurrentUser('employeeId') approverId: string,
+    @CurrentUser('sub') approverId: string,
     @Body() dto: { approve: boolean },
   ) {
     return this.attendanceService.approveCorrection(tenantId, id, approverId, dto.approve);

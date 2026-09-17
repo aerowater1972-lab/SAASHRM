@@ -33,6 +33,20 @@ const ENTITY_ID = TENANT_ID;
 async function main() {
   console.log('=== Seeding demo: PT Nusantara Sejahtera Makmur ===');
 
+  // Create Tenant first (if not exists)
+  await prisma.tenant.upsert({
+    where: { id: TENANT_ID },
+    update: {},
+    create: {
+      id: TENANT_ID,
+      name: 'PT Nusantara Sejahtera Makmur',
+      domain: 'nusantara.flexy-hrms.local',
+      package: 'STANDARD',
+      status: 'ACTIVE',
+      settings: { timezone: 'Asia/Jakarta', currency: 'IDR', dateFormat: 'DD/MM/YYYY', language: 'id' },
+    },
+  });
+
   // -------------------------------------------------------------------------
   // 0. Reset data demo tenant (idempotency via deleteMany)
   // Urutan dijaga agar tidak melanggar FK.
@@ -51,12 +65,27 @@ async function main() {
   await prisma.salaryComponent.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.featureFlag.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.performanceReview.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.ppeAssignment.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.incidentReport.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.disciplinaryCase.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.violationCategory.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.tenantBranding.deleteMany({ where: { tenantId: TENANT_ID } });
+  await prisma.tenantBranding.upsert({
+    where: { tenantId: TENANT_ID },
+    update: {},
+    create: {
+      tenantId: TENANT_ID,
+      primaryColor: '#2563EB',
+      secondaryColor: '#7C3AED',
+    },
+  });
   await prisma.payslip.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.goal.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.expenseClaim.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.loan.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.assetAssignment.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.certification.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
+  await prisma.training.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.trainingParticipant.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.movementRequest.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
   await prisma.payrollAdjustment.deleteMany({ where: { employee: { tenantId: ENTITY_ID } } });
@@ -81,29 +110,13 @@ async function main() {
   await prisma.user.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.role.deleteMany({ where: { tenantId: TENANT_ID } });
   await prisma.tenantEntity.deleteMany({ where: { id: ENTITY_ID } });
-  await prisma.tenant.deleteMany({ where: { id: TENANT_ID } });
+  // Tenant is created above; skip deleteMany to avoid FK conflict with TenantBranding
   console.log('→ cleared previous demo tenant data');
 
   // -------------------------------------------------------------------------
   // 1. Tenant + Entity
   // -------------------------------------------------------------------------
-  const tenant = await prisma.tenant.upsert({
-    where: { id: TENANT_ID },
-    update: {},
-    create: {
-      id: TENANT_ID,
-      name: 'PT Nusantara Sejahtera Makmur',
-      domain: 'nusantara-sejahtera.flexyhrms.demo',
-      package: 'ENTERPRISE',
-      status: 'ACTIVE',
-      settings: {
-        timezone: 'Asia/Jakarta',
-        currency: 'IDR',
-        dateFormat: 'DD/MM/YYYY',
-        language: 'id',
-      },
-    },
-  });
+  const tenant = await prisma.tenant.findUnique({ where: { id: TENANT_ID } });
 
   await prisma.tenantEntity.upsert({
     where: { id: ENTITY_ID },
@@ -483,7 +496,7 @@ async function main() {
     { id: 'nsm-role-sysadmin', name: 'System Administrator', isSystem: true },
     { id: 'nsm-role-hr', name: 'HR Admin', isSystem: true },
     { id: 'nsm-role-manager', name: 'Manager', isSystem: true },
-    { id: 'nsm-role-employee', name: 'Employee', isSystem: true },
+    { id: 'nsm-role-employee', name: 'Employee', isSystem: false },
   ];
   for (const r of roleDefs) {
     await prisma.role.upsert({ where: { id: r.id }, update: {}, create: { ...r, tenantId: TENANT_ID } });
@@ -511,7 +524,7 @@ async function main() {
     'employee:read',
     'ess:attendance:clock', 'ess:attendance:read', 'ess:dashboard:read',
     'attendance:biometric:enroll', 'attendance:biometric:read',
-    'ess:leave:approve', 'ess:leave:create', 'ess:leave:read',
+    'ess:leave:create', 'ess:leave:read',
     'ess:notification:read', 'ess:notification:update',
     'ess:onboarding:complete', 'ess:onboarding:read',
     'ess:payslip:acknowledge', 'ess:payslip:read',
@@ -524,6 +537,12 @@ async function main() {
     'performance:review:update', 'resignations:create',
     'expense-claims:create', 'expense-claims:read', 'loans:create', 'loans:read',
     'assets:read', 'analytics:read',
+    // Employee Relations & Safety
+    'disciplinary-cases:read', 'disciplinary-cases:acknowledge',
+    'incident-reports:create', 'incident-reports:read',
+    'ppe-assignments:create', 'ppe-assignments:read',
+    'k3:dashboard',
+    'announcements:view', 'documents:view',
   ];
   for (const p of empPerms) {
     const lastColon = p.lastIndexOf(':');
@@ -592,7 +611,10 @@ async function main() {
   await prisma.featureFlag.create({
     data: { tenantId: TENANT_ID, module: 'attendance', feature: 'labor_union', enabled: true },
   });
-  console.log('Feature flag labor_union enabled for demo tenant');
+  await prisma.featureFlag.create({
+    data: { tenantId: TENANT_ID, module: 'employee-relations', feature: 'ppe_mandatory_clock_in', enabled: true },
+  });
+  console.log('Feature flags labor_union + ppe_mandatory_clock_in enabled for demo tenant');
 
   const unionMembers = employees.filter((e) => e.union === 'MEMBER' || e.union === 'OFFICER');
   for (const e of unionMembers) {
@@ -648,6 +670,153 @@ async function main() {
     },
   });
   console.log('Demo FACE biometric enrollment created for emp-NSM-2024-007 (Maya Sari)');
+
+  // -------------------------------------------------------------------------
+  // 12. Employee Relations & Safety — Demo data
+  // -------------------------------------------------------------------------
+  const violationCats = [
+    { id: 'nsm-vc-late', name: 'Terlambat Kerja', code: 'LATE', severity: 1, canSkipSP1: false },
+    { id: 'nsm-vc-alpha', name: 'Tanpa Keterangan (Alpha)', code: 'ALPHA', severity: 2, canSkipSP1: false },
+    { id: 'nsm-vc-insub', name: 'Pembangkangan/Insubordinasi', code: 'INSUB', severity: 3, canSkipSP1: true },
+    { id: 'nsm-vc-fraud', name: 'Kecurangan/ Fraud', code: 'FRAUD', severity: 3, canSkipSP1: true },
+    { id: 'nsm-vc-safety', name: 'Pelanggaran K3', code: 'K3-VIO', severity: 2, canSkipSP1: false },
+  ];
+  let vcCount = 0;
+  for (const vc of violationCats) {
+    await prisma.violationCategory.upsert({
+      where: { id: vc.id },
+      update: {},
+      create: { ...vc, tenantId: TENANT_ID },
+    });
+    vcCount++;
+  }
+  console.log(`Demo violation categories: ${vcCount}`);
+
+  // Disciplinary case for Tarmudi (emp-NSM-2024-033) — SP1 terlambat
+  await prisma.disciplinaryCase.upsert({
+    where: { id: 'nsm-dc-demo-001' },
+    update: {},
+    create: {
+      id: 'nsm-dc-demo-001', tenantId: TENANT_ID, employeeId: 'emp-NSM-2024-033',
+      violationCategoryId: 'nsm-vc-late', spLevel: 'SP1', description: 'Terlambat 45 menit tanpa pemberitahuan pada 14 Juli 2026',
+      issuedDate: new Date('2026-07-14'), validUntil: new Date('2027-01-10'),
+      status: 'ACKNOWLEDGED', acknowledgedAt: new Date('2026-07-15'),
+    },
+  });
+  // SP2 for escalation demo (same employee) — more than 3 days ago → triggers BR-05
+  await prisma.disciplinaryCase.upsert({
+    where: { id: 'nsm-dc-demo-002' },
+    update: {},
+    create: {
+      id: 'nsm-dc-demo-002', tenantId: TENANT_ID, employeeId: 'emp-NSM-2024-033',
+      violationCategoryId: 'nsm-vc-alpha', spLevel: 'SP2', description: 'Tidak masuk kerja tanpa keterangan 3 hari berturut (20-22 Juli 2026)',
+      issuedDate: new Date('2026-07-14'), validUntil: new Date('2027-01-10'),
+      status: 'APPROVED', updatedAt: new Date('2026-07-14'),
+    },
+  });
+  console.log('Demo disciplinary cases created (SP1 acknowledged + SP2 pending escalation).');
+
+  // Incident report: near-miss
+  await prisma.incidentReport.upsert({
+    where: { id: 'nsm-inc-demo-001' },
+    update: {},
+    create: {
+      id: 'nsm-inc-demo-001', tenantId: TENANT_ID, employeeId: 'emp-NSM-2024-005',
+      location: 'Gudang Penyimpanan Lt.1', incidentDate: new Date('2026-07-16'),
+      severity: 'MODERATE', category: 'NEAR_MISS',
+      description: 'Rak penyimpanan ambruk — tidak ada korban, barang berserakan',
+      status: 'RESOLVED',
+    },
+  });
+  console.log('Demo incident report created.');
+
+  // PPE assignments
+  await prisma.ppeAssignment.upsert({
+    where: { id: 'nsm-ppe-demo-001' },
+    update: {},
+    create: {
+      id: 'nsm-ppe-demo-001', tenantId: TENANT_ID, employeeId: 'emp-NSM-2024-005',
+      ppeType: 'Safety Helmet', assignedDate: new Date('2026-01-15'),
+      expiryDate: new Date('2027-01-15'), condition: 'GOOD', status: 'ACTIVE',
+    },
+  });
+  await prisma.ppeAssignment.upsert({
+    where: { id: 'nsm-ppe-demo-002' },
+    update: {},
+    create: {
+      id: 'nsm-ppe-demo-002', tenantId: TENANT_ID, employeeId: 'emp-NSM-2024-005',
+      ppeType: 'Sarung Tangan Las', assignedDate: new Date('2026-03-01'),
+      expiryDate: new Date('2026-09-01'), condition: 'WORN', status: 'EXPIRED',
+    },
+  });
+  console.log('Demo PPE assignments created (1 active, 1 expired).');
+
+  // K3 Training & Compliance (FR-11)
+  await prisma.training.upsert({
+    where: { id: 'nsm-training-k3-001' },
+    update: {},
+    create: {
+      id: 'nsm-training-k3-001', tenantId: TENANT_ID,
+      title: 'Pelatihan K3 & Tanggap Darurat Kebakaran', description: 'Dasar-dasar K3, APAR, jalur evakuasi',
+      category: 'K3', type: 'INTERNAL', provider: 'P2K3', startDate: new Date('2026-01-15'), endDate: new Date('2026-01-17'),
+      capacity: 50, status: 'COMPLETED',
+      recommendedViolationCategoryId: 'nsm-vc-safety',
+    },
+  });
+  await prisma.training.upsert({
+    where: { id: 'nsm-training-k3-002' },
+    update: {},
+    create: {
+      id: 'nsm-training-k3-002', tenantId: TENANT_ID,
+      title: 'Safe Handling Bahan Kimia', description: 'Penanganan bahan kimia berbahaya di area produksi',
+      category: 'K3', type: 'INTERNAL', provider: 'P2K3', startDate: new Date('2026-02-10'), endDate: new Date('2026-02-11'),
+      capacity: 30, status: 'COMPLETED',
+      recommendedViolationCategoryId: 'nsm-vc-safety',
+    },
+  });
+  await prisma.training.upsert({
+    where: { id: 'nsm-training-k3-003' },
+    update: {},
+    create: {
+      id: 'nsm-training-k3-003', tenantId: TENANT_ID,
+      title: 'Penggunaan APD yang Benar', description: 'Sesi wajib untuk operator produksi dan gudang',
+      category: 'K3', type: 'INTERNAL', provider: 'P2K3', startDate: new Date('2026-03-05'), endDate: new Date('2026-03-05'),
+      capacity: 40, status: 'COMPLETED',
+    },
+  });
+  await prisma.training.upsert({
+    where: { id: 'nsm-training-k3-004' },
+    update: {},
+    create: {
+      id: 'nsm-training-k3-004', tenantId: TENANT_ID,
+      title: 'Pelatihan K3 Lanjutan — Manajemen Risiko', description: 'Identifikasi bahaya dan penilaian risiko untuk supervisor',
+      category: 'K3', type: 'INTERNAL', provider: 'P2K3', startDate: new Date('2026-08-20'), endDate: new Date('2026-08-22'),
+      capacity: 25, status: 'PLANNED',
+    },
+  });
+
+  const k3CompletedEmps = [
+    // Produksi — all operator & TL
+    'emp-NSM-2024-026', 'emp-NSM-2024-027', 'emp-NSM-2024-028', 'emp-NSM-2024-029', 'emp-NSM-2024-030',
+    'emp-NSM-2024-031', 'emp-NSM-2024-032', 'emp-NSM-2024-033', 'emp-NSM-2024-034', 'emp-NSM-2024-035',
+    // Gudang
+    'emp-NSM-2024-039', 'emp-NSM-2024-040', 'emp-NSM-2024-041',
+    // QC
+    'emp-NSM-2024-036', 'emp-NSM-2024-037', 'emp-NSM-2024-038',
+    // GA & Security
+    'emp-NSM-2024-004', 'emp-NSM-2024-005', 'emp-NSM-2024-042', 'emp-NSM-2024-043', 'emp-NSM-2024-044',
+  ];
+  const k3TrainingIds = ['nsm-training-k3-001', 'nsm-training-k3-002', 'nsm-training-k3-003'];
+  for (const empId of k3CompletedEmps) {
+    for (const tId of k3TrainingIds) {
+      await prisma.trainingParticipant.upsert({
+        where: { trainingId_employeeId: { trainingId: tId, employeeId: empId } },
+        update: {},
+        create: { trainingId: tId, employeeId: empId, status: 'COMPLETED', completedAt: new Date('2026-03-10'), score: 85 },
+      });
+    }
+  }
+  console.log(`K3 training compliance seeded: ${k3CompletedEmps.length} employees completed 3 sessions.`);
 
   console.log('\n✅ Demo seed PT Nusantara Sejahtera Makmur selesai.');
   console.log(`   Tenant: ${TENANT_ID} (${tenant.domain})`);

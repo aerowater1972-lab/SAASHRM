@@ -61,8 +61,9 @@ export class LeaveEssController {
   getLeaveRequest(
     @TenantId() tenantId: string,
     @Param('id') id: string,
+    @CurrentUser('employeeId') employeeId: string,
   ) {
-    return this.leaveService.findOneRequest(tenantId, id);
+    return this.leaveService.findOneRequestScoped(tenantId, id, employeeId);
   }
 
   @Get('leave-balances')
@@ -96,13 +97,15 @@ export class LeaveEssController {
   }
 
   // US-06 / BR-03: manager approval on-the-go — same source logic as web.
+  // approverId WAJIB user id (sub), bukan employeeId, agar guard
+  // segregation-of-duties dan audit approvedBy konsisten dengan web.
   @Post('approvals/leave/:id/approve')
   @Permissions('ess:leave:approve')
   @ApiOperation({ summary: 'Approve a team leave request (mobile)' })
   approveLeave(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @CurrentUser('employeeId') approverId: string,
+    @CurrentUser('sub') approverId: string,
     @Body() dto: { notes?: string },
   ) {
     return this.leaveService.approveRequest(tenantId, id, approverId, dto?.notes);
@@ -114,7 +117,7 @@ export class LeaveEssController {
   rejectLeave(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @CurrentUser('employeeId') approverId: string,
+    @CurrentUser('sub') approverId: string,
     @Body() dto: { reason: string },
   ) {
     return this.leaveService.rejectRequest(tenantId, id, approverId, dto.reason);

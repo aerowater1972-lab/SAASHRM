@@ -505,6 +505,17 @@ export class LeaveService {
     return request;
   }
 
+  /**
+   * Varian ESS: detail hanya bila milik pemohon sendiri (privasi data cuti).
+   */
+  async findOneRequestScoped(tenantId: string, id: string, employeeId: string) {
+    const request = await this.findOneRequest(tenantId, id);
+    if (request.employeeId !== employeeId) {
+      throw new ForbiddenException('Pengajuan cuti ini bukan milik Anda');
+    }
+    return request;
+  }
+
   async cancelRequest(tenantId: string, id: string, employeeId: string) {
     const request = await this.findOneRequest(tenantId, id);
 
