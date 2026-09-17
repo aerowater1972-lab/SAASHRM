@@ -49,6 +49,14 @@ export class EmployeeController {
     return this.employeeService.export(tenantId, filters);
   }
 
+  @Get('wlk-report')
+  @Permissions('employee:read')
+  @ApiOperation({ summary: 'Laporan komposisi tenaga kerja (Wajib Lapor UU 7/1981)' })
+  @ApiQuery({ name: 'year', required: false })
+  wlkReport(@TenantId() tenantId: string, @Query('year') year?: string) {
+    return this.employeeService.getWlkReport(tenantId, year ? parseInt(year, 10) : undefined);
+  }
+
   @Get(':id')
   @Permissions('employee:read')
   @ApiOperation({ summary: 'Get employee by ID' })

@@ -24,6 +24,9 @@ describe('EmployeeService', () => {
     employment: {
       findMany: jest.fn(),
     },
+    tenant: {
+      findFirst: jest.fn(),
+    },
   };
 
   const mockEmployee = {
@@ -333,6 +336,51 @@ describe('EmployeeService', () => {
           email: 'john@example.com',
         }),
       ]);
+    });
+  });
+
+  describe('getWlkReport', () => {
+    const empRow = (over: any) => ({
+      id: 'e-1',
+      gender: 'MALE',
+      status: 'ACTIVE',
+      startDate: new Date('2020-01-10'),
+      employments: [{ type: 'PERMANENT', isActive: true, startDate: new Date('2020-01-10'), endDate: null, department: { id: 'd-1', name: 'HR' } }],
+      ...over,
+    });
+
+    beforeEach(() => {
+      mockPrisma.tenant.findFirst.mockResolvedValue({ id: 't1', name: 'PT Uji' });
+    });
+
+    it('mengelompokkan gender, tipe, departemen, mutasi', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([
+        empRow({}),
+        empRow({ id: 'e-2', gender: 'FEMALE', startDate: new Date('2026-03-01'), employments: [{ type: 'CONTRACT', isActive: true, startDate: new Date('2026-03-01'), endDate: null, department: { id: 'd-2', name: 'IT' } }] }),
+        empRow({ id: 'e-3', status: 'INACTIVE', employments: [{ type: 'PERMANENT', isActive: false, startDate: new Date('2019-01-10'), endDate: new Date('2026-02-01'), department: { id: 'd-1', name: 'HR' } }] }),
+      ]);
+
+      const r = await service.getWlkReport('t1', 2026);
+
+      expect(r.total).toBe(3);
+      expect(r.active).toBe(2);
+      expect(r.byGender).toEqual({ MALE: 2, FEMALE: 1 });
+      expect(r.byEmploymentType).toEqual({ PERMANENT: 2, CONTRACT: 1 });
+      expect(r.byDepartment).toEqual({ HR: 1, IT: 1 });
+      expect(r.newHires).toBe(1);
+      expect(r.leavers).toBe(1);
+      expect(r.tenant).toEqual({ id: 't1', name: 'PT Uji' });
+    });
+
+    it('tanpa gender/departemen masuk UNKNOWN/TANPA_DEPARTEMEN', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([
+        { id: 'e-9', gender: null, status: 'ACTIVE', startDate: new Date('2020-01-10'), employments: [] },
+      ]);
+
+      const r = await service.getWlkReport('t1', 2026);
+
+      expect(r.byGender).toEqual({ UNKNOWN: 1 });
+      expect(r.byDepartment).toEqual({ TANPA_DEPARTEMEN: 1 });
     });
   });
 

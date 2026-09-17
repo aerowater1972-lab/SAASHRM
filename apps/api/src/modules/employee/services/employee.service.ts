@@ -374,8 +374,7 @@ export class EmployeeService {
     return results;
   }
 
-  async export(tenantId: string, filters: EmployeeFilterDto) {
-    const result = await this.findAll(tenantId, { ...filters, page: undefined });
+  async export(tenantId: string, filters: EmployeeFilterDto) {    const result = await this.findAll(tenantId, { ...filters, page: undefined });
     const employees = (Array.isArray(result) ? result : result.data) as any[];
     return employees.map((emp) => ({
       employeeId: emp.employeeId,
@@ -393,5 +392,81 @@ export class EmployeeService {
       city: emp.city,
       province: emp.province,
     }));
+  }
+
+  /**
+   * Laporan komposisi tenaga kerja untuk Wajib Lapor Ketenagakerjaan
+   * (UU 7/1981): total aktif, per gender, per jenis hubungan kerja,
+   * per departemen, serta mutasi masuk/keluar pada tahun berjalan.
+   * Tanpa data kewarganegaraan di model, TKA tidak dipisahkan (dicatat).
+   */
+  async getWlkReport(tenantId: string, year?: number) {
+    const targetYear = year ?? new Date().getFullYear();
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: { id: true, name: true },
+    });
+
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, deletedAt: null },
+      select: {
+        id: true,
+        gender: true,
+        status: true,
+        startDate: true,
+        employments: {
+          orderBy: { startDate: 'desc' },
+          take: 1,
+          select: {
+            type: true,
+            isActive: true,
+            startDate: true,
+            endDate: true,
+            department: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const byGender: Record<string, number> = {};
+    const byType: Record<string, number> = {};
+    const byDepartment: Record<string, number> = {};
+    let active = 0;
+    let newHires = 0;
+    let leavers = 0;
+
+    for (const emp of employees as any[]) {
+      const g = emp.gender ?? 'UNKNOWN';
+      byGender[g] = (byGender[g] ?? 0) + 1;
+      const latest = emp.employments?.[0];
+      const empType = latest?.type ?? 'NONE';
+      byType[empType] = (byType[empType] ?? 0) + 1;
+
+      const isActive = emp.status === 'ACTIVE';
+      if (isActive) {
+        active++;
+        const dept = latest?.department?.name ?? 'TANPA_DEPARTEMEN';
+        byDepartment[dept] = (byDepartment[dept] ?? 0) + 1;
+      }
+      if (emp.startDate && new Date(emp.startDate).getFullYear() === targetYear) {
+        newHires++;
+      }
+      if (latest?.endDate && new Date(latest.endDate).getFullYear() === targetYear) {
+        leavers++;
+      }
+    }
+
+    return {
+      tenant: { id: tenant?.id ?? tenantId, name: tenant?.name ?? null },
+      year: targetYear,
+      total: employees.length,
+      active,
+      byGender,
+      byEmploymentType: byType,
+      byDepartment,
+      newHires,
+      leavers,
+      note: 'Kewarganegaraan (TKA) belum dimodelkan — pisahkan manual bila ada.',
+    };
   }
 }
