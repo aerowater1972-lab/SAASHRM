@@ -168,6 +168,14 @@ export class TaxService {
 
     const taxMethod = (config as any)?.taxMethod === 'PROGRESSIVE' ? 'PROGRESSIVE' : 'TER';
 
+    if ((config as any)?.taxMethod === 'GROSS_UP') {
+      // JANGAN fallback diam-diam ke TER: gross-up butuh target neto,
+      // bukan bruto. Arahkan ke endpoint khusus.
+      throw new BadRequestException(
+        'Metode GROSS_UP membutuhkan target neto — gunakan POST /payroll/tax/gross-up.',
+      );
+    }
+
     let result: any;
 
     if (taxMethod === 'TER') {
@@ -380,5 +388,60 @@ export class TaxService {
 
   private round2(n: number): number {
     return Math.round(n * 100) / 100;
+  }
+
+  /**
+   * Metode GROSS_UP (tunjangan pajak): cari bruto bulanan G sehingga
+   * G - PPh_progresif(G) = target neto. Diselesaikan dengan bisection
+   * pada basis tahunan (f monoton naik karena tarif marjinal < 100%).
+   * Menggantikan silent-fallback ke TER bila taxMethod = GROSS_UP.
+   */
+  async calculateGrossUp(tenantId: string, dto: { employeeId: string; netMonthlyTarget: number }) {
+    const employee = await this.employeeService.findById(tenantId, dto.employeeId);
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (!(dto.netMonthlyTarget > 0)) {
+      throw new BadRequestException('netMonthlyTarget harus positif');
+    }
+
+    const parsed = this.parsePtkpCategory((employee as any).ptkpCategory);
+    const ptkp = this.getPtkp(
+      parsed ? (parsed.married ? 'MARRIED' : 'SINGLE') : (employee.maritalStatus ?? 'SINGLE'),
+      parsed ? parsed.dependents : 0,
+    );
+
+    const netAnnualTarget = dto.netMonthlyTarget * 12;
+    const netOf = (grossAnnual: number) => {
+      const taxable = Math.max(0, grossAnnual - ptkp);
+      return grossAnnual - this.calculateProgressive(taxable).tax;
+    };
+
+    let low = netAnnualTarget;
+    let high = netAnnualTarget * 3;
+    while (netOf(high) < netAnnualTarget) {
+      high *= 2;
+      if (high > netAnnualTarget * 100) {
+        throw new BadRequestException('Gagal konvergensi gross-up untuk target ini');
+      }
+    }
+    for (let i = 0; i < 60; i++) {
+      const mid = (low + high) / 2;
+      if (netOf(mid) < netAnnualTarget) low = mid;
+      else high = mid;
+    }
+    const annualGross = Math.round(high);
+    const grossMonthly = Math.round(annualGross / 12);
+    const annualTax = this.round2(annualGross - netOf(annualGross));
+
+    return {
+      method: 'GROSS_UP',
+      employeeId: dto.employeeId,
+      employeeName: employee.fullName,
+      ptkp,
+      netMonthlyTarget: dto.netMonthlyTarget,
+      grossMonthly,
+      annualGross,
+      annualTax,
+      checkNetAnnual: this.round2(annualGross - annualTax),
+    };
   }
 }

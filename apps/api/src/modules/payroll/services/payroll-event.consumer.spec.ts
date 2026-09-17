@@ -12,6 +12,10 @@ describe('PayrollEventConsumer - overtime BR-10', () => {
   const mockPrisma = {
     employment: {
       findFirst: jest.fn(),
+      update: jest.fn(),
+    },
+    grade: {
+      findUnique: jest.fn(),
     },
     overtimeRecord: {
       findMany: jest.fn(),
@@ -95,5 +99,83 @@ describe('PayrollEventConsumer - overtime BR-10', () => {
       periodStart: '2026-07-01T00:00:00.000Z', periodEnd: '2026-07-31T00:00:00.000Z',
     });
     expect(mockAdjustments.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('PayrollEventConsumer - rapel on retroactive grade change', () => {
+  let service: PayrollEventConsumer;
+
+  const mockPrisma = {
+    employment: { findFirst: jest.fn(), update: jest.fn().mockResolvedValue({}) },
+    grade: { findUnique: jest.fn() },
+  };
+  const mockAdjustments = { create: jest.fn().mockResolvedValue({}) };
+
+  const monthsAgo = (n: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - n);
+    return d.toISOString();
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PayrollEventConsumer,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: PayrollAdjustmentService, useValue: mockAdjustments },
+        { provide: JobHandlerRegistry, useValue: { register: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get<PayrollEventConsumer>(PayrollEventConsumer);
+    mockPrisma.employment.findFirst.mockResolvedValue({ id: 'e-1' });
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  const gradeChange = (effectiveDate: string) =>
+    (service as any).handleGradeChanged('default', {
+      employeeId: 'emp-1',
+      oldGradeId: 'g-old',
+      newGradeId: 'g-new',
+      effectiveDate,
+    });
+
+  beforeEach(() => {
+    mockPrisma.grade.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'g-old') return Promise.resolve({ level: 4 });
+      if (where.id === 'g-new') return Promise.resolve({ level: 5 });
+      return Promise.resolve(null);
+    });
+  });
+
+  it('rapel 3 bulan x selisih 1jt untuk kenaikan berlaku surut', async () => {
+    await gradeChange(monthsAgo(3));
+
+    const rapel = mockAdjustments.create.mock.calls.find((c: any[]) => c[0].type === 'EARNING');
+    expect(rapel).toBeDefined();
+    expect(rapel[0].amount).toBe(3000000);
+    expect(rapel[0].referenceId).toContain(':rapel');
+  });
+
+  it('tanpa rapel bila efektif kemarin (belum ada bulan penuh terlewat)', async () => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString();
+    await gradeChange(yesterday);
+
+    const earnings = mockAdjustments.create.mock.calls.filter((c: any[]) => c[0].type === 'EARNING');
+    expect(earnings).toHaveLength(0);
+    // penanda SALARY_UPDATE tetap dibuat
+    expect(mockAdjustments.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('tanpa rapel untuk penurunan grade', async () => {
+    mockPrisma.grade.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'g-old') return Promise.resolve({ level: 5 });
+      return Promise.resolve({ level: 4 });
+    });
+    await gradeChange(monthsAgo(3));
+
+    const earnings = mockAdjustments.create.mock.calls.filter((c: any[]) => c[0].type === 'EARNING');
+    expect(earnings).toHaveLength(0);
   });
 });

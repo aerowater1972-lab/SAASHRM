@@ -119,4 +119,27 @@ describe('TaxService - ptkpCategory (GapFix v1.3)', () => {
     );
     expect(result.method).toBe('PROGRESSIVE');
   });
+
+  describe('calculateGrossUp (tunjangan pajak)', () => {
+    const empTK0 = { id: 'emp-1', fullName: 'A', maritalStatus: 'SINGLE', ptkpCategory: 'TK/0' };
+    it('neto 8jt/bln TK/0 -> bruto 8.184.211/bln', async () => {
+      mockEmployeeService.findById.mockResolvedValue(empTK0);
+      const r = await service.calculateGrossUp('t1', { employeeId: 'emp-1', netMonthlyTarget: 8000000 });
+      expect(r.grossMonthly).toBe(8184211);
+      expect(r.ptkp).toBe(54000000);
+      // verifikasi balik: bruto - pajak = target (toleransi pembulatan 12 bln)
+      expect(Math.abs(r.checkNetAnnual - 96000000)).toBeLessThanOrEqual(12);
+    });
+    it('menolak target non-positif', async () => {
+      mockEmployeeService.findById.mockResolvedValue(empTK0);
+      await expect(service.calculateGrossUp('t1', { employeeId: 'emp-1', netMonthlyTarget: 0 })).rejects.toThrow();
+    });
+    it('calculate() menolak diam-diam: GROSS_UP wajib lewat endpoint khusus', async () => {
+      mockEmployeeService.findById.mockResolvedValue(empTK0);
+      mockPrisma.taxConfig.findFirst.mockResolvedValue({ taxMethod: 'GROSS_UP' });
+      await expect(
+        service.calculate('t1', { employeeId: 'emp-1', grossIncome: 8000000 } as any),
+      ).rejects.toThrow(/gross-up/i);
+    });
+  });
 });

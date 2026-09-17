@@ -8,6 +8,7 @@ import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { TaxService } from '../services/tax.service';
 import { CreateTaxConfigDto, TaxCalculationDto } from '../dto/tax-config.dto';
 import { AnnualReconcileDto } from '../dto/annual-tax.dto';
+import { GrossUpDto } from '../dto/gross-up.dto';
 
 @ApiTags('Payroll - Tax (PPh 21)')
 @ApiBearerAuth()
@@ -46,6 +47,13 @@ export class TaxController {
   @ApiOperation({ summary: 'Calculate PPh 21 for an employee in a period' })
   calculate(@TenantId() tenantId: string, @Body() dto: TaxCalculationDto) {
     return this.taxService.calculate(tenantId, dto);
+  }
+
+  @Post('gross-up')
+  @Permissions('payroll:tax:read')
+  @ApiOperation({ summary: 'Cari bruto dari target neto (tunjangan pajak)' })
+  grossUp(@TenantId() tenantId: string, @Body() dto: GrossUpDto) {
+    return this.taxService.calculateGrossUp(tenantId, dto);
   }
 
   @Post('annual-reconcile')

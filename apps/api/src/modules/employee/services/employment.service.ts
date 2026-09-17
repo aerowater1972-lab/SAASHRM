@@ -75,6 +75,28 @@ export class EmploymentService {
       }
     }
 
+    // UU 13/2003 Art 60-63: masa percobaan wajib tertulis dengan jangka
+    // waktu dan MAKSIMAL 3 bulan (hanya untuk hubungan kerja PKWTT).
+    if (dto.type === EmploymentType.PROBATION) {
+      if (!dto.endDate) {
+        throw new BadRequestException(
+          'Masa percobaan wajib memiliki tanggal selesai tertulis (UU 13/2003).',
+        );
+      }
+      const s = new Date(dto.startDate);
+      const e = new Date(dto.endDate);
+      if (e <= s) {
+        throw new BadRequestException('Tanggal selesai masa percobaan harus setelah tanggal mulai.');
+      }
+      let months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+      if (e.getDate() < s.getDate()) months -= 1;
+      if (months > 3 || (months === 3 && e.getDate() > s.getDate())) {
+        throw new BadRequestException(
+          'Masa percobaan maksimal 3 bulan kalender (UU 13/2003 Art 60).',
+        );
+      }
+    }
+
     const activeEmployment = await this.prisma.employment.findFirst({
       where: { employeeId, isActive: true },
     });
@@ -295,5 +317,66 @@ export class EmploymentService {
     const endDate = end ? (end instanceof Date ? end : new Date(end)) : new Date();
     const diff = Math.max(0, endDate.getTime() - startDate.getTime());
     return Math.floor(diff / 86400000) + 1;
+  }
+
+  /**
+   * Pengingat pensiun: karyawan AKTIF yang mencapai usia pensiun dalam
+   * H-hari ke depan (default 180). Usia default 56 tahun, dapat dioverride
+   * per tenant via settings.retirementAge. Idempoten: lewati bila reminder
+   * yang sama sudah dikirim dalam jendela yang sama (anti-spam harian).
+   * Reminder, BUKAN eksekusi — keputusan PHK pensiun tetap di tangan HR
+   * (alasan RETIREMENT pada modul pesangon).
+   */
+  async runRetirementReminderCheck(daysAhead: number = 180): Promise<number> {
+    let sent = 0;
+    const tenants = await this.prisma.tenant.findMany();
+
+    for (const tenant of tenants) {
+      let retirementAge = 56;
+      try {
+        const settings = ((tenant as any)?.settings as Record<string, any>) ?? {};
+        const configured = Number(settings?.retirementAge);
+        if (configured > 0) retirementAge = configured;
+      } catch {
+        /* fallthrough to default */
+      }
+
+      const employees = await this.prisma.employee.findMany({
+        where: { tenantId: tenant.id, deletedAt: null, status: 'ACTIVE' as any, birthDate: { not: null } },
+        select: { id: true, fullName: true, employeeId: true, birthDate: true },
+      });
+
+      const now = new Date();
+      for (const emp of employees) {
+        const birth = new Date(emp.birthDate as any);
+        if (Number.isNaN(+birth)) continue;
+        const retireDate = new Date(birth);
+        retireDate.setFullYear(retireDate.getFullYear() + retirementAge);
+        const daysUntil = Math.ceil((retireDate.getTime() - now.getTime()) / 86400000);
+        if (daysUntil < 0 || daysUntil > daysAhead) continue;
+
+        const already = await this.prisma.essNotification.findFirst({
+          where: {
+            employeeId: emp.id,
+            type: 'retirement.reminder',
+            createdAt: { gte: new Date(now.getTime() - daysAhead * 86400000) },
+          },
+        });
+        if (already) continue;
+
+        await this.notification.send({
+          tenantId: tenant.id,
+          employeeId: emp.id,
+          templateKey: 'retirement.reminder',
+          title: 'Mendekati Usia Pensiun',
+          body:
+            `Karyawan ${emp.fullName ?? emp.id} (${(emp as any).employeeId ?? ''}) mencapai usia ` +
+            `${retirementAge} tahun pada ${retireDate.toISOString().slice(0, 10)} ` +
+            `(${daysUntil} hari lagi). Siapkan proses pensiun (pesangon 1,75x, PP 35/2021 Art 56).`,
+        });
+        sent++;
+      }
+    }
+    return sent;
   }
 }

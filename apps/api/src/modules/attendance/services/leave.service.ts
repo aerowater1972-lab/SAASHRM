@@ -294,6 +294,25 @@ export class LeaveService {
       throw new NotFoundException('Leave type not found or inactive');
     }
 
+    // Dokumen wajib (mis. surat dokter untuk keguguran/sakit berkepanjangan):
+    // kolom requiresDocument selama ini hanya disimpan tanpa ditegakkan.
+    if (leaveType.requiresDocument && !dto.documentUrl) {
+      throw new BadRequestException(
+        `Jenis cuti ${leaveType.name} mewajibkan dokumen pendukung (mis. surat dokter).`,
+      );
+    }
+
+    // Batasan gender (mis. MATL/CKG hanya FEMALE): kolom genderRestriction
+    // selama ini juga tidak ditegakkan.
+    if ((leaveType as any).genderRestriction) {
+      const employee = await this.employeeService.findById(tenantId, employeeId);
+      if (employee?.gender && employee.gender !== (leaveType as any).genderRestriction) {
+        throw new BadRequestException(
+          `Jenis cuti ${leaveType.name} hanya untuk gender ${(leaveType as any).genderRestriction}.`,
+        );
+      }
+    }
+
     // Addendum Serikat Pekerja BR-01/BR-02: izin kegiatan serikat hanya untuk
     // union officer dan hanya bila feature flag labor_union aktif.
     if (leaveType.isUnionActivity) {
@@ -526,7 +545,10 @@ export class LeaveService {
       where: { employeeId_leaveTypeId_year: { employeeId: request.employeeId, leaveTypeId: request.leaveTypeId, year } },
     });
 
-    if (balance) {
+    // BR-11: jenis non-deducting (Cuti Haid/Duka/Keguguran, dst) TIDAK PERNAH
+    // menyentuh saldo — tanpa guard ini totalPending bisa negatif karena
+    // baris saldo tetap dibuat oleh seeder untuk semua jenis berbayar.
+    if (balance && (request as any).leaveType?.isBalanceDeducting !== false) {
       await this.prisma.leaveBalance.update({
         where: { id: balance.id },
         data: {

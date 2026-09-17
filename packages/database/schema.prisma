@@ -2290,6 +2290,7 @@ enum HolidayType {
   NATIONAL
   COMPANY
   RELIGIOUS
+  COLLECTIVE
   SPECIAL
 }
 

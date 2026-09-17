@@ -11,9 +11,10 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
 
   const mockPrisma = {
     leaveType: { findFirst: jest.fn() },
-    leaveRequest: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() },
+    leaveRequest: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
     leaveBalance: { findUnique: jest.fn(), update: jest.fn() },
     featureFlag: { findFirst: jest.fn() },
+    attendanceRecord: { upsert: jest.fn() },
   };
 
   const mockEmployeeService = { findById: jest.fn() };
@@ -193,6 +194,46 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       mockPrisma.leaveType.findFirst.mockResolvedValue(null);
       const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
       expect(r.reason).toBe('TYPE_NOT_CONFIGURED');
+    });
+  });
+
+  describe('document and gender enforcement', () => {
+    const docType = { id: 'lt-ckg', isBalanceDeducting: false, requiresDocument: true, genderRestriction: 'FEMALE' };
+    const dto = { leaveTypeId: 'lt-ckg', startDate: '2026-08-10', endDate: '2026-08-10', reason: 'CKG' };
+    it('menolak tanpa documentUrl bila requiresDocument', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue(docType);
+      await expect(service.createLeaveRequest('t1', 'emp-1', dto)).rejects.toThrow(/dokumen/i);
+      expect(mockPrisma.leaveRequest.create).not.toHaveBeenCalled();
+    });
+    it('menolak gender tak sesuai (MATL/CKG untuk FEMALE)', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue(docType);
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', unionStatus: 'NONE', gender: 'MALE' });
+      await expect(
+        service.createLeaveRequest('t1', 'emp-1', { ...dto, documentUrl: 'http://x/doc.pdf' }),
+      ).rejects.toThrow(/gender/i);
+    });
+    it('lolos bila dokumen ada dan gender sesuai', async () => {
+      mockPrisma.leaveType.findFirst.mockResolvedValue(docType);
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1', unionStatus: 'NONE', gender: 'FEMALE' });
+      mockPrisma.leaveRequest.findFirst.mockResolvedValue(null);
+      mockPrisma.leaveRequest.create.mockResolvedValue({ id: 'req-doc' });
+      const r = await service.createLeaveRequest('t1', 'emp-1', { ...dto, documentUrl: 'http://x/doc.pdf' });
+      expect(r.id).toBe('req-doc');
+    });
+    it('approve jenis non-deducting TIDAK menyentuh saldo (BR-11)', async () => {
+      const req = {
+        id: 'req-ck', employeeId: 'emp-1', leaveTypeId: 'lt-ckg',
+        startDate: new Date('2026-08-10'), endDate: new Date('2026-08-10'),
+        totalDays: 1, reason: 'x', isUrgent: false, escalated: false, status: 'PENDING',
+        leaveType: { isBalanceDeducting: false },
+      };
+      mockPrisma.leaveRequest.findFirst.mockResolvedValue(req);
+      mockPrisma.leaveBalance.findUnique.mockResolvedValue({ id: 'bal-1', totalUsed: 0, totalPending: 0 });
+      mockWorkflow.transition.mockReturnValue({ to: 'APPROVED' });
+      mockPrisma.leaveRequest.update.mockResolvedValue({ ...req, status: 'APPROVED' });
+      mockPrisma.attendanceRecord.upsert.mockResolvedValue({});
+      await service.approveRequest('t1', 'req-ck', 'mgr-1');
+      expect(mockPrisma.leaveBalance.update).not.toHaveBeenCalled();
     });
   });
 });

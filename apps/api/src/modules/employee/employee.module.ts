@@ -50,6 +50,7 @@ export class EmployeeModule implements OnModuleInit {
   onModuleInit() {
     // Addendum v1.2 (PKWT) FR-15: pengecekan berkala akumulasi PKWT (default H-90).
     // Diperiksa setiap 24 jam; tenant dapat mengonfigurasi via settings.pkwtReminderDays.
+    // Pengingat pensiun (default H-180, usia 56 thn via settings.retirementAge) jalan di timer yang sama.
     this.reminderTimer = setInterval(() => {
       this.employmentService
         .runPkwtReminderCheck()
@@ -57,9 +58,15 @@ export class EmployeeModule implements OnModuleInit {
           if (sent > 0) this.logger.log(`PKWT reminder sent to ${sent} employee(s)`);
         })
         .catch((err) => this.logger.warn(`PKWT reminder check failed: ${err.message}`));
+      this.employmentService
+        .runRetirementReminderCheck()
+        .then((sent) => {
+          if (sent > 0) this.logger.log(`Retirement reminder sent to ${sent} employee(s)`);
+        })
+        .catch((err) => this.logger.warn(`Retirement reminder check failed: ${err.message}`));
     }, 24 * 60 * 60 * 1000);
 
-    this.logger.log('PKWT reminder scheduler started (interval: 24h)');
+    this.logger.log('PKWT + retirement reminder scheduler started (interval: 24h)');
   }
 
   onModuleDestroy() {

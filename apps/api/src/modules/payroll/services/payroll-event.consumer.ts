@@ -4,6 +4,7 @@ import { JobHandlerRegistry } from '@modules/shared/jobs/job-handler-registry.se
 import { PrismaService } from '@common/prisma/prisma.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
 import { PayrollAdjustmentService } from './payroll-adjustment.service';
+import { calendarMonthsBetween } from '@modules/shared/utils/wage-base.util';
 
 const HANDLED_EVENTS = new Set<string>([
   DomainEventType.ATTENDANCE_PERIOD_CLOSED,
@@ -128,6 +129,34 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
       description: 'Grade change — base salary recalculated from grade level',
       effectiveDate,
     });
+
+    // Rapel: bila kenaikan grade berlaku surut, selisih bulanan x bulan
+    // penuh yang lewat dibayar sebagai EARNING pada run berikutnya.
+    // HANYA kenaikan (diff > 0) dan HANYA bulan penuh yang sudah lewat —
+    // run berjalan memakai grade baru sehingga tidak dobel-hitung.
+    if (payload.oldGradeId && payload.newGradeId && payload.oldGradeId !== payload.newGradeId) {
+      const [oldGrade, newGrade] = await Promise.all([
+        this.prisma.grade.findUnique({ where: { id: payload.oldGradeId } }),
+        this.prisma.grade.findUnique({ where: { id: payload.newGradeId } }),
+      ]);
+      const monthlyDiff =
+        (Number((newGrade as any)?.level || 0) - Number((oldGrade as any)?.level || 0)) * 1_000_000;
+      if (monthlyDiff > 0) {
+        const fullMonths = calendarMonthsBetween(effectiveDate, new Date());
+        if (fullMonths > 0) {
+          await this.adjustments.create({
+            tenantId,
+            employeeId: payload.employeeId,
+            sourceEvent: DomainEventType.EMPLOYEE_GRADE_CHANGED,
+            referenceId: `${payload.oldGradeId}->${payload.newGradeId}:rapel`,
+            type: 'EARNING',
+            amount: monthlyDiff * fullMonths,
+            description: `Rapel kenaikan grade (${fullMonths} bln x ${monthlyDiff.toLocaleString('id-ID')})`,
+            effectiveDate: new Date(),
+          });
+        }
+      }
+    }
   }
 
   private async handlePerformanceFinalized(tenantId: string, payload: any) {

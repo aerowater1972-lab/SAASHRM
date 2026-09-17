@@ -183,7 +183,7 @@ export class ShiftService {
       throw new ConflictException('Holiday already exists for this date');
     }
 
-    return this.prisma.holidayCalendar.create({
+    const created = await this.prisma.holidayCalendar.create({
       data: {
         tenantId,
         name: dto.name,
@@ -194,6 +194,42 @@ export class ShiftService {
         entityId: dto.entityId,
       },
     });
+
+    // SKB cuti bersama = bagian dari cuti tahunan: potong 1 hari dari
+    // saldo cuti tahunan (kode AL) tiap karyawan aktif. Tanpa baris saldo
+    // -> dilewati dan dilaporkan (tidak dibuatkan diam-diam).
+    let deducted = 0;
+    let skipped = 0;
+    if ((dto.type as string) === 'COLLECTIVE') {
+      const annualType = await this.prisma.leaveType.findFirst({
+        where: { tenantId, code: 'AL', isActive: true },
+      });
+      if (annualType) {
+        const year = date.getFullYear();
+        const employees = await this.prisma.employee.findMany({
+          where: { tenantId, deletedAt: null, status: 'ACTIVE' as any },
+          select: { id: true },
+        });
+        for (const emp of employees) {
+          const balance = await this.prisma.leaveBalance.findUnique({
+            where: {
+              employeeId_leaveTypeId_year: { employeeId: emp.id, leaveTypeId: annualType.id, year },
+            },
+          });
+          if (!balance) {
+            skipped++;
+            continue;
+          }
+          await this.prisma.leaveBalance.update({
+            where: { id: balance.id },
+            data: { totalUsed: { increment: 1 } },
+          });
+          deducted++;
+        }
+      }
+    }
+
+    return { holiday: created, collectiveDeduction: { deducted, skipped } };
   }
 
   async findHolidays(tenantId: string, year?: number, entityId?: string) {

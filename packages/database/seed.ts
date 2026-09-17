@@ -796,6 +796,7 @@ async function main() {
     { id: 'leave-sick', name: 'Sick Leave', code: 'SL', isPaid: true },
     { id: 'leave-marriage', name: 'Marriage Leave', code: 'ML', isPaid: true, maxConsecutiveDays: 3 },
     { id: 'leave-maternity', name: 'Maternity Leave', code: 'MATL', isPaid: true, maxConsecutiveDays: 90, genderRestriction: 'FEMALE' },
+    { id: 'leave-miscarriage', name: 'Cuti Keguguran', code: 'CKG', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 45, genderRestriction: 'FEMALE', requiresDocument: true },
     { id: 'leave-unpaid', name: 'Unpaid Leave', code: 'UL', isPaid: false, allowNegativeBalance: true },
     // Addendum v1.2 FR-18 + BR-11: jenis izin non-deducting (tidak memotong saldo)
     { id: 'leave-menstrual', name: 'Cuti Haid', code: 'CL', isPaid: true, isBalanceDeducting: false, sameDayApproval: true, carryForwardLimit: 0, requiresDocument: false },
