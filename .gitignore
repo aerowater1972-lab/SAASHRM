@@ -2,15 +2,21 @@ node_modules/
 dist/
 .env
 .env.local
+.env.*.local
 *.log
+*.err
+*_log.txt
+api_*.txt
 .DS_Store
 coverage/
 .turbo/
 openapi.json
 .next/
 .swc/
-
-# dev server error logs
-*.err
-*.log
+*.tsbuildinfo
+test-results/
+playwright-report/
+nul
+epic2-package/
+apps/api/temp_decls/
 

@@ -11,6 +11,7 @@ import { TenantId } from '@common/decorators/tenant.decorator';
 
 @ApiTags('Admin - Audit Logs')
 @ApiBearerAuth()
+@UseGuards(AuthGuard, PermissionGuard)
 @Controller('admin/audit-logs')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
@@ -26,7 +27,6 @@ export class AuditController {
   }
 
   @Post('ingest')
-  @UseGuards(AuthGuard)
   @Permissions('admin:audit:create')
   @ApiOperation({ summary: 'Internal endpoint to ingest audit log entries (FR-09a v1.1)' })
   ingest(

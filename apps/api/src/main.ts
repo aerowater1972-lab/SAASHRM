@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -19,9 +20,15 @@ async function bootstrap() {
   app.use(compression());
   app.use(cookieParser());
 
+  const rawOrigin = configService.get<string>('CORS_ORIGIN', 'http://localhost:3001');
+  const origins = rawOrigin
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const isWildcard = origins.length === 0 || origins.includes('*');
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGIN', '*'),
-    credentials: true,
+    origin: isWildcard ? false : origins.length === 1 ? origins[0] : origins,
+    credentials: !isWildcard,
   });
 
   app.useGlobalPipes(
@@ -34,6 +41,8 @@ async function bootstrap() {
       },
     }),
   );
+
+  app.useGlobalFilters(new GlobalHttpExceptionFilter());
 
   const port = configService.get<number>('PORT', 3000);
 

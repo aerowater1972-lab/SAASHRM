@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Put, Param, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantService } from '../services/tenant.service';
 import { CreateTenantDto } from '../dto/create-tenant.dto';
@@ -7,6 +8,7 @@ import { CreateEntityDto } from '../dto/create-entity.dto';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { Permissions } from '@common/decorators/permissions.decorator';
+import { Public } from '@common/decorators/public.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 
 @ApiTags('Admin - Tenants')
@@ -21,6 +23,14 @@ export class TenantController {
   @ApiOperation({ summary: 'Create a new tenant' })
   create(@Body() dto: CreateTenantDto) {
     return this.tenantService.create(dto);
+  }
+
+  @Get('public/list')
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiOperation({ summary: 'Public tenant list for login dropdown (id + name only)' })
+  listPublic() {
+    return this.tenantService.listPublic();
   }
 
   @Get()

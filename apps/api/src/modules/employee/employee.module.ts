@@ -4,10 +4,12 @@ import { memoryStorage } from 'multer';
 import { EmployeeController } from './controllers/employee.controller';
 import { OrganizationController } from './controllers/organization.controller';
 import { EmploymentController } from './controllers/employment.controller';
+import { KtpNpwpController } from './controllers/ktp-npwp.controller';
 import { MovementController } from './controllers/movement.controller';
 import { MovementHistoryController } from './controllers/movement-history.controller';
 import { MedicalController } from './controllers/medical.controller';
 import { EmployeeService } from './services/employee.service';
+import { KtpNpwpService } from './services/ktp-npwp.service';
 import { OrganizationService } from './services/organization.service';
 import { EmploymentService } from './services/employment.service';
 import { MovementService } from './services/movement.service';
@@ -17,6 +19,12 @@ import { MedicalService } from './services/medical.service';
   imports: [
     MulterModule.register({
       storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) cb(null, true);
+        else cb(new Error(`Unsupported file type: ${file.mimetype}`), false);
+      },
     }),
   ],
   controllers: [
@@ -24,6 +32,7 @@ import { MedicalService } from './services/medical.service';
     MovementHistoryController,
     OrganizationController,
     EmploymentController,
+    KtpNpwpController,
     EmployeeController,
     MedicalController,
   ],
@@ -31,6 +40,7 @@ import { MedicalService } from './services/medical.service';
     EmployeeService,
     OrganizationService,
     EmploymentService,
+    KtpNpwpService,
     MovementService,
     MedicalService,
   ],
@@ -38,6 +48,7 @@ import { MedicalService } from './services/medical.service';
     EmployeeService,
     OrganizationService,
     EmploymentService,
+    KtpNpwpService,
     MovementService,
   ],
 })
@@ -52,6 +63,12 @@ export class EmployeeModule implements OnModuleInit {
     // Diperiksa setiap 24 jam; tenant dapat mengonfigurasi via settings.pkwtReminderDays.
     // Pengingat pensiun (default H-180, usia 56 thn via settings.retirementAge) jalan di timer yang sama.
     this.reminderTimer = setInterval(() => {
+      this.employmentService
+        .expireFinishedContracts()
+        .then((n) => {
+          if (n > 0) this.logger.log(`PKWT auto-expired ${n} contract(s)`);
+        })
+        .catch((err) => this.logger.warn(`PKWT auto-expire failed: ${err.message}`));
       this.employmentService
         .runPkwtReminderCheck()
         .then((sent) => {

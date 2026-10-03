@@ -8,6 +8,8 @@
   ],
   "scripts": {
     "build": "npm run build -w apps/api",
+    "build:all": "npm run build -w apps/api && npm run build -w apps/web",
+    "build:web": "npm run build -w apps/web",
     "dev": "npm run dev -w apps/api",
     "start:prod": "npm run start:prod -w apps/api",
     "lint": "npm run lint -w apps/api",
@@ -28,5 +30,8 @@
     "@prisma/client": "^6.6.0",
     "prisma": "^6.6.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

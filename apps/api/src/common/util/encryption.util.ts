@@ -1,8 +1,29 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 const ALGO = 'aes-256-gcm';
-const RAW_KEY = process.env.DATA_ENCRYPTION_KEY || 'dev-only-insecure-key-change-me!!';
-const KEY = Buffer.from(RAW_KEY).length >= 32 ? Buffer.from(RAW_KEY).subarray(0, 32) : Buffer.from(RAW_KEY.padEnd(32, '0'));
+
+function resolveKey(): Buffer {
+  const raw = process.env.DATA_ENCRYPTION_KEY;
+  if (!raw || raw.length < 32) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'DATA_ENCRYPTION_KEY is not configured (min 32 chars). Refusing to start in production with insecure fallback.',
+      );
+    }
+    // Dev/test only: derive a deterministic non-secret key and warn loudly.
+    // eslint-disable-next-line no-console
+    console.warn('[security] DATA_ENCRYPTION_KEY missing — using dev-only key. Set it before production.');
+    return Buffer.from('dev-only-insecure-key-change-me!!'.padEnd(32, '0')).subarray(0, 32);
+  }
+  const buf = Buffer.from(raw);
+  if (buf.length >= 32) return buf.subarray(0, 32);
+  // Pad short keys deterministically (still warn: use >=32 chars).
+  // eslint-disable-next-line no-console
+  console.warn('[security] DATA_ENCRYPTION_KEY shorter than 32 bytes — padding. Use a 32+ char secret.');
+  return Buffer.from(raw.padEnd(32, '0')).subarray(0, 32);
+}
+
+const KEY = resolveKey();
 
 function toB64(buf: Buffer): string {
   return buf.toString('base64');

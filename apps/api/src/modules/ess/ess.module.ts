@@ -31,6 +31,12 @@ const NOTIFICATION_SWEEP_MS = 60 * 60 * 1000; // BR-05: hourly archive sweep
     AttendanceModule,
     MulterModule.register({
       storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) cb(null, true);
+        else cb(new Error(`Unsupported file type: ${file.mimetype}`), false);
+      },
     }),
   ],
   controllers: [

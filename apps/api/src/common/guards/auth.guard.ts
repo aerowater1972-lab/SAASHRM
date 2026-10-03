@@ -40,7 +40,11 @@ export class AuthGuard implements CanActivate {
 
     try {
       const secret = this.configService.get<string>('JWT_SECRET');
-      const decoded = jwt.verify(token, secret!) as any;
+      if (!secret || secret.length < 32) {
+        this.logger.error('JWT_SECRET missing or too short (min 32 chars) — refusing authentication');
+        throw new UnauthorizedException('Server misconfiguration');
+      }
+      const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as any;
       request.user = {
         sub: decoded.sub,
         email: decoded.email,

@@ -1,5 +1,7 @@
-import { IsEmail, IsOptional, IsString, MinLength, IsArray } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MinLength, IsArray, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+const PASSWORD_POLICY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
 export class CreateUserDto {
   @ApiProperty({ example: 'jane.doe@acme.com' })
@@ -13,6 +15,9 @@ export class CreateUserDto {
   @ApiProperty({ example: 'Str0ngP@ssw0rd', minLength: 8 })
   @IsString()
   @MinLength(8)
+  @Matches(PASSWORD_POLICY, {
+    message: 'password must contain uppercase, lowercase and number',
+  })
   password!: string;
 
   @ApiPropertyOptional({ example: '+628123456789' })
@@ -51,12 +56,15 @@ export class UpdateUserDto {
 
 export class ResetPasswordDto {
   @ApiPropertyOptional({
-    description: 'New password (min 8). If omitted, a random password is generated and returned.',
+    description: 'New password (min 8, upper+lower+number). If omitted, a random password is generated and returned.',
     minLength: 8,
   })
   @IsOptional()
   @IsString()
   @MinLength(8)
+  @Matches(PASSWORD_POLICY, {
+    message: 'password must contain uppercase, lowercase and number',
+  })
   password?: string;
 }
 
@@ -68,5 +76,8 @@ export class ChangePasswordDto {
   @ApiProperty({ example: 'NewStr0ngP@ss', minLength: 8 })
   @IsString()
   @MinLength(8)
+  @Matches(PASSWORD_POLICY, {
+    message: 'password must contain uppercase, lowercase and number',
+  })
   newPassword!: string;
 }

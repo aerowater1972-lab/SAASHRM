@@ -23,6 +23,15 @@ export class TenantService {
     });
   }
 
+  async listPublic() {
+    return this.prisma.tenant.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+      take: 100,
+    });
+  }
+
   async findById(id: string) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id, deletedAt: null },

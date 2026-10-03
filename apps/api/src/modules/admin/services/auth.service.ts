@@ -17,16 +17,28 @@ export class AuthService {
     tenantId: string,
     dto: { email: string; password: string; fullName: string },
   ) {
-    // Kill-switch operasional: set ALLOW_PUBLIC_REGISTER=false untuk
-    // menutup pendaftaran mandiri (default TERBUKA agar kompatibel
-    // dengan perilaku saat ini; ubah di environment produksi).
+    // Kill-switch operasional: set ALLOW_PUBLIC_REGISTER=true untuk
+    // membuka pendaftaran mandiri. Default TERTUTUP (secure by default)
+    // agar tidak bisa membuat user di tenant arbitrer via x-tenant-id spoofing.
     const allowPublicRegister =
-      (this.configService.get<string>('ALLOW_PUBLIC_REGISTER') ?? 'true').toLowerCase() !== 'false';
+      (this.configService.get<string>('ALLOW_PUBLIC_REGISTER') ?? 'false').toLowerCase() === 'true';
     if (!allowPublicRegister) {
       throw new ForbiddenException('Self-registration is disabled by administrator');
     }
+    // Cegah tenant spoofing: tenant harus ada dan tidak boleh kosong/'default'
+    // tanpa allowlist eksplisit saat registrasi publik aktif.
+    const normalizedTenant = (tenantId || '').trim();
+    if (!normalizedTenant) {
+      throw new ForbiddenException('Tenant identifier is required');
+    }
+    const tenantExists = await this.prisma.tenant.findUnique({
+      where: { id: normalizedTenant },
+    });
+    if (!tenantExists) {
+      throw new ForbiddenException('Invalid tenant identifier');
+    }
     const existing = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email: dto.email } },
+      where: { tenantId_email: { tenantId: normalizedTenant, email: dto.email } },
     });
     if (existing) {
       throw new ConflictException('User with this email already exists');
@@ -35,7 +47,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const user = await this.prisma.user.create({
       data: {
-        tenantId,
+        tenantId: normalizedTenant,
         email: dto.email,
         passwordHash,
         fullName: dto.fullName,
@@ -92,8 +104,8 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     try {
-      const secret = this.configService.get<string>('JWT_REFRESH_SECRET') || this.configService.get<string>('JWT_SECRET') || 'fallback-secret';
-      const decoded = jwt.verify(refreshToken, secret) as any;
+      const secret = this.requireJwtSecret('JWT_REFRESH_SECRET', true);
+      const decoded = jwt.verify(refreshToken, secret, { algorithms: ['HS256'] }) as any;
 
       const user = await this.prisma.user.findUnique({ where: { id: decoded.sub } });
       if (!user) {
@@ -116,24 +128,36 @@ export class AuthService {
     user: { id: string; email: string; tenantId: string; employeeId?: string | null },
     permissions: string[] = [],
   ) {
-    const jwtSecret = this.configService.get<string>('JWT_SECRET') || 'fallback-secret';
-    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET') || jwtSecret;
+    const jwtSecret = this.requireJwtSecret('JWT_SECRET');
+    const refreshSecret = this.requireJwtSecret('JWT_REFRESH_SECRET', true);
     const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN') || '15m';
     const refreshExpiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
 
     const accessToken = jwt.sign(
       { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, permissions },
       jwtSecret,
-      { expiresIn: expiresIn as any },
+      { expiresIn: expiresIn as any, algorithm: 'HS256' },
     );
 
     const refreshToken = jwt.sign(
-      { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, permissions },
+      { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, permissions, type: 'refresh' },
       refreshSecret,
-      { expiresIn: refreshExpiresIn as any },
+      { expiresIn: refreshExpiresIn as any, algorithm: 'HS256' },
     );
 
     return { accessToken, refreshToken };
+  }
+
+  private requireJwtSecret(key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET', allowFallbackToJwtSecret = false): string {
+    const direct = this.configService.get<string>(key);
+    if (direct && direct.length >= 32) return direct;
+    if (allowFallbackToJwtSecret) {
+      const base = this.configService.get<string>('JWT_SECRET');
+      if (base && base.length >= 32) return base;
+    }
+    throw new Error(
+      `${key} is not configured (min 32 chars). Set it in environment; server refuses to start with insecure fallback.`,
+    );
   }
 
   private async loadPermissions(userId: string): Promise<string[]> {
