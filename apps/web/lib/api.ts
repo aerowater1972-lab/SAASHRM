@@ -37,6 +37,7 @@ export const api = {
   async login(email: string, password: string, tenantId: string): Promise<LoginResult> {
     const res = await fetch(`${API_BASE}/admin/auth/login`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
       body: JSON.stringify({ email, password }),
     });
@@ -50,6 +51,7 @@ export const api = {
   async logout(token: string): Promise<void> {
     await fetch(`${API_BASE}/admin/auth/logout`, {
       method: 'POST',
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => undefined);
   },
@@ -113,6 +115,7 @@ async function refreshAccessToken(): Promise<string | null> {
     try {
       const res = await fetch(`${API_BASE}/admin/auth/refresh`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
@@ -143,6 +146,7 @@ async function request<T>(
 
   const doFetch = () => fetch(url, {
     method,
+    credentials: 'include',
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
