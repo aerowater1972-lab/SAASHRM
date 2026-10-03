@@ -1,7 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
-import { CreateBpjsConfigDto, BpjsCalculationDto, BpjsReportDto } from '../dto/bpjs-config.dto';
+import {
+  CreateBpjsConfigDto,
+  BpjsCalculationDto,
+  BpjsReportDto,
+  CreateBpjsClaimDto,
+  UpdateBpjsClaimDto,
+  BpjsClaimFilterDto,
+} from '../dto/bpjs-config.dto';
 
 @Injectable()
 export class BpjsService {
@@ -18,11 +25,11 @@ export class BpjsService {
   private readonly JP_EMPLOYEE = 0.01;
 
   private readonly JKK_RATES: Record<string, number> = {
-    VERY_LOW: 0.0014,
-    LOW: 0.0027,
-    MEDIUM: 0.0044,
-    HIGH: 0.0069,
-    VERY_HIGH: 0.0089,
+    VERY_LOW: 0.0024,
+    LOW: 0.0054,
+    MEDIUM: 0.0089,
+    HIGH: 0.0127,
+    VERY_HIGH: 0.0174,
   };
 
   constructor(
@@ -61,7 +68,15 @@ export class BpjsService {
     let totalEmployer = 0;
     let totalEmployee = 0;
 
-    const kesehatanConfig = configs.find((c: any) => c.type === 'KES');
+    const pick = (...types: string[]) => {
+      for (const t of types) {
+        const found = configs.find((c: any) => c.type === t);
+        if (found) return found;
+      }
+      return undefined;
+    };
+
+    const kesehatanConfig = pick('KES');
     const wageCap = Number(kesehatanConfig?.maxWageLimit) || this.BPJS_KESEHATAN_MAX_WAGE;
     const cappedWage = Math.min(baseSalary, wageCap);
 
@@ -74,10 +89,15 @@ export class BpjsService {
     totalEmployer += results[0].employerAmount;
     totalEmployee += results[0].employeeAmount;
 
-    if ((employee.employments[0]?.grade as any)?.level) {
-      const riskLevel = 'LOW';
-      const jkkRate = this.JKK_RATES[riskLevel] || this.JKK_RATES.LOW;
-      const jkkConfig = configs.find((c: any) => c.type === 'KET');
+    {
+      const jkkConfig = pick('JKK', 'KET');
+      const emp: any = employee;
+      const rawRisk = emp?.employments?.[0]?.position?.riskLevel
+        ?? emp?.employments?.[0]?.grade?.riskLevel
+        ?? emp?.employments?.[0]?.department?.riskLevel
+        ?? 'LOW';
+      const riskLevel = String(rawRisk).toUpperCase();
+      const jkkRate = this.JKK_RATES[riskLevel] ?? this.JKK_RATES.LOW;
 
       results.push({
         bpjsType: 'JKK',
@@ -88,7 +108,7 @@ export class BpjsService {
       totalEmployer += results[results.length - 1].employerAmount;
     }
 
-    const jkmConfig = configs.find((c: any) => c.type === 'KET');
+    const jkmConfig = pick('JKM', 'KET');
     results.push({
       bpjsType: 'JKM',
       employerAmount: Math.round(baseSalary * (Number(jkmConfig?.jkmRate) || this.JKM_RATE)),
@@ -97,7 +117,7 @@ export class BpjsService {
     });
     totalEmployer += results[results.length - 1].employerAmount;
 
-    const jhtConfig = configs.find((c: any) => c.type === 'KET');
+    const jhtConfig = pick('JHT', 'KET');
     results.push({
       bpjsType: 'JHT',
       employerAmount: Math.round(baseSalary * Number(jhtConfig?.jhtEmployerRate ?? this.JHT_EMPLOYER)),
@@ -107,8 +127,8 @@ export class BpjsService {
     totalEmployer += results[results.length - 1].employerAmount;
     totalEmployee += results[results.length - 1].employeeAmount;
 
-    const jpConfig = configs.find((c: any) => c.type === 'KET');
-    const jpMaxWage = Number(jpConfig?.maxWageLimit) || 10_000_000;
+    const jpConfig = pick('JP', 'KET');
+    const jpMaxWage = Number(jpConfig?.maxWageLimit) || 10_042_300;
     const jpWage = Math.min(baseSalary, jpMaxWage);
     results.push({
       bpjsType: 'JP',
@@ -134,17 +154,66 @@ export class BpjsService {
   }
 
   /**
-   * Config efektif per tanggal periode: hanya baris ACTIVE dengan
-   * effectiveDate <= tanggal yang dipakai, terbaru per tipe.
-   * Menutup nondeterminisme pemilihan config (dulu: baris pertama
-   * sembarang dari findMany tanpa order).
+   * Monthly BPJS Kesehatan + JKK preview for dashboard (lightweight:
+   * no payroll period required). Month is 1-12; defaults to current month.
    */
+  async getMonthlyIuran(tenantId: string, employeeId: string, month?: number, year?: number) {
+    const now = new Date();
+    const atDate = new Date(year ?? now.getFullYear(), (month ?? now.getMonth() + 1) - 1, 1);
+
+    const employee = await this.employeeService.findById(tenantId, employeeId);
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    const baseSalary = Number((employee as any).employments?.[0]?.grade?.baseSalary) || 0;
+    const configs = await this.getEffectiveConfigs(tenantId, atDate);
+    const pick = (...types: string[]) => {
+      for (const t of types) {
+        const found = configs.find((c: any) => c.type === t);
+        if (found) return found;
+      }
+      return undefined;
+    };
+
+    const kesehatanConfig = pick('KES');
+    const wageCap = Number(kesehatanConfig?.maxWageLimit) || this.BPJS_KESEHATAN_MAX_WAGE;
+    const cappedWage = Math.min(baseSalary, wageCap);
+    const kesehatan = {
+      wageBase: cappedWage,
+      employer: Math.round(cappedWage * Number(kesehatanConfig?.kesEmployerRate ?? this.BPJS_KESEHATAN_EMPLOYER)),
+      employee: Math.round(cappedWage * Number(kesehatanConfig?.kesEmployeeRate ?? this.BPJS_KESEHATAN_EMPLOYEE)),
+    };
+
+    const jkkConfig = pick('JKK', 'KET');
+    const emp: any = employee;
+    const rawRisk = emp?.employments?.[0]?.position?.riskLevel
+      ?? emp?.employments?.[0]?.grade?.riskLevel
+      ?? emp?.employments?.[0]?.department?.riskLevel
+      ?? 'LOW';
+    const jkkRate = this.JKK_RATES[String(rawRisk).toUpperCase()] ?? this.JKK_RATES.LOW;
+    const jkk = {
+      employer: Math.round(baseSalary * (Number(jkkConfig?.jkkRate) || jkkRate)),
+      employee: 0,
+    };
+
+    const totalEmployer = kesehatan.employer + jkk.employer;
+    const totalEmployee = kesehatan.employee + jkk.employee;
+    return {
+      employeeId,
+      month: month ?? now.getMonth() + 1,
+      year: year ?? now.getFullYear(),
+      kesehatan,
+      jkk,
+      totalEmployer,
+      totalEmployee,
+      totalCombined: totalEmployer + totalEmployee,
+    };
+  }
+
   private async getEffectiveConfigs(tenantId: string, atDate: Date): Promise<any[]> {
     const rows: any[] = await this.prisma.bpjsConfig.findMany({
       where: { tenantId, status: 'ACTIVE', effectiveDate: { lte: atDate } } as any,
       orderBy: { effectiveDate: 'desc' } as any,
     });
-    // Sort ulang di kode agar deterministik walau urutan DB/mock berbeda.
     rows.sort((a, b) => +new Date(b.effectiveDate) - +new Date(a.effectiveDate));
     const seen = new Set<string>();
     return rows.filter((c) => {
@@ -176,7 +245,7 @@ export class BpjsService {
       } as any,
       include: {
         employee: { select: { id: true, fullName: true, employeeId: true, taxIdNumber: true, socialSecurityNumber: true } },
-      },
+      } as any,
     });
 
     const reportData = await Promise.all(
@@ -205,5 +274,113 @@ export class BpjsService {
         { totalEmployer: 0, totalEmployee: 0, totalCombined: 0 },
       ),
     };
+  }
+
+  async createClaim(tenantId: string, dto: CreateBpjsClaimDto) {
+    return this.prisma.bpjsClaim.create({
+      data: {
+        tenantId,
+        employeeId: dto.employeeId || '',
+        claimNumber: dto.claimNumber,
+        claimType: dto.claimType,
+        diagnosisCode: dto.diagnosisCode,
+        diagnosisName: dto.diagnosisName,
+        admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : null,
+        dischargeDate: dto.dischargeDate ? new Date(dto.dischargeDate) : null,
+        daysOfCare: dto.daysOfCare,
+        hospitalCode: dto.hospitalCode,
+        hospitalName: dto.hospitalName,
+        claimAmount: dto.claimAmount,
+        approvedAmount: dto.approvedAmount,
+        patientShare: dto.patientShare,
+        status: 'SUBMITTED',
+        notes: dto.notes,
+      } as any,
+    });
+  }
+
+  async getClaims(tenantId: string, filters: {
+    employeeId?: string;
+    status?: string;
+    claimType?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}) {
+    const where: any = { tenantId };
+    if (filters.employeeId) where.employeeId = filters.employeeId;
+    if (filters.status) where.status = filters.status;
+    if (filters.claimType) where.claimType = filters.claimType;
+    if (filters.startDate || filters.endDate) {
+      where.submittedAt = {};
+      if (filters.startDate) where.submittedAt.gte = new Date(filters.startDate);
+      if (filters.endDate) where.submittedAt.lte = new Date(filters.endDate);
+    }
+
+    return this.prisma.bpjsClaim.findMany({
+      where,
+      orderBy: { submittedAt: 'desc' },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeId: true } },
+      },
+    });
+  }
+
+  async getClaim(tenantId: string, id: string) {
+    const claim = await this.prisma.bpjsClaim.findFirst({
+      where: { id, tenantId },
+      include: { employee: { select: { id: true, fullName: true, employeeId: true } } },
+    });
+    if (!claim) throw new NotFoundException('Claim not found');
+    return claim;
+  }
+
+  async updateClaim(tenantId: string, id: string, dto: UpdateBpjsClaimDto) {
+    const claim = await this.prisma.bpjsClaim.findFirst({ where: { id, tenantId } });
+    if (!claim) throw new NotFoundException('Claim not found');
+
+    const data: any = {};
+    if (dto.status) data.status = dto.status;
+    if (dto.approvedAmount !== undefined) data.approvedAmount = dto.approvedAmount;
+    if (dto.patientShare !== undefined) data.patientShare = dto.patientShare;
+    if (dto.notes !== undefined) data.notes = dto.notes;
+
+    if (dto.status === 'APPROVED' && !claim.processedAt) {
+      data.processedAt = new Date();
+    }
+    if (dto.status === 'PAID' && !claim.paidAt) {
+      data.paidAt = new Date();
+    }
+
+    return this.prisma.bpjsClaim.update({ where: { id }, data: data as any });
+  }
+
+  async getClaimStats(tenantId: string, startDate?: string, endDate?: string) {
+    const where: any = { tenantId };
+    if (startDate || endDate) {
+      where.submittedAt = {};
+      if (startDate) where.submittedAt.gte = new Date(startDate);
+      if (endDate) where.submittedAt.lte = new Date(endDate);
+    }
+
+    const claims = await this.prisma.bpjsClaim.findMany({ where, select: { status: true, claimAmount: true, approvedAmount: true, patientShare: true, claimType: true } });
+
+    const stats = {
+      total: claims.length,
+      byStatus: {} as Record<string, number>,
+      byType: {} as Record<string, number>,
+      totalClaimAmount: 0,
+      totalApproved: 0,
+      totalPatientShare: 0,
+    };
+
+    for (const c of claims) {
+      stats.byStatus[c.status] = (stats.byStatus[c.status] || 0) + 1;
+      stats.byType[c.claimType] = (stats.byType[c.claimType] || 0) + 1;
+      stats.totalClaimAmount += Number(c.claimAmount || 0);
+      stats.totalApproved += Number(c.approvedAmount || 0);
+      stats.totalPatientShare += Number(c.patientShare || 0);
+    }
+
+    return stats;
   }
 }

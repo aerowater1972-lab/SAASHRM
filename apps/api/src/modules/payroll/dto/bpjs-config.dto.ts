@@ -8,10 +8,13 @@ import {
   IsDateString,
   Min,
   IsUUID,
+  IsDate,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 export enum BpjsType {
   KESEHATAN = 'KESEHATAN',
+  KES = 'KES',
+  KET = 'KET',
   JKK = 'JKK',
   JKM = 'JKM',
   JHT = 'JHT',
@@ -23,6 +26,21 @@ export enum BpjsRiskLevel {
   MEDIUM = 'MEDIUM',
   HIGH = 'HIGH',
   VERY_HIGH = 'VERY_HIGH',
+}
+export enum BpjsClaimType {
+  RAWAT_INAP = 'RAWAT_INAP',
+  RAWAT_JALAN = 'RAWAT_JALAN',
+  KUNING = 'KUNING',
+  MERAH = 'MERAH',
+  KELAHIRAN = 'KELAHIRAN',
+  LAINNYA = 'LAINNYA',
+}
+export enum BpjsClaimStatus {
+  SUBMITTED = 'SUBMITTED',
+  PROCESSING = 'PROCESSING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  PAID = 'PAID',
 }
 export class CreateBpjsConfigDto {
   @ApiProperty({ enum: BpjsType })
@@ -89,4 +107,108 @@ export class BpjsReportDto {
   @IsOptional()
   @IsString()
   employeeId?: string;
+}
+export class CreateBpjsClaimDto {
+  @ApiProperty({ enum: BpjsClaimType })
+  @IsEnum(BpjsClaimType)
+  claimType!: BpjsClaimType;
+  @ApiProperty({ description: 'Employee ID (user id) pemilik klaim' })
+  @IsString()
+  employeeId!: string;
+  @ApiProperty()
+  @IsString()
+  claimNumber!: string;
+  @ApiProperty()
+  @IsString()
+  diagnosisCode!: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  diagnosisName?: string;
+  @ApiProperty()
+  @IsDateString()
+  admissionDate!: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  dischargeDate?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  daysOfCare?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  hospitalCode?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  hospitalName?: string;
+  @ApiProperty()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  claimAmount!: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  approvedAmount?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  patientShare?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+export class UpdateBpjsClaimDto {
+  @ApiPropertyOptional({ enum: BpjsClaimStatus })
+  @IsOptional()
+  @IsEnum(BpjsClaimStatus)
+  status?: BpjsClaimStatus;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  approvedAmount?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  patientShare?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+export class BpjsClaimFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(BpjsClaimStatus)
+  status?: BpjsClaimStatus;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(BpjsClaimType)
+  claimType?: BpjsClaimType;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 }
