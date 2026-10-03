@@ -1,6 +1,6 @@
 import { useQuery, useMutation, keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { fetchGoals, fetchGoal, fetchReviews, fetchReview, fetchCycles, fetchCycle, updateGoalProgress, updateReview, submitReview, startCycle, completeCycle } from '@/lib/api/performance';
+import { fetchGoals, fetchGoal, createGoal, fetchReviews, fetchReview, fetchCycles, fetchCycle, updateGoalProgress, updateReview, submitReview, startCycle, completeCycle, startPip, fetchPipStatus } from '@/lib/api/performance';
 
 function usePagedList<T>(queryKey: string[], fetcher: (params: any) => Promise<{ data: T[]; total: number }>) {
   const [page, setPage] = useState(1);
@@ -31,6 +31,14 @@ export function useGoal(id: string) {
     queryKey: ['goals', id],
     queryFn: () => fetchGoal(id),
     enabled: !!id,
+  });
+}
+
+export function useCreateGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof createGoal>[0]) => createGoal(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals'] }),
   });
 }
 
@@ -95,5 +103,27 @@ export function useCompleteCycle() {
   return useMutation({
     mutationFn: (id: string) => completeCycle(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['performance', 'cycles'] }),
+  });
+}
+
+export function usePipStatus(employeeId: string) {
+  return useQuery({
+    queryKey: ['performance', 'pip', employeeId],
+    queryFn: () => fetchPipStatus(employeeId),
+    enabled: !!employeeId,
+  });
+}
+
+export function useStartPip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      employeeId, data,
+    }: {
+      employeeId: string;
+      data: { goals: { title: string; metric?: string; targetValue?: number }[]; endDate?: string; reviewId?: string };
+    }) => startPip(employeeId, data),
+    onSuccess: (_, variables) =>
+      qc.invalidateQueries({ queryKey: ['performance', 'pip', variables.employeeId] }),
   });
 }

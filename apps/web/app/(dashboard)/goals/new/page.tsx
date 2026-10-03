@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { api } from '@/lib/api';
+import { useCreateGoal } from '@/lib/hooks/performance';
 import { goalSchema, type GoalInput } from '@/lib/schemas/performance';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,11 +15,12 @@ export default function NewGoalPage() {
   const router = useRouter();
   const [error, setError] = useState('');
   const form = useForm<GoalInput>({ resolver: zodResolver(goalSchema) });
+  const createGoal = useCreateGoal();
 
   async function onSubmit(data: GoalInput) {
     setError('');
     try {
-      const result = await api.post<any>('/performance/goals', {
+      const result = await createGoal.mutateAsync({
         title: data.title,
         description: data.description || undefined,
         metric: data.metric || undefined,

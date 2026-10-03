@@ -31,6 +31,14 @@ const TENANT_ID = 'nusantara';
 const ENTITY_ID = TENANT_ID;
 
 async function main() {
+  // SAFEGUARD: demo seed starts with deleteMany — never run against production
+  // unless explicitly forced. CI and prod use scripts/seed.js instead.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error(
+      'Refusing to run demo seed in production (deleteMany is destructive). ' +
+        'Set ALLOW_DEMO_SEED=true explicitly if you really mean it.',
+    );
+  }
   console.log('=== Seeding demo: PT Nusantara Sejahtera Makmur ===');
 
   // Create Tenant first (if not exists)
@@ -175,14 +183,14 @@ async function main() {
   // 4. Grades (8 level sesuai struktur Indonesia)
   // -------------------------------------------------------------------------
   const grades = [
-    { id: 'nsm-grade-staff', name: 'Staff', code: 'STF', level: 1 },
-    { id: 'nsm-grade-senior', name: 'Senior Staff', code: 'SST', level: 2 },
-    { id: 'nsm-grade-spv', name: 'Supervisor', code: 'SPV', level: 3 },
-    { id: 'nsm-grade-asstmgr', name: 'Assistant Manager', code: 'AMG', level: 4 },
-    { id: 'nsm-grade-mgr', name: 'Manager', code: 'MGR', level: 5 },
-    { id: 'nsm-grade-srnmgr', name: 'Senior Manager', code: 'SMG', level: 6 },
-    { id: 'nsm-grade-gm', name: 'General Manager', code: 'GM', level: 7 },
-    { id: 'nsm-grade-dir', name: 'Direktur', code: 'DIR', level: 8 },
+    { id: 'nsm-grade-staff', name: 'Staff', code: 'STF', level: 1, maxOvertimeHoursPerMonth: 20 },
+    { id: 'nsm-grade-senior', name: 'Senior Staff', code: 'SST', level: 2, maxOvertimeHoursPerMonth: 20 },
+    { id: 'nsm-grade-spv', name: 'Supervisor', code: 'SPV', level: 3, maxOvertimeHoursPerMonth: 16 },
+    { id: 'nsm-grade-asstmgr', name: 'Assistant Manager', code: 'AMG', level: 4, maxOvertimeHoursPerMonth: 12 },
+    { id: 'nsm-grade-mgr', name: 'Manager', code: 'MGR', level: 5, maxOvertimeHoursPerMonth: 12 },
+    { id: 'nsm-grade-srnmgr', name: 'Senior Manager', code: 'SMG', level: 6, maxOvertimeHoursPerMonth: 8 },
+    { id: 'nsm-grade-gm', name: 'General Manager', code: 'GM', level: 7, maxOvertimeHoursPerMonth: 8 },
+    { id: 'nsm-grade-dir', name: 'Direktur', code: 'DIR', level: 8, maxOvertimeHoursPerMonth: 8 },
   ];
   for (const g of grades) {
     await prisma.grade.upsert({ where: { id: g.id }, update: {}, create: { ...g, tenantId: TENANT_ID } });
@@ -539,6 +547,7 @@ async function main() {
     'assets:read', 'analytics:read',
     // Employee Relations & Safety
     'disciplinary-cases:read', 'disciplinary-cases:acknowledge',
+    'employee-relations:grievance:create', 'employee-relations:grievance:read',
     'incident-reports:create', 'incident-reports:read',
     'ppe-assignments:create', 'ppe-assignments:read',
     'k3:dashboard',
@@ -603,6 +612,8 @@ async function main() {
     { id: 'nsm-lt-marry-child', name: 'Cuti Menikahkan/Mengkhitankan Anak', code: 'CC', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
     { id: 'nsm-lt-spouse-birth', name: 'Cuti Istri Melahirkan/Keguguran', code: 'CI', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 2 },
     { id: 'nsm-lt-personal', name: 'Izin Pribadi', code: 'IP', isPaid: false, isBalanceDeducting: false, allowNegativeBalance: true },
+    { id: 'nsm-lt-long', name: 'Cuti Besar', code: 'LONG', isPaid: true, isBalanceDeducting: false, minServiceMonths: 72, maxConsecutiveDays: 30 },
+    { id: 'nsm-lt-adoption', name: 'Cuti Adopsi', code: 'ADP', isPaid: true, maxConsecutiveDays: 30, requiresDocument: true },
     // Addendum Serikat Pekerja: izin kegiatan serikat (non-deducting, hanya untuk union officer via BR-01)
     { id: 'nsm-lt-union', name: 'Izin Kegiatan Serikat', code: 'IKS', isPaid: true, isBalanceDeducting: false, isUnionActivity: true },
   ];
@@ -662,6 +673,24 @@ async function main() {
     });
   }
   console.log(`${unionMembers.length} union_dues salary components created (Rp50.000/bln)`);
+
+  // Preset salary components (master list for all employees)
+  const presetComponents = [
+    { id: 'nsm-comp-transport', name: 'Uang Transport', code: 'TRANSPORT', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 100000, isTaxable: true, isActive: true },
+    { id: 'nsm-comp-meal', name: 'Uang Makan', code: 'MEAL', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 150000, isTaxable: true, isActive: true },
+    { id: 'nsm-comp-communication', name: 'Uang Komunikasi', code: 'COMM', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 50000, isTaxable: true, isActive: true },
+    { id: 'nsm-comp-position', name: 'Tunjangan Jabatan', code: 'POSITION', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 0, isTaxable: true, isActive: true },
+    { id: 'nsm-comp-supervision', name: 'Tunjangan Pengawasan', code: 'SUPERVISION', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 0, isTaxable: true, isActive: true },
+    { id: 'nsm-comp-honor', name: 'Tunjangan Kehormatan', code: 'HONOR', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 0, isTaxable: true, isActive: true },
+  ];
+  for (const c of presetComponents) {
+    await prisma.payrollComponent.upsert({
+      where: { id: c.id },
+      update: {},
+      create: { ...c, tenantId: TENANT_ID },
+    });
+  }
+  console.log(`${presetComponents.length} preset salary components created`);
 
   const demoUsers = [
     { id: 'nsm-user-admin', email: 'admin@nusantarasejahtera.co.id', fullName: 'Admin Nusantara (Demo)', roleId: 'nsm-role-sysadmin', employeeId: null },

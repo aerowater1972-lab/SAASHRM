@@ -14,6 +14,20 @@ export async function fetchGoal(id: string): Promise<Goal> {
   return api.get(`/performance/goals/${id}`);
 }
 
+export interface CreateGoalInput {
+  title: string;
+  description?: string;
+  metric?: string;
+  targetValue?: number;
+  startDate?: string;
+  endDate?: string;
+  reviewId?: string;
+}
+
+export async function createGoal(data: CreateGoalInput): Promise<Goal> {
+  return api.post('/performance/goals', data);
+}
+
 export async function fetchReviews(params?: { page?: number; limit?: number; q?: string }): Promise<{ data: Review[]; total: number }> {
   return paginated<Review>('/performance/reviews', params);
 }
@@ -48,4 +62,15 @@ export async function startCycle(id: string): Promise<void> {
 
 export async function completeCycle(id: string): Promise<void> {
   return api.post(`/performance/cycles/${id}/complete`, {});
+}
+
+export async function startPip(
+  employeeId: string,
+  data: { goals: { title: string; metric?: string; targetValue?: number }[]; endDate?: string; reviewId?: string },
+): Promise<Record<string, unknown>> {
+  return api.post(`/performance/goals/pip/${employeeId}`, data);
+}
+
+export async function fetchPipStatus(employeeId: string): Promise<Record<string, unknown>> {
+  return api.get(`/performance/goals/pip/${employeeId}/status`);
 }

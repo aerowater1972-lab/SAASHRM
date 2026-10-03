@@ -21,8 +21,12 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/flexy_hrms?schema=public
-      JWT_SECRET: change-me-in-production
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/flexy_hrms?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in environment (min 32 chars)}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in environment (min 32 chars)}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?DATA_ENCRYPTION_KEY must be set in environment (min 32 chars)}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      ALLOW_PUBLIC_REGISTER: ${ALLOW_PUBLIC_REGISTER:-false}
       PORT: 3000
     depends_on:
       - db

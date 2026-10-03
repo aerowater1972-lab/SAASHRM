@@ -27,10 +27,18 @@ import {
   Fingerprint,
   ShieldAlert,
   ShieldCheck,
-  ChevronLeft,
+  AlertTriangle,
+  Upload,
+  Activity,
   ChevronRight,
-  Menu,
+  ChevronLeft,
   X,
+  ClipboardList,
+  MessageSquare,
+  Bell,
+  TrendingUp,
+  Network,
+  Users2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -83,6 +91,19 @@ const navItems: NavGroup[] = [
       { href: '/payslips', label: 'Payslips', icon: FileText },
       { href: '/expenses', label: 'Expenses', icon: DollarSign },
       { href: '/loans', label: 'Loans', icon: DollarSign },
+      { href: '/wage', label: 'UMK/UMP Wage', icon: TrendingUp },
+    ],
+  },
+  {
+    group: 'Employee Relations & Safety',
+    items: [
+      { href: '/employee-relations', label: 'Dashboard K3', icon: AlertTriangle },
+      { href: '/employee-relations/disciplinary-cases', label: 'Surat Peringatan', icon: FileText },
+      { href: '/employee-relations/grievances', label: 'Pengaduan', icon: MessageSquare },
+      { href: '/employee-relations/bipartite', label: 'LKS Bipartit', icon: ClipboardList },
+      { href: '/employee-relations/violation-categories', label: 'Kategori Pelanggaran', icon: AlertTriangle },
+      { href: '/employee-relations/incident-reports', label: 'Insiden Kerja', icon: AlertTriangle },
+      { href: '/employee-relations/ppe-assignments', label: 'APD', icon: ShieldCheck },
     ],
   },
   {
@@ -104,15 +125,44 @@ const navItems: NavGroup[] = [
     group: 'Performance',
     items: [
       { href: '/goals', label: 'Goals & OKRs', icon: Target },
+      { href: '/goals/pip', label: 'PIP', icon: Target },
       { href: '/reviews', label: 'Reviews', icon: Star },
       { href: '/cycles', label: 'Cycles', icon: Repeat },
       { href: '/learning/trainings', label: 'Learning', icon: BookOpen },
+      { href: '/lms', label: 'LMS Courses', icon: BookOpen },
+      { href: '/feedback360', label: '360° Feedback', icon: MessageSquare },
+      { href: '/idp', label: 'Individual Development Plan', icon: Target },
+      { href: '/idp/rekomendasi', label: 'Rekomendasi Training', icon: BookOpen },
+      { href: '/nine-box', label: '9-Box Matrix', icon: Activity },
+    ],
+  },
+  {
+    group: 'Planning & Survey',
+    items: [
+      { href: '/manpower-planning', label: 'Manpower Planning', icon: ClipboardList },
+      { href: '/engagement-survey', label: 'Engagement Survey', icon: MessageSquare },
+    ],
+  },
+  {
+    group: 'Komunikasi & Dokumen',
+    items: [
+      { href: '/announcements', label: 'Pengumuman', icon: Bell },
+      { href: '/documents', label: 'Kelola Dokumen', icon: FileText },
+    ],
+  },
+  {
+    group: 'Succession',
+    items: [
+      { href: '/succession', label: 'Succession Plans', icon: Network },
+      { href: '/succession/talent-pools', label: 'Talent Pools', icon: Users2 },
     ],
   },
   {
     group: 'ESS',
     items: [
       { href: '/ess', label: 'ESS Dashboard', icon: LayoutDashboard },
+      { href: '/ess/notifications', label: 'Notifikasi', icon: Bell },
+      { href: '/ess/surveys', label: 'Survei', icon: ClipboardList },
     ],
   },
   {
@@ -120,7 +170,13 @@ const navItems: NavGroup[] = [
     items: [
       { href: '/resignations', label: 'Resignations', icon: LogOut },
       { href: '/profile', label: 'Profile', icon: UserCircle },
-      { href: '/admin/roles', label: 'Admin', icon: Settings },
+      { href: '/admin', label: 'Admin', icon: Settings },
+      {
+        href: '/admin/users',
+        label: 'Pengguna',
+        icon: Users,
+        permission: 'admin:user:read',
+      },
       {
         href: '/admin/biometric-enrollment',
         label: 'Enrollment Biometrik',
@@ -132,6 +188,30 @@ const navItems: NavGroup[] = [
         label: 'Pengaturan Anti Fake-GPS',
         icon: ShieldCheck,
         permission: 'attendance:biometric:enroll',
+      },
+      {
+        href: '/admin/branding',
+        label: 'Branding Tenant',
+        icon: Settings,
+        permission: 'admin:branding:read',
+      },
+      {
+        href: '/admin/platform/health',
+        label: 'System Health',
+        icon: Activity,
+        permission: 'admin:branding:read',
+      },
+      {
+        href: '/admin/audit-logs',
+        label: 'Audit Logs',
+        icon: FileText,
+        permission: 'admin:branding:read',
+      },
+      {
+        href: '/admin/import',
+        label: 'Import CSV',
+        icon: Upload,
+        permission: 'admin:user:create',
       },
     ],
   },

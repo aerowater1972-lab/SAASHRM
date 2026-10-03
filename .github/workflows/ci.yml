@@ -85,8 +85,10 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flexy_hrms?schema=public
-      JWT_SECRET: ci-jwt-secret
-      JWT_REFRESH_SECRET: ci-jwt-refresh-secret
+      JWT_SECRET: ci-jwt-secret-min-32-chars-long-0001
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
+      DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
+      ALLOW_PUBLIC_REGISTER: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -102,8 +104,8 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
-      - name: Push database schema
-        run: npx prisma db push --schema=packages/database/schema.prisma --accept-data-loss
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --schema=packages/database/schema.prisma
 
       - name: Seed database
         run: npm run db:seed
