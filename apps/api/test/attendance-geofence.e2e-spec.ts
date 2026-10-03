@@ -20,7 +20,13 @@ describe('Attendance Geofence & Correction (e2e, BR-01 / FR-06)', () => {
   let correctionId: string;
 
   beforeAll(async () => {
-    tenantId = (await prisma.tenantEntity.findFirst({ select: { id: true } }))!.id;
+    // Ensure TenantEntity exists for the default tenant (aligns Tenant.id with TenantEntity.id)
+    await prisma.tenantEntity.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default', tenantId: 'default', name: 'Default Entity', code: 'DEF' },
+    });
+    tenantId = 'default';
 
     const location = await prisma.workLocation.create({
       data: {
@@ -45,19 +51,19 @@ describe('Attendance Geofence & Correction (e2e, BR-01 / FR-06)', () => {
     const login = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = login.body?.accessToken;
 
     const emp = await request(app.getHttpServer())
       .post('/api/v1/employees')
       .set('x-tenant-id', tenantId)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ fullName: 'Geo Emp', email: empEmail });
+      .send({ employeeId: `geo-${runId}`, fullName: 'Geo Emp', email: empEmail });
     employeeId = emp.body.id;
     await prisma.employee.update({ where: { id: employeeId }, data: { workLocationId } });
 
     // Link a user so we can log in as the employee to submit a correction
-    await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         tenantId,
         email: empEmail,
@@ -67,7 +73,22 @@ describe('Attendance Geofence & Correction (e2e, BR-01 / FR-06)', () => {
         status: 'ACTIVE',
       },
     });
-    userId = (await prisma.user.findUnique({ where: { tenantId_email: { tenantId, email: empEmail } } }))!.id;
+    userId = newUser.id;
+    // Assign employee role for ess:attendance:clock permission
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId, roleId: 'role-employee' } },
+      update: {},
+      create: { userId, roleId: 'role-employee' },
+    }).catch(() => {});
+    // Grant attendance:correction:create to the employee role for the correction test
+    const correctionPerm = await prisma.permission.findFirst({ where: { module: 'attendance:correction', action: 'create' } });
+    if (correctionPerm) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: 'role-employee', permissionId: correctionPerm.id } },
+        update: {},
+        create: { roleId: 'role-employee', permissionId: correctionPerm.id },
+      }).catch(() => {});
+    }
 
     // Seed an attendance record to correct
     const rec = await prisma.attendanceRecord.create({

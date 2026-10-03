@@ -28,7 +28,7 @@ describe('Integration endpoints (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = res.body?.accessToken;
   });
 

@@ -109,24 +109,38 @@ export class RunService {
         const payslipData = await this.calculateEmployeePayroll(
           tenantId, employee, period, components, id, appliedAdjustmentIds,
         );
+        // Rincian komponen disimpan ke PayrollItem, bukan kolom payslip.
+        const { items, ...payslipFields } = payslipData as any;
 
         const existingPayslip = await this.prisma.payslip.findFirst({
           where: { runId: id, employeeId: employee.id },
         });
 
-        if (existingPayslip) {
-          await this.prisma.payslip.update({
+        const payslipId = existingPayslip
+          ? (await this.prisma.payslip.update({
             where: { id: existingPayslip.id },
-            data: payslipData as any,
-          });
-        } else {
-          await this.prisma.payslip.create({
+            data: payslipFields as any,
+          })).id
+          : (await this.prisma.payslip.create({
             data: {
               tenantId,
               runId: id,
               employeeId: employee.id,
-              ...payslipData,
+              ...payslipFields,
             } as any,
+          })).id;
+
+        // Sinkronisasi rincian: hapus lama, tulis ulang dari komponen aktif.
+        // Idempoten untuk process() ulang pada run yang sama.
+        await this.prisma.payrollItem.deleteMany({ where: { payslipId } });
+        if (Array.isArray(items) && items.length > 0) {
+          await this.prisma.payrollItem.createMany({
+            data: items.map((it: any) => ({
+              payslipId,
+              componentId: it.componentId,
+              amount: it.amount,
+              description: it.description,
+            })),
           });
         }
       }
@@ -176,7 +190,10 @@ export class RunService {
     appliedAdjustmentIds?: string[],
   ) {
     const employment = employee.employments?.[0];
-    const baseSalary = Number(employment?.grade?.level || 0) * 1000000 || 0;
+    // Samakan derivasi dengan bpjs.service / payroll-event.consumer:
+    // prefer grade.baseSalary bila ada, fallback level x Rp1jt.
+    const grade: any = employment?.grade;
+    const baseSalary = Number(grade?.baseSalary ?? (Number(grade?.level || 0) * 1000000)) || 0;
 
     let totalEarnings = 0;
     let totalDeductions = 0;
@@ -279,11 +296,38 @@ export class RunService {
 
     const netPay = totalEarnings - totalDeductions;
 
+    // Kepatuhan UMP (PP 36/2021) non-blokir: bila upah pokok di bawah
+    // minimum provinsi domisili, tulis peringatan ke employeeNotes agar
+    // terlihat di slip — payroll tetap diproses, HR wajib tindak lanjut.
+    let employeeNotes: string | undefined;
+    try {
+      const province = (employee as any)?.province as string | undefined;
+      const year = period?.endDate ? new Date(period.endDate).getFullYear()
+        : period?.startDate ? new Date(period.startDate).getFullYear()
+        : new Date().getFullYear();
+      if (province) {
+        const entry = await this.prisma.provincialMinimumWage.findFirst({
+          where: { tenantId, province, year },
+        });
+        const minimum = Number((entry as any)?.minimumWage || 0);
+        if (minimum > 0 && baseSalary < minimum) {
+          employeeNotes =
+            `PERINGATAN UMP: gaji pokok Rp${baseSalary.toLocaleString('id-ID')} ` +
+            `di bawah UM provinsi ${province} ${year} Rp${minimum.toLocaleString('id-ID')}. ` +
+            `Perlu penyesuaian (PP 36/2021).`;
+        }
+      }
+    } catch {
+      // Kepatuhan tidak boleh menggagalkan payroll.
+    }
+
     return {
       baseSalary,
       grossPay: totalEarnings,
       totalDeductions,
       netPay,
+      items,
+      ...(employeeNotes ? { employeeNotes } : {}),
     };
   }
 
@@ -362,10 +406,17 @@ export class RunService {
     };
   }
 
-  async generateBankTransfer(tenantId: string, id: string, userId?: string) {
+  async generateBankTransfer(tenantId: string, id: string, userId?: string, bank: string = 'CSV') {
     const run = await this.findOne(tenantId, id);
-    if ((run as any).status !== 'APPROVED' && (run as any).status !== 'COMPLETED') {
-      throw new BadRequestException('Run must be APPROVED or COMPLETED to generate bank transfer');
+    // Kontrol: dana hanya boleh ditransfer dari run yang sudah dikunci —
+    // APPROVED saja tidak cukup (masih bisa diubah).
+    if ((run as any).status !== 'LOCKED') {
+      throw new ForbiddenException('Run must be LOCKED to generate bank transfer');
+    }
+
+    const bankCode = String(bank || 'CSV').toUpperCase();
+    if (!['CSV', 'BCA', 'MANDIRI', 'BRI'].includes(bankCode)) {
+      throw new BadRequestException(`Unsupported bank format: ${bank} (pilih CSV/BCA/MANDIRI/BRI)`);
     }
 
     const payslips = await this.prisma.payslip.findMany({
@@ -376,6 +427,9 @@ export class RunService {
             id: true,
             fullName: true,
             employeeId: true,
+            bankName: true,
+            bankAccountNumber: true,
+            bankAccountName: true,
           },
         },
       } as any,
@@ -383,44 +437,82 @@ export class RunService {
     });
 
     const lines: string[] = [];
+    const exceptions: Array<{ employeeId: string; reason: string }> = [];
     let totalAmount = 0;
 
     for (const p of payslips as any[]) {
       const netPay = Number(p.netPay || 0);
       if (netPay <= 0) continue;
-      const bankCode = (p as any).bankTransferCode || '';
-      lines.push([
-        p.employee?.employeeId || '',
-        p.employee?.fullName || '',
-        bankCode,
-        netPay.toFixed(2),
-      ].join(','));
+      // Rekening tujuan: master Employee diutamakan, fallback ke
+      // bankTransferCode pada slip (data lama). Baris tanpa rekening
+      // dilaporkan di `exceptions`, tidak menggagalkan batch.
+      const accountNumber = String(
+        p.employee?.bankAccountNumber || (p as any).bankTransferCode || '',
+      ).trim();
+      if (!accountNumber) {
+        exceptions.push({
+          employeeId: p.employee?.employeeId || p.employeeId,
+          reason: 'NO_ACCOUNT_NUMBER',
+        });
+        continue;
+      }
+      const name = String(p.employee?.fullName || '').replace(/,/g, ' ').slice(0, 50);
+      if (bankCode === 'BCA') {
+        lines.push([accountNumber, name, Math.round(netPay).toFixed(0), 'IDR'].join(','));
+      } else if (bankCode === 'MANDIRI') {
+        lines.push([accountNumber, name, netPay.toFixed(2), (run as any).name || 'PAYROLL'].join(';'));
+      } else if (bankCode === 'BRI') {
+        lines.push([accountNumber, name, Math.round(netPay).toFixed(0)].join('|'));
+      } else {
+        lines.push([
+          p.employee?.employeeId || '',
+          name,
+          accountNumber,
+          netPay.toFixed(2),
+        ].join(','));
+      }
       totalAmount += netPay;
     }
 
-    const content = [
-      `RUN,${(run as any).name},${new Date().toISOString().split('T')[0]},${lines.length},${totalAmount.toFixed(2)}`,
-      ...lines,
-    ].join('\n');
+    const date = new Date().toISOString().split('T')[0];
+    const header =
+      bankCode === 'CSV'
+        ? `RUN,${(run as any).name},${date},${lines.length},${totalAmount.toFixed(2)}`
+        : `HEADER,${bankCode},${(run as any).name},${date},${lines.length},${totalAmount.toFixed(2)}`;
+    const content = [header, ...lines].join('\n');
 
-    const batch = await this.prisma.bankTransferBatch.create({
-      data: {
-        payrollRunId: id,
-        bankCode: '',
-        fileUrl: '',
-        status: 'generated',
-        generatedAt: new Date(),
-      } as any,
+    // Idempoten: satu run = satu batch. Klik ulang memakai ulang baris batch
+    // yang sama (update bankCode), bukan membuat batch duplikat.
+    const existing = await this.prisma.bankTransferBatch.findFirst({
+      where: { payrollRunId: id },
     });
+    const batch = existing
+      ? await this.prisma.bankTransferBatch.update({
+        where: { id: existing.id },
+        data: { bankCode, status: 'generated', generatedAt: new Date() } as any,
+      })
+      : await this.prisma.bankTransferBatch.create({
+        data: {
+          payrollRunId: id,
+          bankCode,
+          fileUrl: '',
+          status: 'generated',
+          generatedAt: new Date(),
+        } as any,
+      });
 
     return {
       batchId: batch.id,
       runId: id,
       runName: (run as any).name,
+      bank: bankCode,
       totalEmployees: lines.length,
       totalAmount: totalAmount.toFixed(2),
-      format: 'CSV',
+      format: bankCode,
       content,
+      exceptions,
+      reused: Boolean(existing),
+      generatedBy: userId || null,
       generatedAt: new Date().toISOString(),
     };
   }

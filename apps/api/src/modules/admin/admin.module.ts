@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@common/prisma/prisma.module';
 
@@ -11,6 +11,8 @@ import { AuthzController } from './controllers/authz.controller';
 import { FeatureFlagController } from './controllers/feature-flag.controller';
 import { IntegrationController } from './controllers/integration.controller';
 import { UserManagementController } from './controllers/user-management.controller';
+import { PlatformController } from './controllers/platform.controller';
+import { BulkImportController } from './controllers/bulk-import.controller';
 
 import { TenantService } from './services/tenant.service';
 import { RoleService } from './services/role.service';
@@ -21,7 +23,9 @@ import { AuthzService } from './services/authz.service';
 import { FeatureFlagService } from './services/feature-flag.service';
 import { IntegrationService } from './services/integration.service';
 import { UserManagementService } from './services/user-management.service';
+import { BulkImportService } from './services/bulk-import.service';
 
+@Global()
 @Module({
   imports: [ConfigModule],
   controllers: [
@@ -37,6 +41,8 @@ import { UserManagementService } from './services/user-management.service';
     FeatureFlagController,
     IntegrationController,
     UserManagementController,
+    PlatformController,
+    BulkImportController,
   ],
   providers: [
     TenantService,
@@ -48,6 +54,7 @@ import { UserManagementService } from './services/user-management.service';
     FeatureFlagService,
     IntegrationService,
     UserManagementService,
+    BulkImportService,
   ],
   exports: [
     TenantService,

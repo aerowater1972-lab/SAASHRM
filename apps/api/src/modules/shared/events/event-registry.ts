@@ -28,6 +28,8 @@ export enum DomainEventType {
   TRAINING_COMPLETED           = 'training.completed',
   CERTIFICATION_ISSUED         = 'certification.issued',
   CERTIFICATION_EXPIRING       = 'certification.expiring',
+  CLEARANCE_CERTIFICATE_ISSUED = 'clearance.certificate.issued',
+  ALUMNI_CREATED = 'alumni.created',
 }
 
 export interface EventDefinition {
@@ -193,5 +195,17 @@ export const EVENT_REGISTRY: Record<DomainEventType, EventDefinition> = {
     description: 'A certification is approaching its expiry date',
     aggregateType: 'learning',
     expectedPayload: { certificationId: 'string', employeeId: 'string', name: 'string', expiryDate: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.CLEARANCE_CERTIFICATE_ISSUED]: {
+    type: DomainEventType.CLEARANCE_CERTIFICATE_ISSUED,
+    description: 'Clearance certificate (paklaring) issued for offboarded employee',
+    aggregateType: 'resignation',
+    expectedPayload: { certificateId: 'string', employeeId: 'string', issuedBy: 'string', tenantId: 'string' },
+  },
+  [DomainEventType.ALUMNI_CREATED]: {
+    type: DomainEventType.ALUMNI_CREATED,
+    description: 'Alumni record created for offboarded employee',
+    aggregateType: 'resignation',
+    expectedPayload: { alumniId: 'string', employeeId: 'string', tenantId: 'string' },
   },
 };

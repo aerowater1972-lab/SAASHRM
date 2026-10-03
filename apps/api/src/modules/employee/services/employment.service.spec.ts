@@ -79,6 +79,72 @@ describe('EmploymentService - probation validation', () => {
     );
     expect(r.id).toBe('em-1');
   });
+
+  it('menolak probation bila karyawan pernah PKWT (PP 35/2021 Pasal 58)', async () => {
+    mockPrisma.employment.findFirst.mockResolvedValueOnce({ id: 'pkwt-1' });
+    await expect(
+      service.create('t1', 'emp-1', { ...baseDto, endDate: '2026-12-01' } as any),
+    ).rejects.toThrow(/PP 35\/2021/);
+    expect(mockPrisma.employment.create).not.toHaveBeenCalled();
+  });
+
+  it('menolak PKWT tanpa endDate tertulis', async () => {
+    await expect(
+      service.create('t1', 'emp-1', {
+        ...baseDto, type: 'CONTRACT', startDate: '2026-09-01', endDate: undefined,
+      } as any),
+    ).rejects.toThrow(/tanggal selesai tertulis/);
+    expect(mockPrisma.employment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('EmploymentService - PKWT auto-expire', () => {
+  let service: EmploymentService;
+
+  const mockPrisma = {
+    employment: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    employee: { update: jest.fn() },
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EmploymentService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EmployeeService, useValue: {} },
+        { provide: EventBusService, useValue: {} },
+        { provide: NotificationService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<EmploymentService>(EmploymentService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('menonaktifkan kontrak lewat endDate dan INACTIVE bila tak ada employment aktif', async () => {
+    mockPrisma.employment.findMany.mockResolvedValue([{ id: 'c-1', employeeId: 'emp-1' }]);
+    mockPrisma.employment.findFirst.mockResolvedValue(null);
+
+    const n = await service.expireFinishedContracts(new Date('2026-09-18T00:00:00Z'));
+
+    expect(n).toBe(1);
+    expect(mockPrisma.employment.update).toHaveBeenCalledWith({
+      where: { id: 'c-1' }, data: { isActive: false },
+    });
+    expect(mockPrisma.employee.update).toHaveBeenCalledWith({
+      where: { id: 'emp-1' }, data: expect.objectContaining({ status: 'INACTIVE' }),
+    });
+  });
+
+  it('tidak menonaktifkan karyawan yang masih punya employment aktif lain', async () => {
+    mockPrisma.employment.findMany.mockResolvedValue([{ id: 'c-1', employeeId: 'emp-1' }]);
+    mockPrisma.employment.findFirst.mockResolvedValue({ id: 'other' });
+
+    await service.expireFinishedContracts(new Date('2026-09-18T00:00:00Z'));
+
+    expect(mockPrisma.employee.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('EmploymentService - retirement reminder', () => {

@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useDashboard, useRecentActivity } from '@/hooks/use-dashboard';
+import { useK3Dashboard, useK3TrainingCompliance } from '@/lib/hooks/employee-relations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LayoutDashboard, Activity, FileText, CalendarCheck } from 'lucide-react';
+import { LayoutDashboard, Activity, FileText, CalendarCheck, ShieldAlert, AlertTriangle, Shield, FileWarning, GraduationCap, Users, CheckCircle, Clock } from 'lucide-react';
 
 const modules = [
   { href: '/employees', label: 'Employees', desc: 'Data dan manajemen karyawan' },
@@ -27,12 +28,17 @@ const modules = [
   { href: '/learning/trainings', label: 'Learning', desc: 'Pelatihan dan sertifikasi' },
   { href: '/resignations', label: 'Resignations', desc: 'Resignasi dan offboarding' },
   { href: '/profile', label: 'My Profile', desc: 'Data pribadi dan kepegawaian' },
+  { href: '/employee-relations', label: 'K3 & Employee Relations', desc: 'Dashboard K3, SP, insiden, dan APD' },
   { href: '/admin/roles', label: 'Admin', desc: 'Role, tenant, dan audit log' },
+  { href: '/admin/branding', label: 'Branding', desc: 'Kustomisasi tampilan tenant' },
 ];
 
 export default function DashboardPage() {
   const { data, isLoading } = useDashboard();
   const { data: activities = [] } = useRecentActivity();
+  const { data: k3 } = useK3Dashboard();
+
+  const { data: training } = useK3TrainingCompliance();
 
   const stats = [
     { icon: CalendarCheck, value: data?.attendance?.isClockedIn ? '✓' : '—', label: 'Attendance', color: data?.attendance?.isClockedIn ? 'text-green-500' : 'text-muted-foreground' },
@@ -66,6 +72,54 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {k3 && (
+        <div>
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><ShieldAlert className="h-4 w-4" />K3 &amp; Employee Relations</h2>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <Link href="/employee-relations" className="no-underline">
+              <Card className="cursor-pointer hover:border-primary/50 transition-all"><CardContent className="p-4 flex items-center gap-3">
+                <AlertTriangle className="h-8 w-8 text-amber-500" />
+                <div><p className="text-2xl font-bold">{k3.totalIncidents}</p><p className="text-xs text-muted-foreground">Total Insiden</p></div>
+              </CardContent></Card>
+            </Link>
+            <Link href="/employee-relations/ppe-assignments" className="no-underline">
+              <Card className="cursor-pointer hover:border-primary/50 transition-all"><CardContent className="p-4 flex items-center gap-3">
+                <Shield className="h-8 w-8 text-blue-500" />
+                <div><p className="text-2xl font-bold">{k3.ppeExpiringSoon}</p><p className="text-xs text-muted-foreground">APD Akan Kedaluwarsa</p></div>
+              </CardContent></Card>
+            </Link>
+            <Link href="/employee-relations/disciplinary-cases" className="no-underline">
+              <Card className="cursor-pointer hover:border-primary/50 transition-all"><CardContent className="p-4 flex items-center gap-3">
+                <FileWarning className="h-8 w-8 text-red-500" />
+                <div><p className="text-2xl font-bold">{k3.openInvestigations}</p><p className="text-xs text-muted-foreground">Investigasi Terbuka</p></div>
+              </CardContent></Card>
+            </Link>
+            <Link href="/employee-relations" className="no-underline">
+              <Card className="cursor-pointer hover:border-primary/50 transition-all"><CardContent className="p-4 flex items-center gap-3">
+                <ShieldAlert className="h-8 w-8 text-orange-500" />
+                <div><p className="text-2xl font-bold">{k3.pendingAuthorityReport}</p><p className="text-xs text-muted-foreground">Pelaporan 48h</p></div>
+              </CardContent></Card>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {data?.pendingApprovals && data.pendingApprovals.total > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Clock className="h-4 w-4" />Persetujuan Tertunda</h2>
+          <div className="flex gap-3">
+            <Card className="flex-1"><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-orange-500">{data.pendingApprovals.leaveRequests}</p>
+              <p className="text-xs text-muted-foreground">Izin/Cuti</p>
+            </CardContent></Card>
+            <Card className="flex-1"><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-orange-500">{data.pendingApprovals.corrections}</p>
+              <p className="text-xs text-muted-foreground">Koreksi Absen</p>
+            </CardContent></Card>
+          </div>
+        </div>
+      )}
+
       {data?.leaveBalances && data.leaveBalances.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold mb-3">Saldo Cuti</h2>
@@ -78,6 +132,30 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      )}
+
+      {training && (
+        <div>
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><GraduationCap className="h-4 w-4" />Kepatuhan Pelatihan K3</h2>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-blue-600">{training.overallComplianceRate}%</p>
+              <p className="text-xs text-muted-foreground">Kepatuhan</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold">{training.completedEmployees}</p>
+              <p className="text-xs text-muted-foreground">Terselesaikan</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-amber-500">{training.pendingEmployees}</p>
+              <p className="text-xs text-muted-foreground">Menunggu</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold">{training.totalActiveEmployees}</p>
+              <p className="text-xs text-muted-foreground">Total Karyawan</p>
+            </CardContent></Card>
           </div>
         </div>
       )}

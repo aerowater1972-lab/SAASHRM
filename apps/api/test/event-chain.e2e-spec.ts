@@ -23,6 +23,8 @@ describe('Event chain (publish -> JobWorker -> consumer)', () => {
     return false;
   }
 
+  let adminUserId: string;
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ envFilePath: '.env' }), AppModule],
@@ -43,10 +45,13 @@ describe('Event chain (publish -> JobWorker -> consumer)', () => {
     eventBus = app.get(EventBusService);
     prisma = app.get(PrismaService);
 
+    const adminUser = await prisma.user.findFirst({ where: { email: 'admin@flexy-hrms.com' } });
+    adminUserId = adminUser!.id;
+
     const res = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = res.body.accessToken;
   });
 
@@ -59,8 +64,8 @@ describe('Event chain (publish -> JobWorker -> consumer)', () => {
   it('AuditEventConsumer persists a *.data.changed event as an AuditLog', async () => {
     await eventBus.publishTyped(
       DomainEventType.DATA_CHANGED,
-      { entity: 'Employee', entityId: 'e2e-audit-1', action: 'UPDATE', changedBy: 'user-1', newValue: { x: 1 } },
-      { tenantId: 'default', userId: 'user-1' },
+      { entity: 'Employee', entityId: 'e2e-audit-1', action: 'UPDATE', changedBy: adminUserId, newValue: { x: 1 } },
+      { tenantId: 'default', userId: adminUserId },
     );
 
     const ok = await pollUntil(async () => {
@@ -83,7 +88,7 @@ describe('Event chain (publish -> JobWorker -> consumer)', () => {
     await eventBus.publishTyped(
       DomainEventType.EXPENSE_CLAIM_APPROVED,
       { employeeId, claimId: 'claim-e2e-1', amount: 100000, category: 'TRAVEL' },
-      { tenantId: 'default', userId: 'user-1' },
+      { tenantId: 'default', userId: adminUserId },
     );
 
     const ok = await pollUntil(async () => {

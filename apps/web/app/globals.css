@@ -4,6 +4,8 @@
 
 @layer base {
   :root {
+    --brand-primary: #2563EB;
+    --brand-secondary: #7C3AED;
     --background: 210 40% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
@@ -26,7 +28,7 @@
     --radius: 0.5rem;
     --sidebar: 222 47% 11%;
     --sidebar-foreground: 210 40% 96%;
-    --sidebar-muted: 215 25% 27%;
+    --sidebar-muted: 215 20% 65%;
     --sidebar-accent: 217 33% 17%;
   }
 
@@ -52,7 +54,7 @@
     --ring: 224 76% 48%;
     --sidebar: 222 47% 11%;
     --sidebar-foreground: 210 40% 96%;
-    --sidebar-muted: 215 25% 27%;
+    --sidebar-muted: 215 20% 65%;
     --sidebar-accent: 217 33% 17%;
   }
 }

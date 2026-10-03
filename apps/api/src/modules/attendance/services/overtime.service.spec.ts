@@ -163,7 +163,7 @@ describe('OvertimeService', () => {
     });
   });
 
-  describe('createRequest caps (UU 13/2003: 3 jam/hari, 14 jam/minggu)', () => {
+  describe('createRequest caps (PP 35/2021: 4 jam/hari, 18 jam/minggu)', () => {
     // Pekan Senin 2026-09-14 s.d. Minggu 2026-09-20.
     const dtoFor = (date: string, minutes: number) => ({
       date,
@@ -178,35 +178,35 @@ describe('OvertimeService', () => {
       mockPrisma.overtimeRequest.create.mockResolvedValue({ id: 'req-new' });
     });
 
-    it('menolak bila total hari melebihi 180 menit', async () => {
+    it('menolak bila total hari melebihi 240 menit', async () => {
       mockPrisma.overtimeRequest.findMany.mockResolvedValue([
-        { date: new Date('2026-09-16T00:00:00Z'), totalMinutes: 120 },
+        { date: new Date('2026-09-16T00:00:00Z'), totalMinutes: 180 },
       ]);
       await expect(service.createRequest('t1', 'emp-1', dtoFor('2026-09-16', 90))).rejects.toThrow(
-        /3 jam\/hari/,
+        /4 jam\/hari/,
       );
       expect(mockPrisma.overtimeRequest.create).not.toHaveBeenCalled();
     });
 
-    it('mengizinkan tepat 180 menit sehari', async () => {
+    it('mengizinkan tepat 240 menit sehari', async () => {
       mockPrisma.overtimeRequest.findMany.mockResolvedValue([
-        { date: new Date('2026-09-16T00:00:00Z'), totalMinutes: 60 },
+        { date: new Date('2026-09-16T00:00:00Z'), totalMinutes: 120 },
       ]);
       const res = await service.createRequest('t1', 'emp-1', dtoFor('2026-09-16', 120));
       expect(res).toBeDefined();
       expect(mockPrisma.overtimeRequest.create).toHaveBeenCalled();
     });
 
-    it('menolak bila total pekan melebihi 840 menit', async () => {
-      // 130 mnt x 6 hari (Senin-Sabtu) = 780; tambah Minggu 120 -> 900.
+    it('menolak bila total pekan melebihi 1080 menit', async () => {
+      // 170 mnt x 6 hari (Senin-Sabtu) = 1020; tambah Minggu 120 -> 1140.
       mockPrisma.overtimeRequest.findMany.mockResolvedValue(
         ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19'].map((d) => ({
           date: new Date(d + 'T00:00:00Z'),
-          totalMinutes: 130,
+          totalMinutes: 170,
         })),
       );
       await expect(service.createRequest('t1', 'emp-1', dtoFor('2026-09-20', 120))).rejects.toThrow(
-        /14 jam\/minggu/,
+        /18 jam\/minggu/,
       );
     });
 

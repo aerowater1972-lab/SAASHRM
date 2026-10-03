@@ -18,6 +18,7 @@ describe('ThrService', () => {
     thrRun: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     thrRecord: { upsert: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
     payrollComponent: { findMany: jest.fn().mockResolvedValue([]) },
+    payrollAdjustment: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const mockEmployeeService = { findActive: jest.fn() };
   const mockAdjustments = { create: jest.fn() };
@@ -141,6 +142,35 @@ describe('ThrService', () => {
         expect.objectContaining({ data: expect.objectContaining({ status: 'paid' }) }),
       );
       expect(res).toBeDefined();
+    });
+
+    it('approve idempoten: lewati karyawan yang sudah terbit', async () => {
+      mockPrisma.thrRecord.findMany.mockResolvedValue([
+        { employeeId: 'emp-1', amount: 8000000, monthsWorked: 12 },
+        { employeeId: 'emp-2', amount: 4000000, monthsWorked: 6 },
+      ]);
+      mockPrisma.payrollAdjustment.findMany.mockResolvedValueOnce([{ employeeId: 'emp-1' }]);
+      await service.approveRun('t1', 'run-1', 'hr-1');
+      expect(mockAdjustments.create).toHaveBeenCalledTimes(1);
+      expect(mockAdjustments.create).toHaveBeenCalledWith(
+        expect.objectContaining({ employeeId: 'emp-2' }),
+      );
+    });
+
+    it('markPaid mengenakan denda 5%/hari bila lewat dueDate', async () => {
+      const due = new Date();
+      due.setDate(due.getDate() - 2);
+      mockPrisma.thrRun.findFirst.mockResolvedValueOnce({ ...run, status: 'APPROVED', dueDate: due });
+      mockPrisma.thrRun.update.mockResolvedValueOnce({ ...run, status: 'PAID' });
+      mockPrisma.thrRecord.findMany.mockResolvedValue([
+        { employeeId: 'emp-1', amount: 8000000, monthsWorked: 12 },
+      ]);
+      const res: any = await service.markPaid('t1', 'run-1');
+      expect(res.daysLate).toBeGreaterThanOrEqual(2);
+      expect(res.lateFeeTotal).toBe(Math.round(8000000 * 0.05 * res.daysLate));
+      expect(mockAdjustments.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceEvent: 'THR_LATE_FEE', type: 'EARNING' }),
+      );
     });
 
     it('cancel hanya dari DRAFT; findOne 404 bila run hilang', async () => {

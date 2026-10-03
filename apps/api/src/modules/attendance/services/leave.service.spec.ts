@@ -5,12 +5,13 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
+import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adjustment.service';
 
 describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
   let service: LeaveService;
 
   const mockPrisma = {
-    leaveType: { findFirst: jest.fn() },
+    leaveType: { findFirst: jest.fn(), findMany: jest.fn() },
     leaveRequest: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
     leaveBalance: { findUnique: jest.fn(), update: jest.fn(), create: jest.fn() },
     featureFlag: { findFirst: jest.fn() },
@@ -162,7 +163,7 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       },
     );
     it('rentang tanpa riwayat: bracket 100% dari bulan 0', async () => {
-      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-sick' });
+      mockPrisma.leaveType.findMany.mockResolvedValue([{ id: 'lt-sick' }]);
       mockPrisma.leaveRequest.findMany.mockResolvedValue([]);
       const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
       expect(r.priorSickDays).toBe(0);
@@ -170,7 +171,7 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       expect(r.brackets).toEqual([{ fromMonth: 0, toMonth: 0, percent: 100 }]);
     });
     it('riwayat 150 hari + 30 hari berjalan -> tetap 75% (bln 6-7)', async () => {
-      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-sick' });
+      mockPrisma.leaveType.findMany.mockResolvedValue([{ id: 'lt-sick' }]);
       mockPrisma.leaveRequest.findMany.mockResolvedValue([
         { startDate: d('2026-01-01'), endDate: d('2026-05-30') },
         { startDate: d('2026-09-01'), endDate: d('2026-09-30') },
@@ -181,7 +182,7 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       expect(r.brackets).toEqual([{ fromMonth: 5, toMonth: 6, percent: 75 }]);
     });
     it('melewati ambang 8 bulan -> menyentuh 50%', async () => {
-      mockPrisma.leaveType.findFirst.mockResolvedValue({ id: 'lt-sick' });
+      mockPrisma.leaveType.findMany.mockResolvedValue([{ id: 'lt-sick' }]);
       mockPrisma.leaveRequest.findMany.mockResolvedValue([
         { startDate: d('2026-01-01'), endDate: d('2026-07-29') },
         { startDate: d('2026-09-01'), endDate: d('2026-09-30') },
@@ -193,8 +194,8 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
         { fromMonth: 8, toMonth: 8, percent: 50 },
       ]);
     });
-    it('tanpa jenis SL -> TYPE_NOT_CONFIGURED', async () => {
-      mockPrisma.leaveType.findFirst.mockResolvedValue(null);
+    it('tanpa jenis SL/CS -> TYPE_NOT_CONFIGURED', async () => {
+      mockPrisma.leaveType.findMany.mockResolvedValue([]);
       const r = await service.getSickPayStatus('t1', 'emp-1', d('2026-09-01'), d('2026-09-30'));
       expect(r.reason).toBe('TYPE_NOT_CONFIGURED');
     });
@@ -347,6 +348,13 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       expect(r).toEqual({ granted: 0, skipped: 0 });
       expect(mockPrisma.employee.findMany).not.toHaveBeenCalled();
     });
+    it('mencari jenis cuti tahunan AL maupun CT (multi-tenant)', async () => {
+      mockPrisma.employee.findMany.mockResolvedValue([]);
+      await service.accrueAnnualEntitlement('t1', asOf);
+      expect(mockPrisma.leaveType.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ code: { in: ['AL', 'CT'] } }) }),
+      );
+    });
   });
 
   describe('findOneRequestScoped (ESS privacy)', () => {
@@ -363,5 +371,87 @@ describe('LeaveService - Addendum Serikat Pekerja (BR-01/BR-02)', () => {
       });
       await expect(service.findOneRequestScoped('t1', 'req-1', 'emp-9')).rejects.toThrow('milik Anda');
     });
+  });
+});
+
+describe('LeaveService - potongan upah sakit otomatis (UU Art 93)', () => {
+  let service: LeaveService;
+
+  const mockPrisma = {
+    leaveType: { findFirst: jest.fn(), findMany: jest.fn() },
+    leaveRequest: { findMany: jest.fn() },
+    payrollComponent: { findMany: jest.fn().mockResolvedValue([]) },
+  };
+  const mockEmployeeService = {
+    findById: jest.fn().mockResolvedValue({
+      id: 'emp-1', employments: [{ grade: { level: 8 } }],
+    }),
+  };
+  const mockAdjustments = { create: jest.fn().mockResolvedValue({}) };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LeaveService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EmployeeService, useValue: mockEmployeeService },
+        { provide: WorkflowEngineService, useValue: {} },
+        { provide: EventBusService, useValue: {} },
+        { provide: PayrollAdjustmentService, useValue: mockAdjustments },
+      ],
+    }).compile();
+
+    service = module.get<LeaveService>(LeaveService);
+    // jenis SL ada; belum ada riwayat sakit -> bracket 100% untuk request pendek
+    mockPrisma.leaveType.findMany.mockResolvedValue([{ id: 'lt-sl', code: 'SL' }]);
+    mockPrisma.leaveRequest.findMany.mockResolvedValue([]);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('tanpa potongan bila masih bracket 100% (sakit pendek)', async () => {
+    const res = await service.postSickPayDeduction('t1', {
+      id: 'req-1', employeeId: 'emp-1',
+      startDate: new Date('2026-09-01'), endDate: new Date('2026-09-03'),
+      leaveType: { code: 'SL' },
+    });
+    expect(res).toEqual({ days: 3, unpaidAmount: 0, posted: false });
+    expect(mockAdjustments.create).not.toHaveBeenCalled();
+  });
+
+  it('memposting DEDUCTION untuk hari di bracket 75% (150 hari sakit sblmnya)', async () => {
+    mockPrisma.leaveRequest.findMany.mockResolvedValue([
+      { startDate: new Date('2026-01-01'), endDate: new Date('2026-05-30') }, // 150 hari
+    ]);
+    const res: any = await service.postSickPayDeduction('t1', {
+      id: 'req-2', employeeId: 'emp-1',
+      startDate: new Date('2026-09-01'), endDate: new Date('2026-09-02'),
+      leaveType: { code: 'SL' },
+    });
+    // 150 hari sblmnya -> bulan ke-5 (indeks 5) = 75% -> unpaid 25% x 2 hari
+    const daily = 8000000 / 30;
+    expect(res.unpaidAmount).toBe(Math.round(daily * 0.25 * 2));
+    expect(res.posted).toBe(true);
+    expect(mockAdjustments.create).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'DEDUCTION', sourceEvent: 'SICK_PAY_UNPAID', referenceId: 'req-2' }),
+    );
+  });
+
+  it('melewatkan jenis non-sakit', async () => {
+    const res = await service.postSickPayDeduction('t1', {
+      id: 'req-3', employeeId: 'emp-1',
+      startDate: new Date('2026-09-01'), endDate: new Date('2026-09-03'),
+      leaveType: { code: 'AL' },
+    });
+    expect(res).toBeNull();
+  });
+
+  it('kode CS (tenant demo) memicu skema yang sama dengan SL', async () => {
+    const res: any = await service.postSickPayDeduction('t1', {
+      id: 'req-4', employeeId: 'emp-1',
+      startDate: new Date('2026-09-01'), endDate: new Date('2026-09-02'),
+      leaveType: { code: 'CS' },
+    });
+    expect(res).toEqual({ days: 2, unpaidAmount: 0, posted: false });
   });
 });

@@ -2,20 +2,23 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { useEssDashboard, useClockIn, useClockOut } from '@/lib/hooks/ess';
 import { useEnrollBiometric, useVerifyFace } from '@/lib/hooks/biometric';
+import { fetchMyPpeCompliance } from '@/lib/api/employee-relations';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState, EmptyState } from '@/components/ui/data-states';
 import { FaceCapture } from '@/components/biometric/face-capture';
-import { Clock, LogOut, CalendarDays, Wallet, Bell, User, ChevronRight, ScanFace, Loader2, MapPin } from 'lucide-react';
+import { Clock, LogOut, CalendarDays, Wallet, Bell, User, ChevronRight, ScanFace, Loader2, MapPin, ShieldOff, ShieldAlert } from 'lucide-react';
 import { getCurrentGeoFix, GeolocationError } from '@/lib/utils/geolocation';
 
 const menuItems = [
   { href: '/ess/leave', label: 'Cuti', icon: CalendarDays, color: 'text-blue-600' },
   { href: '/ess/expense', label: 'Klaim', icon: Wallet, color: 'text-green-600' },
+  { href: '/ess/k3', label: 'K3 & SP', icon: ShieldAlert, color: 'text-amber-600' },
   { href: '/ess/profile', label: 'Profil', icon: User, color: 'text-purple-600' },
   { href: '/ess/payslips', label: 'Payslip', icon: Bell, color: 'text-orange-600' },
 ];
@@ -42,6 +45,13 @@ export default function EssDashboardPage() {
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [faceClockOpen, setFaceClockOpen] = useState(false);
   const [status, setStatus] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+
+  const { data: ppeCheck } = useQuery({
+    queryKey: ['ppe-compliance', 'me'],
+    queryFn: fetchMyPpeCompliance,
+    enabled: raw && (raw as any)?.clockStatus !== 'CLOCKED_IN' && (raw as any)?.clockStatus !== 'CLOCKED_OUT',
+    refetchInterval: 30_000,
+  });
 
   const d = raw as DashboardData | undefined;
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -146,15 +156,24 @@ export default function EssDashboardPage() {
 
       {/* Clock In/Out Button */}
       <div className="px-4 py-6">
+
+        {ppeCheck?.blocked && d?.clockStatus !== 'CLOCKED_IN' && d?.clockStatus !== 'CLOCKED_OUT' && (
+          <div className="mb-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
+            <ShieldOff className="h-5 w-5 shrink-0 mt-0.5" /><span>{ppeCheck.reason}</span>
+          </div>
+        )}
+
         <Button
           onClick={handleClock}
-          disabled={clocking}
+          disabled={clocking || (d?.clockStatus !== 'CLOCKED_IN' && d?.clockStatus !== 'CLOCKED_OUT' && !!ppeCheck?.blocked)}
           className="flex h-28 w-full flex-col items-center justify-center gap-2 rounded-2xl text-lg shadow-lg"
         >
           {clockPhase === 'locating' ? (
             <MapPin className="h-10 w-10 animate-pulse" />
           ) : clockPhase === 'submitting' ? (
             <Loader2 className="h-10 w-10 animate-spin" />
+          ) : ppeCheck?.blocked && d?.clockStatus !== 'CLOCKED_IN' && d?.clockStatus !== 'CLOCKED_OUT' ? (
+            <ShieldOff className="h-10 w-10" />
           ) : (
             <Clock className={`h-10 w-10 ${d?.clockStatus === 'CLOCKED_IN' ? 'animate-pulse' : ''}`} />
           )}
@@ -163,9 +182,11 @@ export default function EssDashboardPage() {
               ? 'Mengambil lokasi...'
               : clockPhase === 'submitting'
                 ? 'Memproses...'
-                : d?.clockStatus === 'CLOCKED_IN'
-                  ? 'Clock Out'
-                  : 'Clock In'}
+                : ppeCheck?.blocked && d?.clockStatus !== 'CLOCKED_IN' && d?.clockStatus !== 'CLOCKED_OUT'
+                  ? 'APD Tidak Memenuhi'
+                  : d?.clockStatus === 'CLOCKED_IN'
+                    ? 'Clock Out'
+                    : 'Clock In'}
           </span>
           {d?.clockStatus === 'CLOCKED_IN' && d?.clockInTime && (
             <span className="text-xs opacity-80">Masuk {d.clockInTime}</span>
@@ -173,7 +194,7 @@ export default function EssDashboardPage() {
         </Button>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <Button variant="outline" onClick={() => setFaceClockOpen(true)} disabled={clocking}>
+          <Button variant="outline" onClick={() => setFaceClockOpen(true)} disabled={clocking || !!ppeCheck?.blocked}>
             <ScanFace className="mr-2 h-4 w-4" /> Presensi Wajah
           </Button>
           <Button variant="outline" onClick={() => setEnrollOpen(true)} disabled={enrollMut.isPending}>
@@ -244,6 +265,22 @@ export default function EssDashboardPage() {
             </div>
           </Card>
         </Link>
+
+        {(d as any)?.k3Profile && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              <span className="text-sm font-medium">Profil K3</span>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Badge variant="secondary" className="text-xs">{((d as any)?.k3Profile?.completedK3Trainings ?? 0)} Pelatihan</Badge>
+              <Badge variant="secondary" className="text-xs">{((d as any)?.k3Profile?.activePpeCount ?? 0)} APD Aktif</Badge>
+              {(d as any)?.k3Profile?.activeSp && (
+                <Badge variant="destructive" className="text-xs">{(d as any).k3Profile.activeSp.spLevel}</Badge>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* 2x2 Menu Grid */}
@@ -278,10 +315,10 @@ export default function EssDashboardPage() {
         <div className="flex justify-around py-2">
           {[
             { href: '/ess', label: 'Home', icon: Clock, active: true },
-            { href: '/attendance', label: 'Absensi', icon: LogOut, active: false },
+            { href: '/ess/k3', label: 'K3', icon: ShieldAlert, active: false },
             { href: '/ess/leave', label: 'Cuti', icon: CalendarDays, active: false },
-             { href: '/ess/profile', label: 'Profil', icon: User, active: false },
-             { href: '/ess/notifications', label: 'Notif', icon: Bell, active: false },
+            { href: '/ess/profile', label: 'Profil', icon: User, active: false },
+            { href: '/ess/notifications', label: 'Notif', icon: Bell, active: false },
            ].map((item) => (
             <Link key={item.label} href={item.href}>
               <div className={`flex flex-col items-center gap-0.5 px-3 py-1 ${item.active ? 'text-primary' : 'text-muted-foreground'}`}>

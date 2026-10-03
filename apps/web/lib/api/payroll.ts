@@ -110,8 +110,10 @@ export async function generateRunPayslips(id: string): Promise<PayrollRun> {
   return api.post<PayrollRun>(`/payroll/runs/${id}/generate-payslips`);
 }
 
-export async function generateRunBankTransfer(id: string): Promise<BankTransferBatch> {
-  return api.post<BankTransferBatch>(`/payroll/runs/${id}/generate-bank-transfer`);
+export async function generateRunBankTransfer(id: string, bank?: string): Promise<BankTransferBatch> {
+  return api.post<BankTransferBatch>(`/payroll/runs/${id}/generate-bank-transfer`, undefined, {
+    params: (bank ? { bank } : {}) as Record<string, unknown>,
+  });
 }
 
 export async function createPayrollComponent(data: Record<string, unknown>): Promise<PayrollComponent> {
@@ -204,4 +206,14 @@ export async function calculateBpjs(data: Record<string, unknown>): Promise<Reco
 
 export async function generateBpjsReport(data: Record<string, unknown>): Promise<Record<string, unknown>> {
   return api.post<Record<string, unknown>>('/payroll/bpjs/report', data);
+}
+
+export async function fetchMonthlyIuran(params: {
+  employeeId: string;
+  month?: number;
+  year?: number;
+}): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/payroll/bpjs/monthly-iuran', {
+    params: params as Record<string, unknown>,
+  });
 }

@@ -104,6 +104,34 @@ export class AnalyticsController {
     return this.analyticsService.getWorkforceCost(tenantId, filters);
   }
 
+  @Get('bradford')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Skor Bradford keterputusan absensi sakit (S^2 x D)' })
+  getBradford(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getBradfordScores(tenantId, filters);
+  }
+
+  @Get('flight-risk')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Heuristik risiko keluar karyawan (Bradford, SP, lembur, PIP, IDP)' })
+  getFlightRisk(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getFlightRisk(tenantId, filters);
+  }
+
+  @Get('lk-kphpp')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Laporan Ketenagakerjaan (LK/KPHPP) bulanan ke Kemenaker' })
+  getLkKphpp(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getLkKphppReport(tenantId, filters);
+  }
+
+  @Get('overtime-by-grade')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Lembur berbayar per grade (jam, sesi, rata-rata)' })
+  getOvertimeByGrade(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getOvertimeByGrade(tenantId, filters);
+  }
+
   @Post('export')
   @Permissions('analytics:read')
   @ApiOperation({ summary: 'Export an analytics report as CSV/PDF' })

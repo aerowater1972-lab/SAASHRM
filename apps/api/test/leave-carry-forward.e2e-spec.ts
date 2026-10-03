@@ -18,7 +18,12 @@ describe('Leave Carry Forward (e2e, FR-13/BR-03)', () => {
   const toYear = 2025;
 
   beforeAll(async () => {
-    tenantId = (await prisma.tenantEntity.findFirst({ select: { id: true } }))!.id;
+    await prisma.tenantEntity.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default', tenantId: 'default', name: 'Default Entity', code: 'DEF' },
+    });
+    tenantId = 'default';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ envFilePath: '.env' }), AppModule],
@@ -31,14 +36,14 @@ describe('Leave Carry Forward (e2e, FR-13/BR-03)', () => {
     const login = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = login.body?.accessToken;
 
     const emp = await request(app.getHttpServer())
       .post('/api/v1/employees')
       .set('x-tenant-id', tenantId)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ fullName: 'CF Emp', email: empEmail });
+      .send({ employeeId: `cf-${runId}`, fullName: 'CF Emp', email: empEmail });
     employeeId = emp.body.id;
 
     const lt = await request(app.getHttpServer())

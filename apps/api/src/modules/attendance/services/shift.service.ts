@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { ANNUAL_LEAVE_CODES } from '@modules/shared/utils/wage-base.util';
 import { CreateShiftDto } from '../dto/create-shift.dto';
 import { CreateRosterDto } from '../dto/create-roster.dto';
 import { RosterEntryDto } from '../dto/roster-entry.dto';
@@ -196,13 +197,13 @@ export class ShiftService {
     });
 
     // SKB cuti bersama = bagian dari cuti tahunan: potong 1 hari dari
-    // saldo cuti tahunan (kode AL) tiap karyawan aktif. Tanpa baris saldo
-    // -> dilewati dan dilaporkan (tidak dibuatkan diam-diam).
+    // saldo cuti tahunan (AL/CT per tenant) tiap karyawan aktif. Tanpa baris
+    // saldo -> dilewati dan dilaporkan (tidak dibuatkan diam-diam).
     let deducted = 0;
     let skipped = 0;
     if ((dto.type as string) === 'COLLECTIVE') {
       const annualType = await this.prisma.leaveType.findFirst({
-        where: { tenantId, code: 'AL', isActive: true },
+        where: { tenantId, code: { in: ANNUAL_LEAVE_CODES }, isActive: true },
       });
       if (annualType) {
         const year = date.getFullYear();

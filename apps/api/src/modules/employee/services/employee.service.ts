@@ -19,6 +19,8 @@ export class EmployeeService {
   async create(tenantId: string, dto: CreateEmployeeDto) {
     const employeeId = dto.employeeId ?? (await this.generateEmployeeId(tenantId));
 
+    this.validateIdentityNumbers(dto.idCardNumber, dto.taxIdNumber);
+
     const existing = await this.prisma.employee.findUnique({
       where: { tenantId_employeeId: { tenantId, employeeId } },
     });
@@ -246,6 +248,8 @@ export class EmployeeService {
       }
     }
 
+    this.validateIdentityNumbers(dto.idCardNumber, dto.taxIdNumber);
+
     const updated = await this.prisma.employee.update({
       where: { id },
       data: {
@@ -268,6 +272,25 @@ export class EmployeeService {
 
     await this.syncMedical(id, dto);
     return updated;
+  }
+
+  /**
+   * NIK wajib 16 digit; NPWP 15 digit (format lama) atau 16 digit
+   * (format baru = NIK), separator titik/strip/spasi diabaikan.
+   * NIK/NPWP salah membuat iuran BPJS & pelaporan pajak bermasalah di hilir.
+   */
+  private validateIdentityNumbers(idCardNumber?: string, taxIdNumber?: string): void {
+    if (idCardNumber !== undefined && idCardNumber !== null && idCardNumber !== '') {
+      if (!/^\d{16}$/.test(idCardNumber)) {
+        throw new BadRequestException('NIK (idCardNumber) harus tepat 16 digit angka.');
+      }
+    }
+    if (taxIdNumber !== undefined && taxIdNumber !== null && taxIdNumber !== '') {
+      const digits = taxIdNumber.replace(/[^0-9]/g, '');
+      if (digits.length !== 15 && digits.length !== 16) {
+        throw new BadRequestException('NPWP (taxIdNumber) harus 15 digit (lama) atau 16 digit (baru).');
+      }
+    }
   }
 
   /**

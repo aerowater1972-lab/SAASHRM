@@ -31,6 +31,16 @@ export class UserManagementService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Strip credentials that must never leave the server (SEC-001). */
+  private sanitize<T>(user: T): T {
+    if (Array.isArray(user)) return user.map((u) => this.sanitize(u)) as T;
+    if (user && typeof user === 'object') {
+      const { passwordHash: _ph, mfaSecret: _mfa, ...safe } = user as Record<string, unknown>;
+      return safe as T;
+    }
+    return user;
+  }
+
   async list(tenantId: string, dto: UserQueryDto) {
     const where: any = { tenantId, deletedAt: null };
     if (dto.status) where.status = dto.status;
@@ -40,11 +50,13 @@ export class UserManagementService {
         { fullName: { contains: dto.search, mode: 'insensitive' } },
       ];
     }
-    return paginate(this.prisma.user, {
+    const result = await paginate(this.prisma.user, {
       where,
       orderBy: { createdAt: 'desc' },
       include: userInclude,
     }, dto.page ?? 1, dto.limit ?? 20);
+    if (Array.isArray(result)) return this.sanitize(result);
+    return { ...result, data: this.sanitize(result.data) };
   }
 
   async getById(
@@ -56,7 +68,7 @@ export class UserManagementService {
       include: userInclude,
     });
     if (!user) throw new NotFoundException('User not found');
-    return user as User & { userRoles: { role?: { isSystem: boolean } }[] };
+    return this.sanitize(user) as User & { userRoles: { role?: { isSystem: boolean } }[] };
   }
 
   async create(tenantId: string, dto: CreateUserDto, actorId: string): Promise<User> {
@@ -108,7 +120,7 @@ export class UserManagementService {
       newValue: { email: user.email, fullName: user.fullName, roleIds: dto.roleIds ?? [] },
     });
 
-    return user as User;
+    return this.sanitize(user) as User;
   }
 
   async update(tenantId: string, id: string, dto: UpdateUserDto, actorId: string): Promise<User> {
@@ -144,7 +156,7 @@ export class UserManagementService {
       newValue: { fullName: updated.fullName, phone: updated.phone, employeeId: updated.employeeId },
     });
 
-    return updated as User;
+    return this.sanitize(updated) as User;
   }
 
   async deactivate(tenantId: string, id: string, actorId: string): Promise<User> {
@@ -197,7 +209,7 @@ export class UserManagementService {
       oldValue: { status: current.status },
       newValue: { status },
     });
-    return updated as User;
+    return this.sanitize(updated) as User;
   }
 
   async resetPassword(
@@ -247,7 +259,7 @@ export class UserManagementService {
       changedBy: actorId,
       newValue: { roleId },
     });
-    return updated as User;
+    return this.sanitize(updated) as User;
   }
 
   private generatePassword(): string {

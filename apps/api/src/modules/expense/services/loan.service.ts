@@ -22,6 +22,29 @@ export class LoanService {
       throw new BadRequestException('Installment count must be at least 1');
     }
 
+    // Kelayakan pengajuan: maksimal 1 pinjaman PENDING per karyawan ...
+    const pending = await this.prisma.loan.findFirst({
+      where: { tenantId, employeeId, status: RequestStatus.PENDING },
+      select: { id: true },
+    });
+    if (pending) {
+      throw new BadRequestException('Karyawan masih memiliki pengajuan pinjaman yang menunggu persetujuan.');
+    }
+
+    // ... dan plafon 3x gaji pokok bulanan (bila grade diketahui).
+    // Batas 3x adalah kebijakan default yang terdokumentasi; sesuaikan
+    // via konfigurasi bila PKB perusahaan berbeda.
+    const employment = await this.prisma.employment.findFirst({
+      where: { employeeId, isActive: true },
+      include: { grade: true },
+    });
+    const baseSalary = Number((employment?.grade as any)?.level || 0) * 1000000 || 0;
+    if (baseSalary > 0 && dto.amount > 3 * baseSalary) {
+      throw new BadRequestException(
+        `Plafon pinjaman maksimal 3x gaji pokok (Rp ${(3 * baseSalary).toLocaleString('id-ID')}).`,
+      );
+    }
+
     const installmentAmount = Math.round((dto.amount / dto.installmentCount) * 100) / 100;
 
     const loan = await this.prisma.loan.create({

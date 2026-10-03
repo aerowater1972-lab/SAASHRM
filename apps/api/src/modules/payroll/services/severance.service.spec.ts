@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { SeveranceService } from './severance.service';
+import { SeveranceService, calculateSeveranceTax } from './severance.service';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 
@@ -132,6 +132,26 @@ describe('SeveranceService (PP 35/2021)', () => {
     await expect(
       service.createCase('t1', { employeeId: 'ghost', cause: 'TERMINATION', terminationDate: '2026-06-01' } as any),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('TERMINATION menyertakan PPh final + neto (64,4jt -> pajak 720rb)', async () => {
+    mockCreate('2022-06-01', 8);
+    const r: any = await service.createCase('t1', {
+      employeeId: 'emp-1', cause: 'TERMINATION', terminationDate: '2026-06-01',
+    } as any);
+    // objek pajak = 64,4jt: 50jt x 0% + 14,4jt x 5%
+    expect(r.incomeTax).toBe(Math.round(14400000 * 0.05));
+    expect(r.netPayout).toBe(64400000 - Math.round(14400000 * 0.05));
+    expect(r.incomeTaxBrackets).toHaveLength(2);
+  });
+
+  it.each([
+    [30000000, 0],
+    [75000000, 1250000],
+    [200000000, 17500000],
+    [600000000, 87500000],
+  ])('PPh final PP 68/2009 bruto %i -> pajak %i', (bruto, expected) => {
+    expect(calculateSeveranceTax(bruto).total).toBe(expected);
   });
 
   it('siklus DRAFT->APPROVED->PAID; tolak transisi ilegal', async () => {

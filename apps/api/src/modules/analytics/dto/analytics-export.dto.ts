@@ -3,8 +3,8 @@ import { IsIn, IsOptional, IsString } from 'class-validator';
 import { AnalyticsFilterDto } from './analytics-filter.dto';
 
 export class AnalyticsExportDto {
-  @ApiProperty({ enum: ['headcount', 'turnover', 'workforce-cost'] })
-  @IsIn(['headcount', 'turnover', 'workforce-cost'])
+  @ApiProperty({ enum: ['headcount', 'turnover', 'workforce-cost', 'bradford', 'flight-risk', 'leave', 'overtime', 'gender-pay-gap', 'lk-kphpp'] })
+  @IsIn(['headcount', 'turnover', 'workforce-cost', 'bradford', 'flight-risk', 'leave', 'overtime', 'gender-pay-gap', 'lk-kphpp'])
   report!: string;
 
   @ApiPropertyOptional({ enum: ['csv', 'pdf'], default: 'csv' })

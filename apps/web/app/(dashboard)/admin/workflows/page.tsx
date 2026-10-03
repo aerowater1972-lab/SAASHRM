@@ -3,17 +3,27 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useWorkflows, useCreateWorkflow } from '@/lib/hooks/admin';
+import {
+  useWorkflows,
+  useCreateWorkflow,
+  useUpdateWorkflow,
+} from '@/lib/hooks/admin';
 import { createWorkflowSchema, type CreateWorkflowInput } from '@/lib/schemas/admin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TableSkeleton, ErrorState, EmptyState } from '@/components/ui/data-states';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Plus, Workflow, Clock, UserCheck, Save, CircleDot, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Workflow, Clock, UserCheck, Save, CircleDot } from 'lucide-react';
 
 const approverVariant: Record<string, 'info' | 'warning' | 'secondary'> = {
   ROLE: 'info',
@@ -28,6 +38,16 @@ export default function WorkflowsPage() {
 
   const { data: workflows = [], isLoading, error, refetch } = useWorkflows();
   const createMutation = useCreateWorkflow();
+  const updateMutation = useUpdateWorkflow();
+
+  const [isAddingStep, setIsAddingStep] = useState(false);
+  const [newStepName, setNewStepName] = useState('');
+  const [newStepApproverType, setNewStepApproverType] = useState('ROLE');
+  const [newStepTimeout, setNewStepTimeout] = useState<number | undefined>(undefined);
+  const [editingStepIdx, setEditingStepIdx] = useState<number | null>(null);
+  const [editStepName, setEditStepName] = useState('');
+  const [editStepApproverType, setEditStepApproverType] = useState('ROLE');
+  const [editStepTimeout, setEditStepTimeout] = useState<number | undefined>(undefined);
 
   const form = useForm<CreateWorkflowInput>({ resolver: zodResolver(createWorkflowSchema) });
 
@@ -122,7 +142,13 @@ export default function WorkflowsPage() {
                     <div key={s.id} className="flex w-full flex-col items-center">
                       <div className="my-1 h-8 w-0.5 bg-border" />
                       <button
-                        onClick={() => setSelectedStep(i)}
+                        onClick={() => {
+                          setSelectedStep(i);
+                          setEditingStepIdx(i);
+                          setEditStepName(s.name);
+                          setEditStepApproverType(s.approverType);
+                          setEditStepTimeout(s.timeoutHours);
+                        }}
                         className={`flex w-full max-w-sm items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${
                           selectedStep === i ? 'border-primary ring-2 ring-primary/30' : 'border-border'
                         }`}
@@ -164,44 +190,115 @@ export default function WorkflowsPage() {
                 </div>
                 {selectedStep === null || !steps[selectedStep] ? (
                   <p className="text-sm text-muted-foreground">Pilih sebuah step untuk melihat detail.</p>
-                ) : (
-                  (() => {
-                    const s = steps[selectedStep];
-                    return (
-                      <div className="space-y-3 text-sm">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Nama Step</p>
-                          <p className="font-medium">{s.name}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Urutan</p>
-                          <p className="font-medium">{s.stepOrder}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Tipe Approver</p>
-                          <Badge variant={approverVariant[s.approverType] || 'secondary'} className="text-[10px]">{s.approverType}</Badge>
-                        </div>
-                        {s.approverRoleId && (
-                          <div><p className="text-xs text-muted-foreground">Role ID</p><p className="font-mono text-xs break-all">{s.approverRoleId}</p></div>
-                        )}
-                        {s.approverUserId && (
-                          <div><p className="text-xs text-muted-foreground">User ID</p><p className="font-mono text-xs break-all">{s.approverUserId}</p></div>
-                        )}
-                        <div>
-                          <p className="text-xs text-muted-foreground">Timeout (jam)</p>
-                          <p className="font-medium">{s.timeoutHours ?? '-'}</p>
-                        </div>
+                ) : (() => {
+                  const s = steps[selectedStep];
+                  return (
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Nama Step</p>
+                        <Input value={editStepName} onChange={(e) => setEditStepName(e.target.value)} className="h-8" />
                       </div>
-                    );
-                  })()
-                )}
+                      <div>
+                        <p className="text-xs text-muted-foreground">Urutan</p>
+                        <p className="font-medium">{s.stepOrder}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Tipe Approver</p>
+                        <select value={editStepApproverType} onChange={(e) => setEditStepApproverType(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm">
+                          <option value="ROLE">ROLE</option>
+                          <option value="USER">USER</option>
+                          <option value="MANAGER">MANAGER</option>
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Timeout (jam)</p>
+                        <Input type="number" min={1} value={editStepTimeout ?? ''} onChange={(e) => setEditStepTimeout(e.target.value ? parseInt(e.target.value) : undefined)} className="h-8" placeholder="24" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" className="flex-1" onClick={() => {
+                          if (!active) return;
+                          const updated = [...steps];
+                          updated[selectedStep] = { ...s, name: editStepName || s.name, approverType: editStepApproverType as any, timeoutHours: editStepTimeout } as any;
+                          updateMutation.mutate(
+                            { id: active.id, data: { steps: updated as any } },
+                            { onSuccess: () => { setEditingStepIdx(null); refetch(); } },
+                          );
+                        }} disabled={updateMutation.isPending}>Simpan</Button>
+                        <Button size="sm" variant="destructive" className="flex-1" onClick={() => {
+                          if (!active) return;
+                          const filtered = steps.filter((_: any, i: number) => i !== selectedStep);
+                          updateMutation.mutate(
+                            { id: active.id, data: { steps: filtered as any } },
+                            { onSuccess: () => { setEditingStepIdx(null); setSelectedStep(null); refetch(); } },
+                          );
+                        }}>Hapus</Button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex justify-end">
-            <Button variant="outline" size="sm" disabled title="Pengubahan step belum didukung oleh backend">
-              <Save className="mr-2 h-4 w-4" />Simpan Alur
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <Dialog open={isAddingStep} onOpenChange={setIsAddingStep}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Plus className="mr-1 h-3 w-3" />Tambah Step
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Tambah Step Baru</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="ns-name">Nama Step</Label>
+                    <Input id="ns-name" value={newStepName} onChange={(e) => setNewStepName(e.target.value)} placeholder="e.g. Manager Approval" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ns-type">Tipe Approver</Label>
+                    <select id="ns-type" value={newStepApproverType} onChange={(e) => setNewStepApproverType(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                      <option value="ROLE">By Role</option>
+                      <option value="USER">By User</option>
+                      <option value="MANAGER">By Manager</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ns-timeout">Timeout (jam, opsional)</Label>
+                    <Input id="ns-timeout" type="number" min={1} value={newStepTimeout ?? ''} onChange={(e) => setNewStepTimeout(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="24" />
+                  </div>
+                  <Button onClick={() => {
+                    if (!active || !newStepName.trim()) return;
+                    const currentSteps = [...(active.steps ?? [])];
+                    currentSteps.push({
+                      id: `step-${Date.now()}`,
+                      name: newStepName.trim(),
+                      approverType: newStepApproverType as any,
+                      timeoutHours: newStepTimeout,
+                      stepOrder: currentSteps.length + 1,
+                    } as any);
+                    updateMutation.mutate(
+                      { id: active.id, data: { steps: currentSteps as any } },
+                      { onSuccess: () => { setIsAddingStep(false); setNewStepName(''); setNewStepTimeout(undefined); refetch(); } },
+                    );
+                  }} disabled={updateMutation.isPending || !newStepName.trim()} className="w-full">
+                    {updateMutation.isPending ? 'Menyimpan…' : 'Tambah Step'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button
+              onClick={() => {
+                if (!active) return;
+                updateMutation.mutate(
+                  { id: active.id, data: { steps: active.steps as any } },
+                  { onSuccess: () => refetch() },
+                );
+              }}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Menyimpan…' : 'Simpan Alur'}
             </Button>
           </div>
         </>

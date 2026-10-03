@@ -21,7 +21,7 @@ export class ResignationFilterDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   employeeId?: string;
-  @ApiPropertyOptional({ enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] })
+  @ApiPropertyOptional({ enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'] })
   @IsOptional()
   @IsString()
   status?: string;

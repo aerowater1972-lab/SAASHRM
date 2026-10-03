@@ -13,12 +13,18 @@ import {
   updateTenant,
   fetchUsers,
   createUser,
+  updateUser,
+  deactivateUser,
+  activateUser,
+  resetUserPassword,
   fetchAuditLogs,
   fetchWorkflows,
   createWorkflow,
+  updateWorkflow,
   fetchFeatureFlags,
   toggleFeatureFlag,
   fetchIntegrations,
+  bulkImportEmployees,
 } from '@/lib/api/admin';
 import type { CreateRoleInput, CreateTenantInput, CreateWorkflowInput, CreateUserInput } from '@/lib/schemas/admin';
 
@@ -93,8 +99,11 @@ export function useCreateTenant() {
   });
 }
 
-export function useUsers() {
-  return useQuery({ queryKey: ['admin', 'users'], queryFn: fetchUsers });
+export function useUsers(params?: { page?: number; limit?: number; status?: string; search?: string }) {
+  return useQuery({
+    queryKey: ['admin', 'users', params],
+    queryFn: () => fetchUsers(params),
+  });
 }
 
 export function useCreateUser() {
@@ -105,8 +114,43 @@ export function useCreateUser() {
   });
 }
 
-export function useAuditLogs() {
-  return useQuery({ queryKey: ['admin', 'audit-logs'], queryFn: fetchAuditLogs });
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateUserInput> }) => updateUser(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useDeactivateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deactivateUser(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useActivateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => activateUser(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useResetUserPassword() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, password }: { id: string; password?: string }) => resetUserPassword(id, password),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useAuditLogs(params?: { page?: number; limit?: number; module?: string; entity?: string; action?: string }) {
+  return useQuery({
+    queryKey: ['admin', 'audit-logs', params],
+    queryFn: () => fetchAuditLogs(params),
+  });
 }
 
 export function useWorkflows() {
@@ -117,6 +161,15 @@ export function useCreateWorkflow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateWorkflowInput) => createWorkflow(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'workflows'] }),
+  });
+}
+
+export function useUpdateWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateWorkflowInput> }) =>
+      updateWorkflow(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'workflows'] }),
   });
 }
@@ -135,4 +188,11 @@ export function useToggleFeatureFlag() {
 
 export function useIntegrations() {
   return useQuery({ queryKey: ['admin', 'integrations'], queryFn: fetchIntegrations });
+}
+
+export function useBulkImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { rows: Record<string, string>[] }) => bulkImportEmployees(data),
+  });
 }

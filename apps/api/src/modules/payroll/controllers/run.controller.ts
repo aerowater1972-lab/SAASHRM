@@ -90,12 +90,13 @@ export class RunController {
 
   @Post(':id/generate-bank-transfer')
   @Permissions('payroll:bank-transfer:export')
-  @ApiOperation({ summary: 'Generate bank transfer file for the run' })
+  @ApiOperation({ summary: 'Generate bank transfer file for the run (LOCKED only, idempotent)' })
   generateBankTransfer(
     @TenantId() tenantId: string,
     @Param('id') id: string,
     @CurrentUser('sub') userId?: string,
+    @Query('bank') bank?: string,
   ) {
-    return this.runService.generateBankTransfer(tenantId, id, userId);
+    return this.runService.generateBankTransfer(tenantId, id, userId, bank || 'CSV');
   }
 }

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@common/prisma/prisma.service';
@@ -11,7 +12,8 @@ import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
-import { calendarMonthsBetween } from '@modules/shared/utils/wage-base.util';
+import { calendarMonthsBetween, computeWageBase, SICK_LEAVE_CODES, ANNUAL_LEAVE_CODES } from '@modules/shared/utils/wage-base.util';
+import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adjustment.service';
 import { CreateLeaveTypeDto } from '../dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from '../dto/create-leave-request.dto';
 import { LeaveFilterDto } from '../dto/leave-filter.dto';
@@ -26,6 +28,9 @@ import {
 // Addendum Serikat Pekerja BR-02: fitur aktif hanya bila feature flag ini ON.
 const LABOR_UNION_FEATURE = 'labor_union';
 
+// Kode cuti terpusat di shared/utils; re-export agar import lama tetap jalan.
+export { SICK_LEAVE_CODES, ANNUAL_LEAVE_CODES };
+
 @Injectable()
 export class LeaveService {
   constructor(
@@ -33,6 +38,7 @@ export class LeaveService {
     private readonly employeeService: EmployeeService,
     private readonly workflow: WorkflowEngineService,
     private readonly eventBus: EventBusService,
+    @Optional() private readonly adjustments?: PayrollAdjustmentService,
   ) {}
 
   async createLeaveType(tenantId: string, dto: CreateLeaveTypeDto) {
@@ -115,17 +121,21 @@ export class LeaveService {
   }
 
   async getSickPayStatus(tenantId: string, employeeId: string, startDate: Date, endDate: Date) {
-    const SICK_CODE = 'SL';
-
-    const sickType = await this.prisma.leaveType.findFirst({
-      where: { tenantId, code: SICK_CODE, isActive: true },
+    const sickTypes = await this.prisma.leaveType.findMany({
+      where: { tenantId, code: { in: SICK_LEAVE_CODES }, isActive: true },
+      select: { id: true },
     });
-    if (!sickType) {
+    if (sickTypes.length === 0) {
       return { employeeId, brackets: [], reason: 'TYPE_NOT_CONFIGURED' as const };
     }
 
     const approved = await this.prisma.leaveRequest.findMany({
-      where: { tenantId, employeeId, leaveTypeId: sickType.id, status: RequestStatus.APPROVED },
+      where: {
+        tenantId,
+        employeeId,
+        leaveTypeId: { in: sickTypes.map((t) => t.id) },
+        status: RequestStatus.APPROVED,
+      },
       select: { startDate: true, endDate: true },
     });
 
@@ -606,7 +616,61 @@ export class LeaveService {
       tenantId,
     });
 
+    // Upah sakit berkepanjangan (UU 13/2003 Art 93): hari di luar bracket
+    // 100% otomatis menjadi potongan payroll (proporsional harian).
+    await this.postSickPayDeduction(tenantId, request as any);
+
     return updated;
+  }
+
+  /**
+   * Potongan otomatis porsi upah sakit yang tidak dibayar penuh.
+   * Harian: dailyRate = wageBase/30; tiap hari memakai bracket bulan
+   * (priorSickDays + indeks hari)/30. Tanpa provider adjustments (mis. unit
+   * test) hanya menghitung dan mengembalikan preview tanpa posting.
+   */
+  async postSickPayDeduction(
+    tenantId: string,
+    request: { id: string; employeeId: string; startDate: Date; endDate: Date; leaveType?: { code?: string } | null },
+  ): Promise<{ days: number; unpaidAmount: number; posted: boolean } | null> {
+    if (!SICK_LEAVE_CODES.includes(String((request.leaveType as any)?.code || '').toUpperCase())) return null;
+
+    const start = new Date(request.startDate);
+    const end = new Date(request.endDate);
+    const status: any = await this.getSickPayStatus(tenantId, request.employeeId, start, end);
+    if (!status || status.reason === 'TYPE_NOT_CONFIGURED') return null;
+
+    const priorDays = Number(status.priorSickDays || 0);
+    const dayMs = 86400000;
+    const days = Math.round((end.getTime() - start.getTime()) / dayMs) + 1;
+    if (days <= 0) return null;
+
+    const employee: any = await this.employeeService.findById(tenantId, request.employeeId);
+    if (!employee) return null;
+    const wageBase = await computeWageBase(this.prisma, tenantId, employee);
+    if (wageBase <= 0) return null;
+    const dailyRate = wageBase / 30;
+
+    let unpaid = 0;
+    for (let i = 0; i < days; i++) {
+      const percent = this.sickPayPercentForMonth(Math.floor((priorDays + i) / 30));
+      if (percent < 100) unpaid += dailyRate * (1 - percent / 100);
+    }
+    const unpaidAmount = Math.round(unpaid);
+    if (unpaidAmount <= 0) return { days, unpaidAmount: 0, posted: false };
+
+    if (!this.adjustments) return { days, unpaidAmount, posted: false };
+    await this.adjustments.create({
+      tenantId,
+      employeeId: request.employeeId,
+      sourceEvent: 'SICK_PAY_UNPAID',
+      referenceId: request.id,
+      type: 'DEDUCTION',
+      amount: unpaidAmount,
+      description: `Potongan upah sakit (${days} hari, di luar bracket 100%)`,
+      effectiveDate: end,
+    });
+    return { days, unpaidAmount, posted: true };
   }
 
   async escalateRequest(tenantId: string, id: string, escalatedBy: string) {
@@ -820,7 +884,7 @@ export class LeaveService {
     const year = refDate.getFullYear();
 
     const annualType = await this.prisma.leaveType.findFirst({
-      where: { tenantId, code: 'AL', isActive: true },
+      where: { tenantId, code: { in: ANNUAL_LEAVE_CODES }, isActive: true },
     });
     if (!annualType) return { granted: 0, skipped: 0 };
 

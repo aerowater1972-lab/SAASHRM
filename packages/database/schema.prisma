@@ -23,45 +23,46 @@ model Tenant {
   updatedAt DateTime     @updatedAt
   deletedAt DateTime?
 
-  entities              TenantEntity[]
-  users                 User[]
-  roles                 Role[]
-  featureFlags          FeatureFlag[]
-  workflows             WorkflowDefinition[]
-  integrations          Integration[]
-  auditLogs             AuditLog[]
-  systemHealthSnapshots SystemHealthSnapshot[]
-  backupRecords         BackupRecord[]
-  maintenanceWindows    MaintenanceWindow[]
-  trainings             Training[]
-  courses               Course[]
-  feedback360s          Feedback360[]
-  idps                  IndividualDevelopmentPlan[]
-  provincialWages       ProvincialMinimumWage[]
-  violationCategories   ViolationCategory[]
-  disciplinaryCases     DisciplinaryCase[]
-  incidentReports       IncidentReport[]
-  ppeAssignments        PpeAssignment[]
-  tenantBranding        TenantBranding?
-  locationPings         LocationPing[]
-  fieldTerritories      FieldTerritory[]
-  liveTrackingSettings  LiveTrackingSettings?
-  documents             Document[]
-  announcements         Announcement[]
-  documentCategories    DocumentCategory[]
-  talentPools           TalentPool[]
-  successionPlans       SuccessionPlan[]
-  territoryViolations   TerritoryViolation[]
-  engagementSurveys     EngagementSurvey[]
-  manpowerPlans         ManpowerPlan[]
-  GrievanceCase         GrievanceCase[]
-  BipartiteSession      BipartiteSession[]
-  BpjsClaim             BpjsClaim[]
+  entities                 TenantEntity[]
+  users                    User[]
+  employees                Employee[]
+  roles                    Role[]
+  featureFlags             FeatureFlag[]
+  workflows                WorkflowDefinition[]
+  integrations             Integration[]
+  auditLogs                AuditLog[]
+  systemHealthSnapshots    SystemHealthSnapshot[]
+  backupRecords            BackupRecord[]
+  maintenanceWindows       MaintenanceWindow[]
+  trainings                Training[]
+  courses                  Course[]
+  feedback360s             Feedback360[]
+  idps                     IndividualDevelopmentPlan[]
+  provincialWages          ProvincialMinimumWage[]
+  violationCategories      ViolationCategory[]
+  disciplinaryCases        DisciplinaryCase[]
+  incidentReports          IncidentReport[]
+  ppeAssignments           PpeAssignment[]
+  tenantBranding           TenantBranding?
+  locationPings            LocationPing[]
+  fieldTerritories         FieldTerritory[]
+  liveTrackingSettings     LiveTrackingSettings?
+  documents                Document[]
+  announcements            Announcement[]
+  documentCategories       DocumentCategory[]
+  talentPools              TalentPool[]
+  successionPlans          SuccessionPlan[]
+  territoryViolations      TerritoryViolation[]
+  engagementSurveys        EngagementSurvey[]
+  manpowerPlans            ManpowerPlan[]
+  GrievanceCase            GrievanceCase[]
+  BipartiteSession         BipartiteSession[]
+  BpjsClaim                BpjsClaim[]
   BpjsKetenagakerjaanClaim BpjsKetenagakerjaanClaim[]
-  wfhRequests           WfhRequest[]
-  wfhPolicies           WfhPolicy[]
-  Alumni                Alumni[]
-  ShiftGroup            ShiftGroup[]
+  wfhRequests              WfhRequest[]
+  wfhPolicies              WfhPolicy[]
+  Alumni                   Alumni[]
+  ShiftGroup               ShiftGroup[]
 }
 
 model TenantEntity {
@@ -83,7 +84,6 @@ model TenantEntity {
   parent   TenantEntity?  @relation("EntityHierarchy", fields: [parentId], references: [id])
   children TenantEntity[] @relation("EntityHierarchy")
 
-  employees        Employee[]
   departments      Department[]
   holidayCalendars HolidayCalendar[]
   workLocations    WorkLocation[]
@@ -371,7 +371,7 @@ model Employee {
   updatedAt            DateTime       @updatedAt
   deletedAt            DateTime?
 
-  tenantEntity                   TenantEntity                @relation(fields: [tenantId], references: [id]) // via tenantId ref
+  tenant                         Tenant                      @relation(fields: [tenantId], references: [id])
   user                           User?
   employments                    Employment[]
   documents                      EmployeeDocument[]
@@ -1220,29 +1220,29 @@ model BpjsClaim {
 }
 
 model BpjsKetenagakerjaanClaim {
-  id                    String                                    @id @default(uuid())
-  tenantId              String
-  employeeId            String
-  claimNumber           String // nomor klaim BPJS TK
-  claimType             BpjsKetenagakerjaanClaimType // JKK, JKM, JHT, JP
-  diagnosisCode         String? // kode ICD-10
-  diagnosisName         String?
-  admissionDate         DateTime?
-  dischargeDate         DateTime?
-  daysOfCare            Int?
-  hospitalCode          String? // kode rumah sakit BPJS
-  hospitalName          String?
-  claimAmount           Decimal         @db.Decimal(18, 2) // total tagihan
-  approvedAmount        Decimal?        @db.Decimal(18, 2) // yang disetujui BPJS TK
-  patientShare          Decimal?        @db.Decimal(18, 2) // biaya peserta (jika ada)
-  status                BpjsKetenagakerjaanClaimStatus @default(SUBMITTED)
-  submittedAt           DateTime        @default(now())
-  processedAt           DateTime?
-  paidAt                DateTime?
-  notes                 String?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
-  deletedAt             DateTime?
+  id             String                         @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  claimNumber    String // nomor klaim BPJS TK
+  claimType      BpjsKetenagakerjaanClaimType // JKK, JKM, JHT, JP
+  diagnosisCode  String? // kode ICD-10
+  diagnosisName  String?
+  admissionDate  DateTime?
+  dischargeDate  DateTime?
+  daysOfCare     Int?
+  hospitalCode   String? // kode rumah sakit BPJS
+  hospitalName   String?
+  claimAmount    Decimal                        @db.Decimal(18, 2) // total tagihan
+  approvedAmount Decimal?                       @db.Decimal(18, 2) // yang disetujui BPJS TK
+  patientShare   Decimal?                       @db.Decimal(18, 2) // biaya peserta (jika ada)
+  status         BpjsKetenagakerjaanClaimStatus @default(SUBMITTED)
+  submittedAt    DateTime                       @default(now())
+  processedAt    DateTime?
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  deletedAt      DateTime?
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])

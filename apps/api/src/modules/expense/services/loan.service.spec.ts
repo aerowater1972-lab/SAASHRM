@@ -64,6 +64,7 @@ describe('LoanService', () => {
     payslip: {
       findFirst: jest.fn(),
     },
+    employment: { findFirst: jest.fn() },
     employee: {
       findUnique: jest.fn(),
     },
@@ -108,6 +109,30 @@ describe('LoanService', () => {
       mockPrisma.loan.create.mockResolvedValue(mockLoan);
       const result = await service.create('default', 'emp-1', { amount: 1000, installmentCount: 4 } as any);
       expect(result.installmentAmount.toNumber()).toBe(250);
+    });
+
+    it('should reject when employee already has a pending loan', async () => {
+      mockPrisma.loan.findFirst.mockResolvedValue({ id: 'loan-old' });
+      await expect(
+        service.create('default', 'emp-1', { amount: 1000, installmentCount: 4 } as any),
+      ).rejects.toThrow(/menunggu persetujuan/);
+      expect(mockPrisma.loan.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject amount above 3x base salary', async () => {
+      mockPrisma.loan.findFirst.mockResolvedValue(null);
+      mockPrisma.employment.findFirst.mockResolvedValue({ grade: { level: 5 } });
+      await expect(
+        service.create('default', 'emp-1', { amount: 16000000, installmentCount: 4 } as any),
+      ).rejects.toThrow(/3x gaji pokok/);
+    });
+
+    it('should skip cap when grade unknown', async () => {
+      mockPrisma.loan.findFirst.mockResolvedValue(null);
+      mockPrisma.employment.findFirst.mockResolvedValue(null);
+      mockPrisma.loan.create.mockResolvedValue(mockLoan);
+      const result = await service.create('default', 'emp-1', { amount: 100000000, installmentCount: 4 } as any);
+      expect(result).toBeDefined();
     });
   });
 

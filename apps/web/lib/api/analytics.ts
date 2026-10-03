@@ -55,3 +55,11 @@ export async function exportReport(data: Record<string, unknown>): Promise<Recor
 export async function getDashboardSummary(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
   return api.get<Record<string, unknown>>('/analytics/dashboard/summary', { params: filters });
 }
+
+export async function getBradfordScores(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/analytics/bradford', { params: filters });
+}
+
+export async function getFlightRisk(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/analytics/flight-risk', { params: filters });
+}

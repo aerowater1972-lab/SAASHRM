@@ -83,12 +83,12 @@ async function main() {
 
   // 5. Create Grades
   const grades = [
-    { id: 'grade-1', name: 'Staff', code: 'STF', level: 1 },
-    { id: 'grade-2', name: 'Senior Staff', code: 'SST', level: 2 },
-    { id: 'grade-3', name: 'Supervisor', code: 'SPV', level: 3 },
-    { id: 'grade-4', name: 'Manager', code: 'MGR', level: 4 },
-    { id: 'grade-5', name: 'Senior Manager', code: 'SMG', level: 5 },
-    { id: 'grade-6', name: 'Director', code: 'DIR', level: 6 },
+    { id: 'grade-1', name: 'Staff', code: 'STF', level: 1, maxOvertimeHoursPerMonth: 20 },
+    { id: 'grade-2', name: 'Senior Staff', code: 'SST', level: 2, maxOvertimeHoursPerMonth: 20 },
+    { id: 'grade-3', name: 'Supervisor', code: 'SPV', level: 3, maxOvertimeHoursPerMonth: 16 },
+    { id: 'grade-4', name: 'Manager', code: 'MGR', level: 4, maxOvertimeHoursPerMonth: 12 },
+    { id: 'grade-5', name: 'Senior Manager', code: 'SMG', level: 5, maxOvertimeHoursPerMonth: 8 },
+    { id: 'grade-6', name: 'Director', code: 'DIR', level: 6, maxOvertimeHoursPerMonth: 8 },
   ];
 
   for (const g of grades) {
@@ -349,6 +349,11 @@ async function main() {
     'disciplinary-cases:create',
     'disciplinary-cases:read',
     'disciplinary-cases:update',
+    'employee-relations:grievance:create',
+    'employee-relations:grievance:read',
+    'employee-relations:grievance:manage',
+    'employee-relations:bipartite:read',
+    'employee-relations:bipartite:manage',
     'incident-reports:create',
     'incident-reports:read',
     'incident-reports:update',
@@ -507,6 +512,11 @@ async function main() {
       'documents:view',
       'announcements:manage',
       'announcements:view',
+      'employee-relations:grievance:create',
+      'employee-relations:grievance:read',
+      'employee-relations:grievance:manage',
+      'employee-relations:bipartite:read',
+      'employee-relations:bipartite:manage',
       'succession:manage',
       'succession:view',
       'expense-claims:approve',
@@ -629,6 +639,7 @@ async function main() {
       'attendance:correction:read',
       'attendance:read',
       'employee:read',
+      'employee-relations:bipartite:read',
       'employee:movement:read',
       'employee:movement:history',
       'employee:organization:read',
@@ -674,6 +685,8 @@ async function main() {
       'benefits:enroll',
       'benefits:read',
       'employee:read',
+      'employee-relations:grievance:create',
+      'employee-relations:grievance:read',
       'ess:attendance:clock',
       'ess:attendance:read',
       'ess:dashboard:read',
@@ -796,6 +809,8 @@ async function main() {
     { id: 'leave-marriage', name: 'Marriage Leave', code: 'ML', isPaid: true, maxConsecutiveDays: 3 },
     { id: 'leave-maternity', name: 'Maternity Leave', code: 'MATL', isPaid: true, maxConsecutiveDays: 90, genderRestriction: 'FEMALE' },
     { id: 'leave-miscarriage', name: 'Cuti Keguguran', code: 'CKG', isPaid: true, isBalanceDeducting: false, maxConsecutiveDays: 45, genderRestriction: 'FEMALE', requiresDocument: true },
+    { id: 'leave-long', name: 'Cuti Besar', code: 'LONG', isPaid: true, isBalanceDeducting: false, minServiceMonths: 72, maxConsecutiveDays: 30 },
+    { id: 'leave-adoption', name: 'Cuti Adopsi', code: 'ADP', isPaid: true, maxConsecutiveDays: 30, requiresDocument: true },
     { id: 'leave-unpaid', name: 'Unpaid Leave', code: 'UL', isPaid: false, allowNegativeBalance: true },
     // Addendum v1.2 FR-18 + BR-11: jenis izin non-deducting (tidak memotong saldo)
     { id: 'leave-menstrual', name: 'Cuti Haid', code: 'CL', isPaid: true, isBalanceDeducting: false, sameDayApproval: true, carryForwardLimit: 0, requiresDocument: false },
@@ -910,7 +925,25 @@ async function main() {
   });
   console.log(`Tax config created: ${taxConfig.taxMethod}`);
 
-  // 19. Create Tenant Branding
+  // 19. Create Preset Salary Components (tunjangan preset)
+  const presetComponents = [
+    { id: 'comp-transport', name: 'Uang Transport', code: 'TRANSPORT', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 100000, isTaxable: true, isActive: true },
+    { id: 'comp-meal', name: 'Uang Makan', code: 'MEAL', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 150000, isTaxable: true, isActive: true },
+    { id: 'comp-communication', name: 'Uang Komunikasi', code: 'COMM', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 50000, isTaxable: true, isActive: true },
+    { id: 'comp-position', name: 'Tunjangan Jabatan', code: 'POSITION', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 0, isTaxable: true, isActive: true },
+    { id: 'comp-supervision', name: 'Tunjangan Pengawasan', code: 'SUPERVISION', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 0, isTaxable: true, isActive: true },
+    { id: 'comp-honor', name: 'Tunjangan Kehormatan', code: 'HONOR', type: 'ALLOWANCE', calculationMethod: 'FIXED', defaultValue: 0, isTaxable: true, isActive: true },
+  ];
+  for (const c of presetComponents) {
+    await prisma.payrollComponent.upsert({
+      where: { id: c.id },
+      update: {},
+      create: { ...c, tenantId: 'default' },
+    });
+  }
+  console.log(`${presetComponents.length} preset salary components created`);
+
+  // 20. Create Tenant Branding
   await prisma.tenantBranding.upsert({
     where: { tenantId: 'default' },
     update: {},

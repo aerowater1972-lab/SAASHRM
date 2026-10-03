@@ -130,6 +130,14 @@ export function TopBar({ onMenuClick }: TopBarProps) {
                   ))
                 )}
               </div>
+              <div className="border-t">
+                <button
+                  onClick={() => { router.push('/ess/notifications'); setNotifOpen(false); }}
+                  className="w-full px-4 py-2 text-center text-sm font-medium text-primary hover:bg-muted/50 transition-colors"
+                >
+                  Lihat Semua Notifikasi
+                </button>
+              </div>
             </div>
           )}
         </div>

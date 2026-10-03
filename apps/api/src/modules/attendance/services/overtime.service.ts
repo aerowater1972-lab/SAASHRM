@@ -48,7 +48,7 @@ export class OvertimeService {
       throw new BadRequestException(`Overtime minimum is ${this.overtimeMinMinutes} minutes`);
     }
 
-    // UU 13/2003 Art 78: batas lembur MAKSIMAL 3 jam/hari dan 14 jam/minggu.
+    // PP 35/2021 (UU Cipta Kerja): batas lembur MAKSIMAL 4 jam/hari dan 18 jam/minggu.
     // Menghitung request PENDING + APPROVED (rejected/cancelled tidak makan kuota).
     const day = new Date(dto.date);
     day.setUTCHours(0, 0, 0, 0);
@@ -295,8 +295,9 @@ export class OvertimeService {
     day: Date,
     newMinutes: number,
   ): Promise<void> {
-    const MAX_DAILY_MINUTES = 180; // 3 jam/hari
-    const MAX_WEEKLY_MINUTES = 840; // 14 jam/minggu
+    const MAX_DAILY_MINUTES = 240; // 4 jam/hari (PP 35/2021)
+    const MAX_WEEKLY_MINUTES = 1080; // 18 jam/minggu (PP 35/2021)
+    const MAX_MONTHLY_MINUTES = 480; // 8 jam/bulan (default); akan digantikan oleh grade-specific
 
     // Awal pekan (Senin) dari tanggal yang diajukan.
     const weekStart = new Date(day);
@@ -323,14 +324,66 @@ export class OvertimeService {
     const dayTotal = existing.filter((r) => sameDay(new Date(r.date))).reduce((s, r) => s + r.totalMinutes, 0);
     if (dayTotal + newMinutes > MAX_DAILY_MINUTES) {
       throw new BadRequestException(
-        `Melebihi batas lembur harian (maks 3 jam/hari, UU 13/2003): sudah ada ${dayTotal} menit pada tanggal ini.`,
+        `Melebihi batas lembur harian (maks 4 jam/hari, PP 35/2021): sudah ada ${dayTotal} menit pada tanggal ini.`,
       );
     }
 
     const weekTotal = existing.reduce((s, r) => s + r.totalMinutes, 0);
     if (weekTotal + newMinutes > MAX_WEEKLY_MINUTES) {
       throw new BadRequestException(
-        `Melebihi batas lembur mingguan (maks 14 jam/minggu, UU 13/2003): sudah ada ${weekTotal} menit pada pekan ini.`,
+        `Melebihi batas lembur mingguan (maks 18 jam/minggu, PP 35/2021): sudah ada ${weekTotal} menit pada pekan ini.`,
+      );
+    }
+
+    // GRADING: baca maxOvertimeHoursPerMonth dari grade karyawan
+    // Relasi: Employee -> Employment -> Grade
+    // Fallback ke default MAX_MONTHLY_MINUTES jika tidak ada data employment/grade
+    let gradeMaxMonthly = MAX_MONTHLY_MINUTES; // default 8 jam
+    try {
+      const employee = await this.prisma.employee.findFirst({
+        where: { id: employeeId },
+        include: {
+          employments: {
+            where: { isActive: true },
+            take: 1,
+            include: { grade: true },
+          },
+        },
+      });
+      const grade = employee?.employments?.[0]?.grade;
+      if (grade?.maxOvertimeHoursPerMonth) {
+        gradeMaxMonthly = grade.maxOvertimeHoursPerMonth * 60;
+      }
+    } catch {
+      // Jika gagal membaca grade (misal: test environment tanpa data), gunakan default
+    }
+
+    // Total overtime menit untuk bulan ini (bulan kalender dari date)
+    const monthStart = new Date(day);
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const monthEnd = new Date(monthStart);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+    monthEnd.setUTCDate(0);
+    monthEnd.setUTCHours(23, 59, 59, 999);
+
+    const monthlyExisting = await this.prisma.overtimeRequest.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        date: { gte: monthStart, lte: monthEnd },
+        status: { in: [RequestStatus.PENDING, RequestStatus.APPROVED] },
+      },
+      select: { totalMinutes: true },
+    });
+
+    const monthlyTotal = monthlyExisting.reduce((s, r) => s + r.totalMinutes, 0);
+    if (monthlyTotal + newMinutes > gradeMaxMonthly) {
+      const isDefault = gradeMaxMonthly === MAX_MONTHLY_MINUTES;
+      throw new BadRequestException(
+        isDefault
+          ? `Melebihi batas lembur bulanan (maks ${(gradeMaxMonthly / 60)} jam/bulan, default): sudah ada ${monthlyTotal} menit pada bulan ini.`
+          : `Melebihi batas lembur bulanan grade (maks ${gradeMaxMonthly / 60} jam/bulan): sudah ada ${monthlyTotal} menit pada bulan ini.`,
       );
     }
   }

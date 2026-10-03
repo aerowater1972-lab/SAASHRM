@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEmployee, useDeleteEmployee, useActivateEmployee, useDeactivateEmployee, useEmployeeDocuments, useEmployeeEmployments } from '@/lib/hooks/employees';
+import { useQuery } from '@tanstack/react-query';
+import { fetchDisciplinaryHistory, fetchEmployeeK3Profile } from '@/lib/api/employee-relations';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { PageSkeleton, ErrorState } from '@/components/ui/data-states';
-import { ArrowLeft, Edit, Trash2, CheckCircle, XCircle, FileText, Building2, Calendar, Phone, Mail, MapPin, User } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, CheckCircle, XCircle, FileText, Building2, Calendar, Phone, Mail, MapPin, User, ShieldAlert, GraduationCap } from 'lucide-react';
 
 const statusVariant: Record<string, 'success' | 'warning' | 'secondary'> = {
   ACTIVE: 'success',
@@ -33,6 +35,16 @@ export default function EmployeeDetailPage() {
   const { data: employee, isLoading, error, refetch } = useEmployee(id);
   const { data: documents } = useEmployeeDocuments(id);
   const { data: employments } = useEmployeeEmployments(id);
+  const { data: spHistory = [] } = useQuery({
+    queryKey: ['disciplinary-history', id],
+    queryFn: () => fetchDisciplinaryHistory(id),
+    enabled: !!id,
+  });
+  const { data: k3Profile } = useQuery({
+    queryKey: ['k3-profile', id],
+    queryFn: () => fetchEmployeeK3Profile(id),
+    enabled: !!id,
+  });
   const deleteMutation = useDeleteEmployee();
   const activateMutation = useActivateEmployee();
   const deactivateMutation = useDeactivateEmployee();
@@ -141,6 +153,10 @@ export default function EmployeeDetailPage() {
           <TabsTrigger value="documents">
             <FileText className="mr-2 h-4 w-4" />
             Dokumen
+          </TabsTrigger>
+          <TabsTrigger value="k3">
+            <ShieldAlert className="mr-2 h-4 w-4" />
+            K3 & SP
           </TabsTrigger>
         </TabsList>
 
@@ -307,6 +323,51 @@ export default function EmployeeDetailPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="k3" className="space-y-4">
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-sm flex items-center gap-2"><GraduationCap className="h-4 w-4" /> Pelatihan K3</CardTitle>
+              <span className="text-lg font-bold">{k3Profile?.completedK3Trainings ?? 0}</span>
+            </CardHeader>
+            <CardContent>
+              {k3Profile?.trainings?.length > 0 ? (
+                <div className="space-y-1 text-sm">
+                  {k3Profile.trainings.map((t: any) => (
+                    <div key={t.id} className="flex justify-between"><span>{t.title}</span><span className="text-muted-foreground">{new Date(t.startDate).toLocaleDateString('id-ID')}</span></div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Belum ada pelatihan K3.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Riwayat Surat Peringatan</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {spHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Tidak ada riwayat SP.</p>
+              ) : (
+                <div className="space-y-2">
+                  {spHistory.map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between text-sm border-b pb-1 last:border-0">
+                      <span>
+                        <Badge variant={c.spLevel === 'SP3' ? 'destructive' : c.spLevel === 'SP2' ? 'secondary' : 'success'} className="mr-2">{c.spLevel}</Badge>
+                        {c.description}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{new Date(c.issuedDate).toLocaleDateString('id-ID')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
         </TabsContent>
       </Tabs>
     </div>

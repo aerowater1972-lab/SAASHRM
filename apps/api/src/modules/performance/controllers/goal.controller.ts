@@ -88,4 +88,22 @@ export class GoalController {
   ) {
     return this.goalService.updateProgress(tenantId, id, dto);
   }
+
+  @Post('pip/:employeeId')
+  @Permissions('performance:goal:create')
+  @ApiOperation({ summary: 'Mulai PIP 90 hari berbasis goal terukur' })
+  startPip(
+    @TenantId() tenantId: string,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: { goals: Array<{ title: string; metric?: string; targetValue?: number }>; endDate?: string; reviewId?: string },
+  ) {
+    return this.goalService.startPip(tenantId, employeeId, dto);
+  }
+
+  @Get('pip/:employeeId/status')
+  @Permissions('performance:goal:read')
+  @ApiOperation({ summary: 'Status PIP karyawan' })
+  pipStatus(@TenantId() tenantId: string, @Param('employeeId') employeeId: string) {
+    return this.goalService.pipStatus(tenantId, employeeId);
+  }
 }

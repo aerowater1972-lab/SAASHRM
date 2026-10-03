@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit, Logger } from '@nestjs/common';
 import { EmployeeModule } from '@modules/employee/employee.module';
 import { ComponentController } from './controllers/component.controller';
 import { PeriodController } from './controllers/period.controller';
@@ -61,4 +61,28 @@ import { PayrollEventConsumer } from './services/payroll-event.consumer';
     SeveranceService,
   ],
 })
-export class PayrollModule {}
+export class PayrollModule implements OnModuleInit {
+  private readonly logger = new Logger(PayrollModule.name);
+  private reminderTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(private readonly thrService: ThrService) {}
+
+  onModuleInit() {
+    // THR reminder: H-14 before holiday (Permenaker 6/2016).
+    // Checked daily; tenant can configure via settings.thrReminderDays.
+    this.reminderTimer = setInterval(() => {
+      this.thrService
+        .runThrReminderCheck()
+        .then((sent) => {
+          if (sent > 0) this.logger.log(`THR reminder sent to ${sent} HR user(s)`);
+        })
+        .catch((err) => this.logger.warn(`THR reminder check failed: ${err.message}`));
+    }, 24 * 60 * 60 * 1000);
+
+    this.logger.log('THR reminder scheduler started (interval: 24h)');
+  }
+
+  onModuleDestroy() {
+    if (this.reminderTimer) clearInterval(this.reminderTimer);
+  }
+}

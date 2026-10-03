@@ -3,19 +3,21 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useBpjsConfigs, useCreateBpjsConfig, useUpdateBpjsConfig } from '@/lib/hooks/payroll';
+import { useBpjsConfigs, useCreateBpjsConfig, useUpdateBpjsConfig, useMonthlyIuran } from '@/lib/hooks/payroll';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { bpjsSchema, type BpjsInput } from '@/lib/schemas/payroll';
+import { EmployeeSearch } from '@/components/employee-search';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { TableSkeleton, EmptyState, ErrorState } from '@/components/ui/data-states';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { Plus } from 'lucide-react';
+import { Plus, Calculator } from 'lucide-react';
 
 interface BpjsConfig { id: string; name: string; type: string; employeeRate: number; employerRate: number; maxWage?: number; isActive: boolean }
 
@@ -137,6 +139,8 @@ export default function BpjsConfigPage() {
 
       {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
+      <IuranPreviewCard />
+
       {isLoading && <TableSkeleton rows={5} columns={6} />}
 
       {queryError && <ErrorState message={(queryError as any)?.message || 'Gagal memuat data'} onRetry={() => refetch()} />}
@@ -176,5 +180,72 @@ export default function BpjsConfigPage() {
         </div>
       )}
     </div>
+  );
+}
+
+const MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+];
+
+function IuranPreviewCard() {
+  const now = new Date();
+  const [empId, setEmpId] = useState('');
+  const [empLabel, setEmpLabel] = useState('');
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const { data, isLoading, error } = useMonthlyIuran({ employeeId: empId, month, year });
+  const r = data as any;
+
+  const rp = (n: unknown) => `Rp ${Number(n || 0).toLocaleString('id-ID')}`;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Calculator className="h-4 w-4" /> Pratinjau Iuran Bulanan (Kesehatan + JKK)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="md:col-span-2">
+            <EmployeeSearch value={empId} onChange={(id, label) => { setEmpId(id); setEmpLabel(label); }} />
+          </div>
+          <select className="border rounded-md px-2 py-1.5 text-sm bg-background" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select className="border rounded-md px-2 py-1.5 text-sm bg-background" value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        {!empId && <p className="text-sm text-muted-foreground">Pilih karyawan untuk melihat pratinjau iuran.</p>}
+        {empId && isLoading && <p className="text-sm text-muted-foreground">Menghitung…</p>}
+        {empId && error && <p className="text-sm text-destructive">Gagal menghitung pratinjau.</p>}
+        {empId && r && (
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Kesehatan — Perusahaan</p>
+              <p className="text-lg font-bold">{rp(r.kesehatan?.employer)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Basis upah: {rp(r.kesehatan?.wageBase)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Kesehatan — Karyawan + JKK</p>
+              <p className="text-lg font-bold">{rp((r.kesehatan?.employee || 0) + (r.jkk?.total || 0))}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Kes {rp(r.kesehatan?.employee)} · JKK {rp(r.jkk?.total)}
+              </p>
+            </div>
+            <div className="rounded-lg border p-3 bg-muted/30">
+              <p className="text-xs text-muted-foreground">Total gabungan</p>
+              <p className="text-lg font-bold">{rp(r.totalCombined)}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {r.employeeName ?? empLabel} · Gaji pokok {rp(r.baseSalary)}
+              </p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

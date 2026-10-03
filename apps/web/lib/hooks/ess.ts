@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 import {
   getEssDashboard,
   getEssProfile,
@@ -54,14 +55,20 @@ export function useEssAttendance(params?: Record<string, unknown>) {
 }
 
 export function useEssNotifications() {
-  return useQuery({ queryKey: ['ess', 'notifications'], queryFn: getEssNotifications });
+  return useQuery({
+    queryKey: queryKeys.notifications.all,
+    queryFn: getEssNotifications,
+  });
 }
 
 export function useMarkNotificationRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ess', 'notifications'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      qc.invalidateQueries({ queryKey: queryKeys.notifications.unread });
+    },
   });
 }
 
@@ -69,7 +76,10 @@ export function useMarkAllNotificationsRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => markAllNotificationsRead(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ess', 'notifications'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      qc.invalidateQueries({ queryKey: queryKeys.notifications.unread });
+    },
   });
 }
 

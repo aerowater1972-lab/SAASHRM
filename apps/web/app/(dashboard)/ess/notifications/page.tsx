@@ -16,8 +16,14 @@ interface EssNotification {
   body?: string;
   createdAt?: string;
   created_at?: string;
+  readStatus?: boolean;
   read?: boolean;
   isRead?: boolean;
+}
+
+function isRead(n: EssNotification): boolean {
+  if ('readStatus' in n) return !!n.readStatus;
+  return !!(n.read || n.isRead);
 }
 
 function normalizeNotifications(raw: unknown): EssNotification[] {
@@ -37,7 +43,7 @@ export default function EssNotificationsPage() {
   const markAllMut = useMarkAllNotificationsRead();
 
   const notifications = normalizeNotifications(raw);
-  const hasUnread = notifications.some((n) => !n.read && !n.isRead);
+  const hasUnread = notifications.some((n) => !isRead(n));
 
   if (isLoading) {
     return (
@@ -82,7 +88,7 @@ export default function EssNotificationsPage() {
         ) : (
           <div className="space-y-3">
             {notifications.map((n) => {
-              const read = !!n.read || !!n.isRead;
+              const read = isRead(n);
               const dateValue = n.createdAt ?? n.created_at;
               return (
                 <Card

@@ -334,10 +334,37 @@ export class ResignationService {
 
     await this.employeeService.deactivate(tenantId, request.employeeId, request.effectiveDate);
 
+    // Offboarding selesai = COMPLETED (berbeda dari CANCELLED = pembatalan).
     await this.prisma.resignationRequest.update({
       where: { id },
-      data: { status: RequestStatus.CANCELLED },
+      data: { status: RequestStatus.COMPLETED },
     });
+
+    // Jangan lewatkan settlement: buat draft bila belum ada agar Finance wajib mereview.
+    // Tautkan pesangon: salin total case APPROVED/PAID terbaru karyawan ini
+    // (modul Severance sengaja off-cycle) agar tidak diinput ulang manual.
+    const existingSettlement = await this.prisma.finalSettlement.findFirst({
+      where: { resignationId: id },
+    });
+    if (!existingSettlement) {
+      let severanceAmount = 0;
+      try {
+        const sev = await (this.prisma as any).severanceCase.findFirst({
+          where: {
+            employeeId: request.employeeId,
+            tenantId,
+            status: { in: ['APPROVED', 'PAID'] },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        severanceAmount = Math.max(0, Number(sev?.totalAmount || 0));
+      } catch {
+        // Tanpa case pesangon: draft tetap dibuat dengan nominal 0.
+      }
+      await this.prisma.finalSettlement.create({
+        data: { resignationId: id, status: 'draft', severanceAmount } as any,
+      });
+    }
 
     await this.eventBus.publishTyped(DomainEventType.RESIGNATION_EFFECTIVE, {
       employeeId: request.employeeId,

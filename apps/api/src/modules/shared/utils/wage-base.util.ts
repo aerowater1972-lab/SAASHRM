@@ -1,5 +1,18 @@
 import { PrismaService } from '@common/prisma/prisma.service';
 
+/**
+ * Kode jenis cuti sakit per tenant seed: 'SL' (default) vs 'CS' (demo
+ * Nusantara). Semua logika sakit (skema upah, Bradford, potongan) wajib
+ * memakai daftar ini, bukan hardcode satu kode.
+ */
+export const SICK_LEAVE_CODES = ['SL', 'CS'];
+
+/**
+ * Kode cuti tahunan per tenant seed: 'AL' (default) vs 'CT' (demo Nusantara,
+ * "Cuti Tahunan"). Berlaku untuk akrual tahunan & potongan cuti bersama.
+ */
+export const ANNUAL_LEAVE_CODES = ['AL', 'CT'];
+
 /** Bulan kalender penuh antara dua tanggal (start inklusif). */
 export function calendarMonthsBetween(start: Date, end: Date): number {
   let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());

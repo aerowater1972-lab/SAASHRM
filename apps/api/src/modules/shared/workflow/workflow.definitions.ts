@@ -59,12 +59,13 @@ export const WORKFLOW_DEFINITIONS: WorkflowDefinition[] = [
       },
       APPROVED: {
         transitions: [
-          { action: 'OFFBOARD', to: 'CANCELLED' },
+          { action: 'OFFBOARD', to: 'COMPLETED' },
           { action: 'CANCEL', to: 'CANCELLED' },
         ],
       },
       REJECTED: { transitions: [] },
       CANCELLED: { transitions: [] },
+      COMPLETED: { transitions: [] },
     },
   },
   {
@@ -210,6 +211,40 @@ export const WORKFLOW_DEFINITIONS: WorkflowDefinition[] = [
         ],
       },
       COMPLETED: { transitions: [] },
+      CANCELLED: { transitions: [] },
+    },
+  },
+  {
+    key: 'manpower-plan',
+    description: 'Manpower plan approval lifecycle (DRAFT → SUBMITTED → HR_REVIEW → FINANCE_REVIEW → APPROVED)',
+    initialState: 'DRAFT',
+    states: {
+      DRAFT: {
+        transitions: [
+          { action: 'SUBMIT', to: 'SUBMITTED' },
+          { action: 'CANCEL', to: 'CANCELLED' },
+        ],
+      },
+      SUBMITTED: {
+        transitions: [
+          { action: 'HR_APPROVE', to: 'HR_REVIEW' },
+          { action: 'HR_REJECT', to: 'REJECTED' },
+        ],
+      },
+      HR_REVIEW: {
+        transitions: [
+          { action: 'FINANCE_APPROVE', to: 'FINANCE_REVIEW' },
+          { action: 'FINANCE_REJECT', to: 'REJECTED' },
+        ],
+      },
+      FINANCE_REVIEW: {
+        transitions: [
+          { action: 'FINAL_APPROVE', to: 'APPROVED' },
+          { action: 'FINAL_REJECT', to: 'REJECTED' },
+        ],
+      },
+      APPROVED: { transitions: [] },
+      REJECTED: { transitions: [] },
       CANCELLED: { transitions: [] },
     },
   },

@@ -197,6 +197,14 @@ export class ExpenseService {
       throw new BadRequestException('Cannot submit a claim with no items');
     }
 
+    // Setiap item wajib melampirkan struk (kecuali batal demi hukum tidak ada).
+    const missing = items.filter((i: any) => !i.receiptUrl);
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Semua item wajib melampirkan struk (kurang ${missing.length} struk).`,
+      );
+    }
+
     const totalAmount = items.reduce((sum, item) => sum + item.amount.toNumber(), 0);
 
     const updated = await this.prisma.expenseClaim.update({

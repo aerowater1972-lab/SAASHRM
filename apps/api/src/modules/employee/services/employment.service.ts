@@ -56,6 +56,27 @@ export class EmploymentService {
       if (!grade) throw new NotFoundException('Grade not found');
     }
 
+    // PP 35/2021 Pasal 58: PKWT dilarang mensyaratkan masa percobaan.
+    if (dto.type === EmploymentType.PROBATION) {
+      const priorContract = await this.prisma.employment.findFirst({
+        where: { employeeId, type: EmploymentType.CONTRACT },
+        select: { id: true },
+      });
+      if (priorContract) {
+        throw new BadRequestException(
+          'Masa percobaan tidak boleh diterapkan pada PKWT (PP 35/2021 Pasal 58). ' +
+            'Ubah hubungan kerja menjadi PKWTT terlebih dahulu bila ingin masa percobaan.',
+        );
+      }
+    }
+
+    // PP 35/2021: PKWT wajib dibuat tertulis dengan jangka waktu (ada endDate).
+    if (dto.type === EmploymentType.CONTRACT && !dto.endDate) {
+      throw new BadRequestException(
+        'PKWT wajib memiliki tanggal selesai tertulis (PP 35/2021). Kontrak tanpa batas waktu harus dicatat sebagai PKWTT.',
+      );
+    }
+
     // Addendum v1.2 (PKWT): FR-14/FR-16 + BR-09/BR-10 — validasi akumulasi sebelum simpan
     if (dto.type === EmploymentType.CONTRACT) {
       const accumulation = await this.computePkwtAccumulation(
@@ -272,6 +293,43 @@ export class EmploymentService {
       }
     }
     return sent;
+  }
+
+  /**
+   * Auto-expire: nonaktifkan employment CONTRACT yang sudah lewat endDate.
+   * Bila karyawan tidak punya employment aktif lain, status ikut INACTIVE.
+   * Dijalankan scheduler harian bersama reminder — eksekusi, bukan sekadar notifikasi.
+   */
+  async expireFinishedContracts(now: Date = new Date()): Promise<number> {
+    const startOfDay = new Date(now);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    const expired = await this.prisma.employment.findMany({
+      where: {
+        type: EmploymentType.CONTRACT,
+        isActive: true,
+        endDate: { lt: startOfDay },
+      },
+      select: { id: true, employeeId: true },
+    });
+
+    for (const e of expired) {
+      await this.prisma.employment.update({
+        where: { id: e.id },
+        data: { isActive: false },
+      });
+      const remaining = await this.prisma.employment.findFirst({
+        where: { employeeId: e.employeeId, isActive: true },
+        select: { id: true },
+      });
+      if (!remaining) {
+        await this.prisma.employee.update({
+          where: { id: e.employeeId },
+          data: { status: EmployeeStatus.INACTIVE },
+        });
+      }
+    }
+    return expired.length;
   }
 
   private async sendPkwtReminder(

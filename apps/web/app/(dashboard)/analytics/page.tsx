@@ -1,9 +1,11 @@
 'use client';
 
-import { useDashboardSummary } from '@/lib/hooks/analytics';
+import { useDashboardSummary, useBradfordScores, useFlightRisk } from '@/lib/hooks/analytics';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { ErrorState, EmptyState, PageSkeleton } from '@/components/ui/data-states';
 
 interface ChartPoint {
@@ -171,8 +173,92 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
           </div>
+
+          <div className="grid gap-4 md:grid-cols-2 mt-4">
+            <BradfordCard />
+            <FlightRiskCard />
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+const bandVariant = (band: string) => {
+  const m: Record<string, string> = { HIGH: 'destructive', MEDIUM: 'secondary', LOW: 'success' };
+  return <Badge variant={(m[band] || 'secondary') as any}>{band}</Badge>;
+};
+
+function BradfordCard() {
+  const { data: raw, isLoading } = useBradfordScores();
+  const scores = ((raw ?? {}) as any).scores ?? [];
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Skor Bradford (S² × D) — 12 bulan</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : scores.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Tidak ada episode cuti sakit tercatat.</p>
+        ) : (
+          <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow><TableHead>Karyawan</TableHead><TableHead>Episode</TableHead><TableHead>Hari</TableHead><TableHead>Skor</TableHead><TableHead></TableHead></TableRow></TableHeader>
+            <TableBody>
+              {scores.slice(0, 10).map((s: any) => (
+                <TableRow key={s.employeeId}>
+                  <TableCell>{s.fullName ?? s.employeeCode ?? s.employeeId}</TableCell>
+                  <TableCell>{s.spells}</TableCell>
+                  <TableCell>{s.sickDays}</TableCell>
+                  <TableCell>{s.bradfordScore}</TableCell>
+                  <TableCell>{bandVariant(s.band)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FlightRiskCard() {
+  const { data: raw, isLoading } = useFlightRisk();
+  const d = (raw ?? {}) as any;
+  const people = (d.people ?? []).filter((p: any) => p.band !== 'LOW').slice(0, 10);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">
+          Flight Risk — HIGH {d.high ?? 0} · MEDIUM {d.medium ?? 0} · LOW {d.low ?? 0}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : people.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Tidak ada karyawan berisiko menengah/tinggi.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader><TableRow><TableHead>Karyawan</TableHead><TableHead>Skor</TableHead><TableHead></TableHead><TableHead>Sinyal</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {people.map((p: any) => (
+                  <TableRow key={p.employeeId}>
+                    <TableCell>{p.fullName ?? p.employeeCode ?? p.employeeId}</TableCell>
+                    <TableCell>{p.riskScore}</TableCell>
+                    <TableCell>{bandVariant(p.band)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground min-w-[200px]">{(p.signals ?? []).join('; ')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

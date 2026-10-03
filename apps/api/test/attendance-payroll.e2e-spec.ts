@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
+import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { EventBusService } from '../src/modules/shared/events/event-bus.service';
 import { PrismaService } from '../src/common/prisma/prisma.service';
@@ -26,6 +27,11 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
   const auth = () => ({ Authorization: `Bearer ${adminToken}` });
 
   beforeAll(async () => {
+    // Clean up stale jobs from previous test runs that may carry invalid userId references
+    const cleanup = new PrismaClient();
+    await cleanup.jobQueue.deleteMany({ where: { queue: 'events', status: { in: ['PENDING', 'FAILED'] } } }).catch(() => {});
+    await cleanup.$disconnect();
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ envFilePath: '.env' }), AppModule],
     }).compile();
@@ -48,7 +54,7 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
     const res = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = res.body.accessToken;
   });
 
@@ -98,6 +104,7 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
     const period = `e2e-att-${Date.now()}`;
     const referenceId = `${period}:${employeeId}`;
 
+    const adminUser = await prisma.user.findFirst({ where: { email: 'admin@flexy-hrms.com' } });
     await eventBus.publishTyped(
       DomainEventType.ATTENDANCE_PERIOD_CLOSED,
       {
@@ -109,7 +116,7 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
         leaveDays: 1,
         tenantId: 'default',
       },
-      { tenantId: 'default', userId: 'user-1' },
+      { tenantId: 'default', userId: adminUser?.id ?? 'default' },
     );
 
     const ok = await pollUntil(async () => {

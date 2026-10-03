@@ -11,6 +11,10 @@ describe('AuditEventService', () => {
       create: jest.fn(),
       createMany: jest.fn(),
     },
+    user: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -23,6 +27,10 @@ describe('AuditEventService', () => {
 
     service = module.get<AuditEventService>(AuditEventService);
     prisma = module.get(PrismaService);
+
+    // Aktor penyusun audit: user-1 terdaftar.
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+    mockPrisma.user.findMany.mockResolvedValue([{ id: 'user-1' }]);
   });
 
   afterEach(() => {

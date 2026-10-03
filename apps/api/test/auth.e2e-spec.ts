@@ -37,19 +37,19 @@ describe('Auth (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/admin/auth/login')
         .set('x-tenant-id', 'default')
-        .send({ email: 'admin@flexy.local', password: 'admin123' })
+        .send({ email: 'admin@flexy-hrms.com', password: 'admin123' })
         .expect(200);
 
       expect(res.body.accessToken).toBeDefined();
       expect(res.body.refreshToken).toBeDefined();
-      expect(res.body.user.email).toBe('admin@flexy.local');
+      expect(res.body.user.email).toBe('admin@flexy-hrms.com');
     });
 
     it('should reject invalid credentials', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/admin/auth/login')
         .set('x-tenant-id', 'default')
-        .send({ email: 'admin@flexy.local', password: 'wrongpassword' })
+        .send({ email: 'admin@flexy-hrms.com', password: 'wrongpassword' })
         .expect(401);
     });
   });
@@ -89,7 +89,7 @@ describe('Auth (e2e)', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/admin/auth/login')
         .set('x-tenant-id', 'default')
-        .send({ email: 'admin@flexy.local', password: 'admin123' })
+        .send({ email: 'admin@flexy-hrms.com', password: 'admin123' })
         .expect(200);
 
       const refreshToken = loginRes.body.refreshToken;
@@ -108,7 +108,7 @@ describe('Auth (e2e)', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/admin/auth/login')
         .set('x-tenant-id', 'default')
-        .send({ email: 'admin@flexy.local', password: 'admin123' })
+        .send({ email: 'admin@flexy-hrms.com', password: 'admin123' })
         .expect(200);
 
       const accessToken = loginRes.body.accessToken;

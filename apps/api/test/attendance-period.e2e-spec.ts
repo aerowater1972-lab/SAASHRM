@@ -16,7 +16,12 @@ describe('Attendance Period Close (e2e, attendance.period.closed)', () => {
   let periodId: string;
 
   beforeAll(async () => {
-    tenantId = (await prisma.tenantEntity.findFirst({ select: { id: true } }))!.id;
+    await prisma.tenantEntity.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default', tenantId: 'default', name: 'Default Entity', code: 'DEF' },
+    });
+    tenantId = 'default';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ envFilePath: '.env' }), AppModule],
@@ -29,14 +34,14 @@ describe('Attendance Period Close (e2e, attendance.period.closed)', () => {
     const login = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = login.body?.accessToken;
 
     const emp = await request(app.getHttpServer())
       .post('/api/v1/employees')
       .set('x-tenant-id', tenantId)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ fullName: 'Period Emp', email: empEmail });
+      .send({ employeeId: `per-${runId}`, fullName: 'Period Emp', email: empEmail });
     employeeId = emp.body.id;
 
     const period = await prisma.payrollPeriod.create({

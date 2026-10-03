@@ -69,19 +69,19 @@ describe('PayrollEventConsumer - overtime BR-10', () => {
     });
   };
 
-  it('HARI_KERJA 180min -> multiplier x5.5 (1.5x first + 2x rest)', async () => {
+  it('HARI_KERJA 180min -> 5.5 jam-upah (1.5x jam-1 + 2x sisanya)', async () => {
     await run([{ id: 'r1', payableMinutes: 180, dayType: 'HARI_KERJA', isPaid: true }]);
     const call = mockAdjustments.create.mock.calls[0][0];
     expect(call.type).toBe('EARNING');
-    expect(call.description).toContain('x5.5');
+    expect(call.description).toContain('5.5 jam-upah');
     const hourly = 4_000_000 / 173;
-    expect(call.amount).toBe(Math.round(3 * hourly * 5.5));
+    expect(call.amount).toBe(Math.round(hourly * 5.5));
   });
 
-  it('HARI_LIBUR_RESM 120min -> multiplier x2', async () => {
+  it('HARI_LIBUR_RESM 120min -> multiplier 2x', async () => {
     await run([{ id: 'r2', payableMinutes: 120, dayType: 'HARI_LIBUR_RESM', isPaid: true }]);
     const call = mockAdjustments.create.mock.calls[0][0];
-    expect(call.description).toContain('x2');
+    expect(call.description).toContain('2x');
     const hourly = 4_000_000 / 173;
     expect(call.amount).toBe(Math.round(2 * hourly * 2));
   });
@@ -99,6 +99,20 @@ describe('PayrollEventConsumer - overtime BR-10', () => {
       periodStart: '2026-07-01T00:00:00.000Z', periodEnd: '2026-07-31T00:00:00.000Z',
     });
     expect(mockAdjustments.create).not.toHaveBeenCalled();
+  });
+
+  it('tidak double-pay: record detail menang, fallback flat diabaikan', async () => {
+    mockPrisma.employment.findFirst.mockResolvedValue({ id: 'e-1', grade: { level: 4 } });
+    mockPrisma.overtimeRecord.findMany.mockResolvedValue([
+      { id: 'r5', payableMinutes: 60, dayType: 'HARI_KERJA', isPaid: true },
+    ]);
+    await (service as any).handleAttendancePeriodClosed('default', {
+      employeeId: 'emp-1', period: 'Jul-2026',
+      periodStart: '2026-07-01T00:00:00.000Z', periodEnd: '2026-07-31T00:00:00.000Z',
+      overtimeMinutes: 600,
+    });
+    expect(mockAdjustments.create).toHaveBeenCalledTimes(1);
+    expect(mockAdjustments.create.mock.calls[0][0].referenceId).toContain('r5');
   });
 });
 

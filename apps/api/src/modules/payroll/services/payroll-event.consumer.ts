@@ -202,37 +202,24 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
       orderBy: { startDate: 'desc' },
     });
 
-    const baseSalary = Number(employment?.grade?.level || 0) * 1_000_000 || 0;
+    // Upah sejam = 1/173 x upah sebulan (gaji pokok + tunjangan tetap).
+    // Samakan dengan derivasi base salary di bpjs.service: prefer grade.baseSalary,
+    // fallback ke level x Rp1jt agar tidak divergen antar modul.
+    const grade: any = (employment as any)?.grade;
+    const baseSalary = Number(grade?.baseSalary ?? (Number(grade?.level || 0) * 1_000_000)) || 0;
     const hourlyRate = baseSalary > 0 ? baseSalary / 173 : 0;
     const referenceId = `${period}:${employeeId}`;
-
-    const overtimeMinutes = Number(payload.overtimeMinutes || 0);
-    if (overtimeMinutes > 0 && hourlyRate > 0) {
-      const overtimeAmount = Math.round((overtimeMinutes / 60) * hourlyRate * 1.5);
-      if (overtimeAmount > 0) {
-        await this.adjustments.create({
-          tenantId,
-          employeeId,
-          sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
-          referenceId,
-          type: 'EARNING',
-          amount: overtimeAmount,
-          description: `Overtime (${overtimeMinutes} min) — period ${period}`,
-        });
-      }
-    }
+    if (hourlyRate <= 0) return;
 
     // CROSS-REFERENCE (Attendance & Leave v1.1 Addendum, Bagian 5 / BR-10):
-    // modul Payroll bertanggung jawab menerapkan pengali Kepmenaker No. 102/2004.
-    // Sumber otoritatif adalah OvertimeRecord (payableMinutes + dayType) yang
-    // dihasilkan modul Attendance saat reconciling clock-out dengan rencana
-    // lembur yang disetujui. payroll.reads `payableMinutes` (bukan actualMinutes)
-    // dan `dayType` untuk menentukan pengali: HARI_KERJA = 1.5x jam pertama +
-    // 2x sisanya; ISTIRAHAT_MINGGUAN / HARI_LIBUR_RESM = 2x sejak jam pertama.
-    // Catatan: konsumsi ini hanya trigger jika employee punya AttendanceRecord
-    // di periode tersebut (event ATTENDANCE_PERIOD_CLOSED di-emit per-employee).
+    // Sumber otoritatif TUNGGAL adalah OvertimeRecord (payableMinutes + dayType)
+    // Kepmenaker No. 102/2004: HARI_KERJA = 1.5x jam pertama + 2x sisanya;
+    // ISTIRAHAT_MINGGUAN / HARI_LIBUR_RESM = 2x sejak jam pertama.
+    // Jalur flat payload.overtimeMinutes HANYA fallback bila periode/record
+    // detail tidak tersedia — agar tidak double-pay bila dua-duanya ada.
     const periodStart = payload.periodStart ? new Date(payload.periodStart) : null;
     const periodEnd = payload.periodEnd ? new Date(payload.periodEnd) : null;
+    let usedDetailed = false;
     if (periodStart && periodEnd) {
       const records = await this.prisma.overtimeRecord.findMany({
         where: {
@@ -244,15 +231,19 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
       });
 
       for (const rec of records) {
-        if (rec.payableMinutes <= 0 || hourlyRate <= 0) continue;
+        if (rec.payableMinutes <= 0) continue;
+        usedDetailed = true;
         const hours = rec.payableMinutes / 60;
         let multiplier: number;
+        let rateDesc: string;
         if (rec.dayType === 'HARI_KERJA') {
-          // first hour 1.5x, subsequent hours 2x
-          multiplier = hours <= 1 ? 1.5 : 1.5 + (hours - 1) * 2;
+          // Kepmenaker 102/2004: jam-1 = 1.5x, jam-2 dst = 2x.
+          // multiplier efektif total = (1.5 + 2*(hours-1)) untuk hours>1.
+          multiplier = hours <= 1 ? 1.5 : (1.5 + (hours - 1) * 2) / hours;
+          rateDesc = hours <= 1 ? '1.5x' : `1.5x+2x (${(1.5 + (hours - 1) * 2).toFixed(1)} jam-upah)`;
         } else {
-          // istirahat mingguan / hari libur resmi: 2x from the first hour
           multiplier = 2;
+          rateDesc = '2x';
         }
         const amount = Math.round(hours * hourlyRate * multiplier);
         if (amount > 0) {
@@ -263,26 +254,32 @@ export class PayrollEventConsumer implements JobHandler, OnModuleInit {
             referenceId: `${referenceId}:${rec.id}`,
             type: 'EARNING',
             amount,
-            description: `Overtime ${rec.dayType} (${rec.payableMinutes} min, x${multiplier}) — period ${period}`,
+            description: `Overtime ${rec.dayType} (${rec.payableMinutes} min, ${rateDesc}) — period ${period}`,
           });
         }
       }
     }
 
-    const lateCount = Number(payload.lateCount || 0);
-    if (lateCount > 0 && hourlyRate > 0) {
-      const lateAmount = Math.round(lateCount * hourlyRate);
-      if (lateAmount > 0) {
-        await this.adjustments.create({
-          tenantId,
-          employeeId,
-          sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
-          referenceId,
-          type: 'DEDUCTION',
-          amount: lateAmount,
-          description: `Late arrival penalty (${lateCount}x) — period ${period}`,
-        });
+    if (!usedDetailed) {
+      const overtimeMinutes = Number(payload.overtimeMinutes || 0);
+      if (overtimeMinutes > 0) {
+        const overtimeAmount = Math.round((overtimeMinutes / 60) * hourlyRate * 1.5);
+        if (overtimeAmount > 0) {
+          await this.adjustments.create({
+            tenantId,
+            employeeId,
+            sourceEvent: DomainEventType.ATTENDANCE_PERIOD_CLOSED,
+            referenceId,
+            type: 'EARNING',
+            amount: overtimeAmount,
+            description: `Overtime fallback 1.5x (${overtimeMinutes} min) — period ${period}`,
+          });
+        }
       }
     }
+
+    // Denda keterlambatan otomatis DINONAKTIFKAN: tidak ada dasar UU untuk
+    // potong upah per keterlambatan. Gunakan proses disipliner (SP) +
+    // adjustment manual bila diperlukan.
   }
 }

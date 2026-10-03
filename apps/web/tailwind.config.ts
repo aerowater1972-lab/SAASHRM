@@ -56,6 +56,10 @@ const config: Config = {
           muted: 'hsl(var(--sidebar-muted))',
           accent: 'hsl(var(--sidebar-accent))',
         },
+        brand: {
+          primary: 'var(--brand-primary)',
+          secondary: 'var(--brand-secondary)',
+        },
         success: '#22c55e',
         warning: '#eab308',
         error: '#ef4444',

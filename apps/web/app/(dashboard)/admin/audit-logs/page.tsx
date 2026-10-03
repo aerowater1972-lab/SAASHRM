@@ -10,7 +10,9 @@ const modules = ['employee', 'attendance', 'payroll', 'expense', 'leave', 'recru
 
 export default function AuditLogsPage() {
   const [module, setModule] = useState('');
-  const { data: logs = [], isLoading, error, refetch } = useAuditLogs();
+  const { data: logsData, isLoading, error, refetch } = useAuditLogs();
+
+  const logs = logsData?.data ?? [];
 
   const filtered = module ? logs.filter((l: any) => l.module === module) : logs;
 

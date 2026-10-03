@@ -14,6 +14,8 @@ import {
   getWorkforceCost,
   exportReport,
   getDashboardSummary,
+  getBradfordScores,
+  getFlightRisk,
 } from '@/lib/api/analytics';
 
 export function useHeadcount(filters?: Record<string, unknown>) {
@@ -76,4 +78,12 @@ export function useExportReport() {
 
 export function useDashboardSummary(filters?: Record<string, unknown>) {
   return useQuery({ queryKey: ['analytics', 'dashboard', 'summary', filters], queryFn: () => getDashboardSummary(filters) });
+}
+
+export function useBradfordScores(filters?: Record<string, unknown>) {
+  return useQuery({ queryKey: ['analytics', 'bradford', filters], queryFn: () => getBradfordScores(filters) });
+}
+
+export function useFlightRisk(filters?: Record<string, unknown>) {
+  return useQuery({ queryKey: ['analytics', 'flight-risk', filters], queryFn: () => getFlightRisk(filters) });
 }

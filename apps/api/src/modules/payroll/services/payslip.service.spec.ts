@@ -11,7 +11,11 @@ import { PrismaService } from '@common/prisma/prisma.service';
 describe('PayslipService - viewer scoping', () => {
   let service: PayslipService;
 
-  const mockPrisma = { payslip: { findMany: jest.fn(), findFirst: jest.fn() }, employment: { findMany: jest.fn() } };
+  const mockPrisma = {
+    payslip: { findMany: jest.fn(), findFirst: jest.fn() },
+    employment: { findMany: jest.fn() },
+    payrollItem: { findMany: jest.fn() },
+  };
 
   const empViewer = { employeeId: 'emp-1', permissions: ['payroll:payslip:read'] };
   const hrViewer = { employeeId: 'hr-1', permissions: ['payroll:payslip:read', 'payroll:run:read', 'payroll:run:approve'] };
@@ -101,5 +105,54 @@ describe('PayslipService - viewer scoping', () => {
     mockPrisma.payslip.findFirst.mockResolvedValue(null);
 
     await expect(service.findOne('t1', 'nope', hrViewer)).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('PayslipService - generatePdf', () => {
+  let service: PayslipService;
+
+  const mockPrisma = {
+    payslip: { findFirst: jest.fn(), findMany: jest.fn() },
+    employment: { findMany: jest.fn() },
+    payrollItem: { findMany: jest.fn() },
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PayslipService, { provide: PrismaService, useValue: mockPrisma }],
+    }).compile();
+
+    service = module.get<PayslipService>(PayslipService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('menghasilkan PDF valid dengan rincian komponen + YTD', async () => {
+    mockPrisma.payslip.findFirst.mockResolvedValue({
+      id: 'p-1', tenantId: 't1', employeeId: 'emp-1',
+      grossPay: 8000000, totalDeductions: 1000000, netPay: 7000000,
+      employee: { fullName: 'Budi', employeeId: 'E001', employments: [] },
+      run: { name: 'PR-1', period: { name: 'Jan 2026' } },
+      items: [],
+    });
+    mockPrisma.payrollItem.findMany.mockResolvedValue([
+      { id: 'i-1', description: 'Gaji Pokok', amount: 8000000, component: { type: 'EARNING', name: 'Gaji' } },
+      { id: 'i-2', description: 'BPJS Kes', amount: 1000000, component: { type: 'BPJS_KES', name: 'BPJS' } },
+    ]);
+    mockPrisma.payslip.findMany.mockResolvedValue([
+      { grossPay: 8000000, totalDeductions: 1000000, netPay: 7000000 },
+    ]);
+
+    const res = await service.generatePdf('t1', 'p-1', {
+      employeeId: 'hr-1',
+      permissions: ['payroll:payslip:read', 'payroll:run:read', 'payroll:run:approve'],
+    });
+
+    expect(res.contentType).toBe('application/pdf');
+    expect(res.filename).toMatch(/\.pdf$/);
+    const raw = Buffer.from(res.data, 'base64').toString('utf-8');
+    expect(raw.startsWith('%PDF-1.4')).toBe(true);
+    expect(raw).toContain('Gaji Pokok');
+    expect(raw).toContain('YTD');
   });
 });

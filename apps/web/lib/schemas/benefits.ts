@@ -24,6 +24,8 @@ export const createTrainingSchema = z.object({
   title: z.string().min(1, 'Judul training wajib diisi'),
   description: z.string().optional(),
   type: z.enum(['ONLINE', 'OFFLINE', 'SELF_PACED']),
+  category: z.enum(['GENERAL', 'K3', 'MANAGEMENT', 'COMPLIANCE']).optional(),
+  recommendedViolationCategoryId: z.string().optional(),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
   maxParticipants: z.number().int().positive().optional(),

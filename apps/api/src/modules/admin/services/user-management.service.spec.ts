@@ -87,7 +87,15 @@ describe('UserManagementService', () => {
         'actor',
       );
 
-      expect(result).toEqual(mockUser);
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: 'user-1',
+          email: 'admin@example.com',
+          tenantId: 'default',
+        }),
+      );
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(result).not.toHaveProperty('mfaSecret');
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ tenantId: 'default', email: 'admin@example.com' }),
@@ -159,6 +167,16 @@ describe('UserManagementService', () => {
       prisma.user.findFirst.mockResolvedValue(mockUser);
       prisma.role.findFirst.mockResolvedValue(null);
       await expect(service.revokeRole('default', 'user-1', 'role-x', 'actor')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('credential stripping (SEC-001)', () => {
+    it('never returns passwordHash or mfaSecret from getById', async () => {
+      prisma.user.findFirst.mockResolvedValue({ ...mockUser, mfaSecret: 'mfa-secret' });
+      const result: any = await service.getById('default', 'user-1');
+      expect(result.passwordHash).toBeUndefined();
+      expect(result.mfaSecret).toBeUndefined();
+      expect(result.email).toBe('admin@example.com');
     });
   });
 });

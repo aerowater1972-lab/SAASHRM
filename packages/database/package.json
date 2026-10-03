@@ -8,6 +8,7 @@
     "db:push": "prisma db push --schema=./schema.prisma",
     "db:seed": "prisma db seed --schema=./schema.prisma",
     "db:seed:demo": "ts-node ./seed-demo-nusantara.ts",
+    "db:seed:features": "ts-node ./seed-new-features.ts",
     "db:studio": "prisma studio --schema=./schema.prisma"
   },
   "devDependencies": {

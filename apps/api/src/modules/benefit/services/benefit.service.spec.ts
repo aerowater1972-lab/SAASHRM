@@ -42,6 +42,9 @@ describe('BenefitService', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    benefitEligibilityRule: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
 
   const mockBenefit = {
@@ -110,6 +113,38 @@ describe('BenefitService', () => {
         expect.objectContaining({ benefitId: 'benefit-1', employeeId: 'emp-1' }),
         expect.any(Object),
       );
+    });
+
+    it('should reject enrollment when grade/department rules mismatch', async () => {
+      mockPrisma.benefit.findFirst.mockResolvedValue(mockBenefit);
+      mockEmployeeService.findById.mockResolvedValue({
+        id: 'emp-1',
+        employments: [{ isActive: true, gradeId: 'g-staff', departmentId: 'd-ops' }],
+      });
+      mockPrisma.employeeBenefit.findFirst.mockResolvedValue(null);
+      mockPrisma.benefitEligibilityRule.findMany.mockResolvedValue([
+        { gradeId: 'g-manager', departmentId: null },
+      ]);
+      await expect(
+        service.enroll('default', { benefitId: 'benefit-1', employeeId: 'emp-1' } as any),
+      ).rejects.toThrow(/syarat eligibility/);
+      expect(mockPrisma.employeeBenefit.create).not.toHaveBeenCalled();
+    });
+
+    it('should enroll when at least one rule matches', async () => {
+      mockPrisma.benefit.findFirst.mockResolvedValue(mockBenefit);
+      mockEmployeeService.findById.mockResolvedValue({
+        id: 'emp-1',
+        employments: [{ isActive: true, gradeId: 'g-staff', departmentId: 'd-ops' }],
+      });
+      mockPrisma.employeeBenefit.findFirst.mockResolvedValue(null);
+      mockPrisma.benefitEligibilityRule.findMany.mockResolvedValue([
+        { gradeId: 'g-manager', departmentId: null },
+        { gradeId: null, departmentId: 'd-ops' },
+      ]);
+      mockPrisma.employeeBenefit.create.mockResolvedValue({ id: 'enr-2', status: BenefitStatus.ACTIVE });
+      const result = await service.enroll('default', { benefitId: 'benefit-1', employeeId: 'emp-1' } as any);
+      expect(result.status).toBe(BenefitStatus.ACTIVE);
     });
   });
 

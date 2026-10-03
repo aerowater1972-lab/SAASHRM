@@ -10,16 +10,29 @@ export class DashboardService {
   ) {}
 
   async getDashboard(tenantId: string, employeeId: string) {
+    if (!employeeId) {
+      return {
+        attendance: null,
+        leaveBalances: [],
+        upcomingSchedule: [],
+        recentPayslips: [],
+        pendingApprovals: { total: 0, leaveRequests: 0, corrections: 0 },
+        notifications: [],
+        k3Profile: { completedK3Trainings: 0, activePpeCount: 0, activeSp: null, recentTrainings: [] },
+      };
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [attendance, balances, schedule, payslips, pendingCount, notifications] = await Promise.all([
+    const [attendance, balances, schedule, payslips, pendingCount, notifications, k3] = await Promise.all([
       this.getTodayAttendance(tenantId, employeeId, today),
       this.getLeaveBalances(tenantId, employeeId),
       this.getUpcomingSchedule(tenantId, employeeId, today),
       this.getRecentPayslips(tenantId, employeeId),
       this.getPendingApprovalsCount(tenantId, employeeId),
       this.getRecentNotifications(tenantId, employeeId),
+      this.getEmployeeK3Profile(tenantId, employeeId),
     ]);
 
     return {
@@ -29,6 +42,7 @@ export class DashboardService {
       recentPayslips: payslips,
       pendingApprovals: pendingCount,
       notifications,
+      k3Profile: k3,
     };
   }
 
@@ -147,5 +161,39 @@ export class DashboardService {
     ]);
 
     return { total: leaveRequests + corrections, leaveRequests, corrections };
+  }
+
+  private async getEmployeeK3Profile(tenantId: string, employeeId: string) {
+    const completedTrainings = await this.prisma.trainingParticipant.findMany({
+      where: {
+        employeeId,
+        status: 'COMPLETED',
+        training: { tenantId, category: 'K3' },
+      },
+      include: { training: { select: { id: true, title: true, startDate: true } } },
+      orderBy: { completedAt: 'desc' },
+    });
+
+    const activePpe = await this.prisma.ppeAssignment.findMany({
+      where: { tenantId, employeeId, status: 'ACTIVE', deletedAt: null },
+    });
+
+    const activeSp = await this.prisma.disciplinaryCase.findFirst({
+      where: {
+        tenantId,
+        employeeId,
+        status: { in: ['APPROVED', 'ACKNOWLEDGED'] as any },
+        validUntil: { gte: new Date() },
+        deletedAt: null,
+      },
+      orderBy: { spLevel: 'desc' },
+    });
+
+    return {
+      completedK3Trainings: completedTrainings.length,
+      activePpeCount: activePpe.length,
+      activeSp: activeSp ? { spLevel: activeSp.spLevel, description: activeSp.description } : null,
+      recentTrainings: completedTrainings.slice(0, 3).map((tp) => tp.training),
+    };
   }
 }

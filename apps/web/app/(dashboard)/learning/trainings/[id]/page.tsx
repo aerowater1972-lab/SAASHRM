@@ -8,10 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { PageSkeleton, ErrorState } from '@/components/ui/data-states';
-import { ArrowLeft, CalendarDays, Users, FileText } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Users, FileText, Tag, ShieldAlert } from 'lucide-react';
 
 interface Participant { id: string; employeeId: string; fullName?: string; status: string; score?: number }
-interface TrainingDetail { id: string; title: string; description?: string; type: string; startDate: string; endDate: string; status: string; maxParticipants?: number; participants: Participant[] }
 
 const statusVariant: Record<string, 'success' | 'warning' | 'secondary' | 'destructive'> = {
   ACTIVE: 'success', COMPLETED: 'secondary', CANCELLED: 'destructive', DRAFT: 'secondary',
@@ -55,9 +54,13 @@ export default function TrainingDetailPage() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-sm">Informasi Training</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex items-start gap-3"><Tag className="h-4 w-4 text-muted-foreground mt-0.5" /><div><p className="text-sm">{data.category ? <Badge variant={data.category === 'K3' ? 'success' : 'secondary'}>{data.category}</Badge> : <span className="text-muted-foreground">—</span>}</p></div></div>
             <div className="flex items-start gap-3"><FileText className="h-4 w-4 text-muted-foreground mt-0.5" /><div><p className="text-sm font-medium">{data.type}</p></div></div>
             <div className="flex items-start gap-3"><CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5" /><div><p className="text-sm">{new Date(data.startDate).toLocaleDateString('id-ID')} – {new Date(data.endDate).toLocaleDateString('id-ID')}</p></div></div>
             {data.capacity && <div className="flex items-start gap-3"><Users className="h-4 w-4 text-muted-foreground mt-0.5" /><div><p className="text-sm">Max: {data.capacity} peserta</p></div></div>}
+            {data.recommendedViolationCategory && (
+              <div className="flex items-start gap-3"><ShieldAlert className="h-4 w-4 text-amber-500 mt-0.5" /><div><p className="text-sm">Rekomendasi untuk: <span className="font-medium">{data.recommendedViolationCategory.name}</span></p></div></div>
+            )}
             {data.description && <p className="text-sm text-muted-foreground pt-2">{data.description}</p>}
           </CardContent>
         </Card>

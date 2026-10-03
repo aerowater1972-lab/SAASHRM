@@ -15,8 +15,12 @@ describe('Employee Management — Employee ID (e2e)', () => {
 
   beforeAll(async () => {
     const prisma = new PrismaClient();
-    const tenant = await prisma.tenantEntity.findFirst({ select: { id: true } });
-    tenantId = tenant!.id;
+    await prisma.tenantEntity.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default', tenantId: 'default', name: 'Default Entity', code: 'DEF' },
+    });
+    tenantId = 'default';
     await prisma.$disconnect();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -31,7 +35,7 @@ describe('Employee Management — Employee ID (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy.local', password: 'admin123' });
+      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
     adminToken = res.body?.accessToken;
   });
 

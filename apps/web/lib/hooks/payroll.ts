@@ -38,6 +38,7 @@ import {
   updateBpjsConfig,
   calculateBpjs,
   generateBpjsReport,
+  fetchMonthlyIuran,
   type PeriodListParams,
   type RunListParams,
   type PayslipListParams,
@@ -139,7 +140,10 @@ export function useGenerateRunPayslips() {
 export function useGenerateRunBankTransfer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => generateRunBankTransfer(id),
+    mutationFn: (input: string | { id: string; bank?: string }) =>
+      typeof input === 'string'
+        ? generateRunBankTransfer(input)
+        : generateRunBankTransfer(input.id, input.bank),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'runs'] }),
   });
 }
@@ -273,6 +277,14 @@ export function useUpdateBpjsConfig() {
 export function useCalculateBpjs() {
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => calculateBpjs(data),
+  });
+}
+
+export function useMonthlyIuran(params: { employeeId: string; month?: number; year?: number }) {
+  return useQuery({
+    queryKey: ['payroll', 'bpjs-monthly-iuran', params],
+    queryFn: () => fetchMonthlyIuran(params),
+    enabled: !!params.employeeId,
   });
 }
 

@@ -11,13 +11,14 @@ import {
   useUpdateResignationTask,
 } from '@/lib/hooks/benefits';
 import { fetchFinalSettlement } from '@/lib/api/benefits';
+import { fetchDisciplinaryHistory, fetchEmployeeK3Profile } from '@/lib/api/employee-relations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PageSkeleton, ErrorState } from '@/components/ui/data-states';
-import { ArrowLeft, User, CheckCircle, XCircle, ClipboardList } from 'lucide-react';
+import { ArrowLeft, User, CheckCircle, XCircle, ClipboardList, FileWarning, Shield, GraduationCap } from 'lucide-react';
 
 const statusVariant: Record<string, 'success' | 'warning' | 'destructive' | 'secondary'> = {
   APPROVED: 'success',
@@ -45,6 +46,10 @@ export default function ResignationDetailPage() {
   const [settlementLoading, setSettlementLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [spHistory, setSpHistory] = useState<any[]>([]);
+  const [k3Profile, setK3Profile] = useState<any>(null);
+  const [loadingER, setLoadingER] = useState(false);
+  const [calculatedSeverance, setCalculatedSeverance] = useState<number | null>(null);
 
   const loadSettlement = () => {
     fetchFinalSettlement(params.id as string)
@@ -54,10 +59,20 @@ export default function ResignationDetailPage() {
 
   useEffect(() => { loadSettlement(); }, [params.id]);
 
-  const handleSaveSettlement = async () => {
+  useEffect(() => {
+    if (req?.employee?.id) {
+      setLoadingER(true);
+      Promise.all([
+        fetchDisciplinaryHistory(req.employee.id).catch(() => []),
+        fetchEmployeeK3Profile(req.employee.id).catch(() => null),
+      ]).then(([sp, k3]) => { setSpHistory(sp); setK3Profile(k3); }).finally(() => setLoadingER(false));
+    }
+  }, [req?.employee?.id]);
+
+const handleSaveSettlement = async () => {
     setSettlementLoading(true);
     try { const s = await createFinalSettlement.mutateAsync({ id: params.id as string, data: settlementForm }); setSettlement(s); setShowSettlementForm(false); }
-    catch (e: any) { setActionError(e.message); } finally { setSettlementLoading(false); }
+    catch (e) { setActionError((e as any)?.message); } finally { setSettlementLoading(false); }
   };
 
   async function handleApprove() {
@@ -211,6 +226,61 @@ export default function ResignationDetailPage() {
         </CardContent>
       </Card>
 
+      {/* SP History — Employee Relations integration */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileWarning className="h-4 w-4" /> Riwayat Surat Peringatan
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingER ? (
+            <div className="h-8 w-full bg-muted animate-pulse rounded" />
+          ) : spHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Tidak ada riwayat SP.</p>
+          ) : (
+            <div className="space-y-2">
+              {spHistory.map((c: any) => (
+                <div key={c.id} className="flex items-center justify-between text-sm border-b pb-1 last:border-0">
+                  <span>
+                    <Badge variant={c.spLevel === 'SP3' ? 'destructive' : c.spLevel === 'SP2' ? 'secondary' : 'success'} className="mr-2">{c.spLevel}</Badge>
+                    {c.description}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{new Date(c.issuedDate).toLocaleDateString('id-ID')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* K3 Profile */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <GraduationCap className="h-4 w-4" /> Profil K3
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingER ? (
+            <div className="h-8 w-full bg-muted animate-pulse rounded" />
+          ) : !k3Profile ? (
+            <p className="text-sm text-muted-foreground">Data K3 tidak tersedia.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Pelatihan K3</p>
+                <p className="font-medium">{k3Profile.completedK3Trainings ?? 0} sesi</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">APD Aktif</p>
+                <p className="font-medium">{k3Profile.activePpeCount ?? 0} item</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {r.status === 'APPROVED' && (
         <Card>
           <CardHeader className="pb-3">
@@ -254,7 +324,21 @@ export default function ResignationDetailPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Pesangon</Label>
-                  <Input type="number" value={settlementForm.severanceAmount} onChange={(e) => setSettlementForm({ ...settlementForm, severanceAmount: +e.target.value })} />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={settlementForm.severanceAmount}
+                      onChange={(e) => setSettlementForm({ ...settlementForm, severanceAmount: +e.target.value })}
+                      disabled={calculatedSeverance !== null}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={actionLoading}
+                    >
+                      {actionLoading ? 'Memproses…' : 'Hitung'}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Potongan Pinjaman</Label>

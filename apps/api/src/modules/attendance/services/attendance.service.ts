@@ -114,8 +114,17 @@ export class AttendanceService {
 
     const shift = await this.findAssignedShift(tenantId, employeeId, today);
 
+    // Get employee's department for department-level cut-off
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId, tenantId },
+      select: { employments: { where: { isActive: true }, take: 1, select: { department: true } } },
+    });
+    const department = employee?.employments?.[0]?.department;
+
+    // Use department-level cut-off if available, otherwise fall back to shift grace period
+    const cutOffGraceMinutes = department?.cutOffGraceMinutes ?? shift?.gracePeriodMinutes ?? 15;
     const clockInTime = new Date();
-    const lateMinutes = shift ? this.calculateLateMinutes(clockInTime, shift.startTime, shift.gracePeriodMinutes!) : 0;
+    const lateMinutes = shift ? this.calculateLateMinutes(clockInTime, shift.startTime, cutOffGraceMinutes) : 0;
     const status = lateMinutes > 0 ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
 
     const record = await this.prisma.attendanceRecord.upsert({
@@ -203,6 +212,16 @@ export class AttendanceService {
       ? await this.prisma.shift.findUnique({ where: { id: record.shiftId } })
       : null;
 
+    // Get department for early leave threshold
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId, tenantId },
+      select: { employments: { where: { isActive: true }, take: 1, select: { department: true } } },
+    });
+    const department = employee?.employments?.[0]?.department;
+
+    // Use department-level cut-off if available, otherwise fall back to shift earlyLeaveThresholdMinutes
+    const earlyLeaveThresholdMinutes = department?.cutOffGraceMinutes ?? shift?.earlyLeaveThresholdMinutes ?? 15;
+
     const earlyLeaveMinutes = shift
       ? this.calculateEarlyLeaveMinutes(clockOutTime, shift.endTime)
       : 0;
@@ -212,7 +231,7 @@ export class AttendanceService {
       : 0;
 
     let status = record.status;
-    if (earlyLeaveMinutes > (shift?.earlyLeaveThresholdMinutes || 15)) {
+    if (earlyLeaveMinutes > earlyLeaveThresholdMinutes) {
       status = AttendanceStatus.EARLY_LEAVE;
     }
 

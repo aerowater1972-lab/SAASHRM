@@ -3,6 +3,7 @@ import { AuthProvider } from '@/lib/auth';
 import { ThemeProvider } from '@/lib/theme';
 import { ToastProvider } from '@/lib/toast';
 import QueryProvider from '@/lib/query-provider';
+import { BrandingInjector } from '@/lib/branding';
 
 export const metadata = {
   title: 'Flexy HRMS',
@@ -23,7 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AuthProvider>
             <QueryProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <BrandingInjector>
+                <ToastProvider>{children}</ToastProvider>
+              </BrandingInjector>
             </QueryProvider>
           </AuthProvider>
         </ThemeProvider>

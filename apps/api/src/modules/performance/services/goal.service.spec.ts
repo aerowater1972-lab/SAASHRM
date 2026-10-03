@@ -13,6 +13,7 @@ describe('GoalService (BR-02)', () => {
     goal: {
       create: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
     },
     performanceReview: {
@@ -103,6 +104,37 @@ describe('GoalService (BR-02)', () => {
       mockPrisma.goal.findFirst.mockResolvedValue({ id: 'g2', approvalRequired: false });
       const result = await service.approve('default', 'g2', 'hrbp-1');
       expect(mockPrisma.goal.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PIP', () => {
+    it('startPip membuat goal [PIP] IN_PROGRESS 90 hari + pipStatus agregat', async () => {
+      mockEmployeeService.findById.mockResolvedValue({ id: 'emp-1' });
+      mockPrisma.goal.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: `g-${data.title}`, ...data }),
+      );
+      const res: any = await service.startPip('t1', 'emp-1', {
+        goals: [{ title: 'Kehadiran >= 95%', targetValue: 95 }],
+      });
+      expect(res.goals).toHaveLength(1);
+      expect(res.goals[0].title).toMatch(/^\[PIP\]/);
+      expect(res.goals[0].status).toBe('IN_PROGRESS');
+
+      mockPrisma.goal.findMany.mockResolvedValue([
+        { id: 'g-1', title: '[PIP] A', status: 'ACHIEVED', endDate: new Date('2026-12-31') },
+        { id: 'g-2', title: '[PIP] B', status: 'IN_PROGRESS', endDate: new Date('2026-12-31') },
+      ]);
+      const st: any = await service.pipStatus('t1', 'emp-1');
+      expect(st.total).toBe(2);
+      expect(st.achieved).toBe(1);
+      expect(st.passed).toBe(false);
+      expect(st.active).toBe(true);
+    });
+
+    it('pipStatus inactive bila belum pernah PIP', async () => {
+      mockPrisma.goal.findMany.mockResolvedValue([]);
+      const st: any = await service.pipStatus('t1', 'emp-1');
+      expect(st.active).toBe(false);
     });
   });
 });

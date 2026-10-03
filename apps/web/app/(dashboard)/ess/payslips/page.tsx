@@ -132,6 +132,7 @@ export default function EssPayslipsPage() {
       <PayslipDetailDialog
         id={selectedId}
         onClose={() => setSelectedId(null)}
+        pdfId={selectedId as string | undefined}
       />
 
       {/* Bottom Navigation */}
@@ -157,7 +158,7 @@ export default function EssPayslipsPage() {
   );
 }
 
-function PayslipDetailDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
+function PayslipDetailDialog({ id, onClose, pdfId }: { id: string | null; onClose: () => void; pdfId: string | undefined }) {
   const { data, isLoading, error, refetch } = useEssPayslip(id ?? '');
   const ackMut = useAcknowledgeEssPayslip();
 
@@ -214,6 +215,16 @@ function PayslipDetailDialog({ id, onClose }: { id: string | null; onClose: () =
                 }}
               >
                 {ackMut.isPending ? 'Memproses...' : 'Tandai Dibaca'}
+              </Button>
+            )}
+
+            {pdfId && (
+              <Button
+                variant="outline"
+                className="w-full mt-2"
+                onClick={() => window.open(`/api/v1/payroll/payslips/${pdfId}/pdf`, '_blank')}
+              >
+                Download PDF
               </Button>
             )}
 

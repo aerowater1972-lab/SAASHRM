@@ -7,6 +7,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createTrainingSchema, type CreateTrainingInput } from '@/lib/schemas/benefits';
 import { useTrainings, useCreateTraining } from '@/lib/hooks/benefits';
+import { useViolationCategories } from '@/lib/hooks/employee-relations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,10 +32,11 @@ export default function TrainingsPage() {
 
   const { rows: trainings, total, page, setPage, search, setSearch, isLoading, error, refetch } = useTrainings();
   const createMutation = useCreateTraining();
+  const { data: violationCats = [] } = useViolationCategories();
 
   const form = useForm<CreateTrainingInput>({
     resolver: zodResolver(createTrainingSchema),
-    defaultValues: { title: '', description: '', type: 'ONLINE', startDate: '', endDate: '' },
+    defaultValues: { title: '', description: '', category: 'GENERAL', type: 'ONLINE', startDate: '', endDate: '' },
   });
 
   async function onSubmit(data: CreateTrainingInput) {
@@ -77,6 +79,35 @@ export default function TrainingsPage() {
                 <Input id="t-desc" {...form.register('description')} placeholder="Deskripsi pelatihan" />
                 {form.formState.errors.description && <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="t-cat">Kategori</Label>
+                <Controller control={form.control} name="category" render={({ field }) => (
+                  <Select value={field.value ?? 'GENERAL'} onValueChange={field.onChange}>
+                    <SelectTrigger id="t-cat"><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GENERAL">General</SelectItem>
+                      <SelectItem value="K3">K3</SelectItem>
+                      <SelectItem value="MANAGEMENT">Management</SelectItem>
+                      <SelectItem value="COMPLIANCE">Compliance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )} />
+              </div>
+              {form.watch('category') === 'K3' && (
+                <div className="space-y-2">
+                  <Label htmlFor="t-vcat">Rekomendasi Kategori Pelanggaran</Label>
+                  <Controller control={form.control} name="recommendedViolationCategoryId" render={({ field }) => (
+                    <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                      <SelectTrigger id="t-vcat"><SelectValue placeholder="Opsional — hubungkan ke kategori pelanggaran" /></SelectTrigger>
+                      <SelectContent>
+                        {violationCats.map((vc: any) => (
+                          <SelectItem key={vc.id} value={vc.id}>{vc.name} ({vc.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )} />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="t-type">Tipe</Label>
                 <Controller
@@ -140,6 +171,7 @@ export default function TrainingsPage() {
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Judul</th>
+                    <th className="px-4 py-3 font-medium">Kategori</th>
                     <th className="px-4 py-3 font-medium">Tipe</th>
                     <th className="px-4 py-3 font-medium">Periode</th>
                     <th className="px-4 py-3 font-medium">Status</th>
@@ -150,6 +182,9 @@ export default function TrainingsPage() {
                     <tr key={t.id} className="hover:bg-muted/50">
                       <td className="px-4 py-3">
                         <Link href={`/learning/trainings/${t.id}`} className="font-medium hover:underline">{t.title}</Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        {t.category === 'K3' ? <Badge variant="success" className="text-[10px]">K3</Badge> : t.category ? <Badge variant="secondary" className="text-[10px]">{t.category}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="secondary" className="text-[10px]">{t.type}</Badge>

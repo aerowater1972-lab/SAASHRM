@@ -77,15 +77,33 @@ describe('Expense module — lifecycle (e2e)', () => {
       },
     });
 
-    // Assign superadmin role for expense-claims:approve and expense-claims:pay
-    await prisma.userRole.upsert({
-      where: { userId_roleId: { userId: `user-${unique}`, roleId: 'role-superadmin' } },
+    // Assign a role with expense-claims permissions (scoped to the test tenant)
+    const expPerms = await prisma.permission.findMany({ where: { module: 'expense-claims' } });
+    await prisma.role.upsert({
+      where: { id: `role-${unique}` },
       update: {},
-      create: { userId: `user-${unique}`, roleId: 'role-superadmin' },
+      create: {
+        id: `role-${unique}`,
+        tenantId: TENANT,
+        name: 'Expense E2E Admin',
+        isSystem: false,
+      },
+    });
+    await prisma.rolePermission.createMany({
+      data: expPerms.map((perm) => ({ roleId: `role-${unique}`, permissionId: perm.id, scope: 'ALL' })),
+      skipDuplicates: true,
+    });
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: `user-${unique}`, roleId: `role-${unique}` } },
+      update: {},
+      create: { userId: `user-${unique}`, roleId: `role-${unique}` },
     });
   });
 
   afterAll(async () => {
+    const roleIds = await prisma.role.findMany({ where: { tenantId: TENANT }, select: { id: true } });
+    await prisma.rolePermission.deleteMany({ where: { roleId: { in: roleIds.map((r) => r.id) } } }).catch(() => {});
+    await prisma.role.deleteMany({ where: { tenantId: TENANT } }).catch(() => {});
     await prisma.user.deleteMany({ where: { tenantId: TENANT } }).catch(() => {});
     await prisma.expenseClaim.deleteMany({ where: { tenantId: TENANT } }).catch(() => {});
     await prisma.employee.deleteMany({ where: { tenantId: TENANT } }).catch(() => {});
@@ -121,7 +139,7 @@ describe('Expense module — lifecycle (e2e)', () => {
       .post(`/api/v1/expense/claims/${claimId}/items`)
       .set('x-tenant-id', TENANT)
       .set('Authorization', `Bearer ${token}`)
-      .send({ description: 'Notebooks', amount: 150000, category: 'OFFICE_SUPPLIES' })
+      .send({ description: 'Notebooks', amount: 150000, category: 'OFFICE_SUPPLIES', receiptUrl: 'http://files.local/r.jpg' })
       .expect(201);
   });
 

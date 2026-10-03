@@ -87,14 +87,14 @@ describe('BpjsService', () => {
     expect(kesOf(result).employeeAmount).toBe(Math.round(8000000 * 0.01));
   });
 
-  it('menerapkan batas JP 10jt ketika gaji melebihi batas', async () => {
+  it('menerapkan batas JP (default 10.042.300) ketika gaji melebihi batas', async () => {
     mockPrisma.bpjsConfig.findMany.mockResolvedValue([kesConfig]);
 
     const result = await service.calculate('t1', { employeeId: 'emp-1', baseSalary: 20000000 } as any);
 
-    expect(jpOf(result).wageBase).toBe(10000000);
-    expect(jpOf(result).employerAmount).toBe(Math.round(10000000 * 0.02));
-    expect(jpOf(result).employeeAmount).toBe(Math.round(10000000 * 0.01));
+    expect(jpOf(result).wageBase).toBe(10042300);
+    expect(jpOf(result).employerAmount).toBe(Math.round(10042300 * 0.02));
+    expect(jpOf(result).employeeAmount).toBe(Math.round(10042300 * 0.01));
   });
 
   it('memakai config terbaru yang efektif pada tanggal periode (bukan baris sembarang)', async () => {
@@ -133,5 +133,72 @@ describe('BpjsService', () => {
     // tidak ada config efektif -> fallback default 1%, bukan 9% masa depan
     expect(kesOf(result).employeeAmount).toBe(Math.round(8000000 * 0.01));
     expect(future.kesEmployeeRate).toBe(0.09); // guard: memastikan skenario bermakna
+  });
+
+  it('memakai tarif JKK sesuai risiko jabatan (PP 44/2015), bukan hardcode', async () => {
+    mockEmployeeService.findById.mockResolvedValue({
+      id: 'emp-1',
+      fullName: 'Budi',
+      employments: [{ grade: { level: 8 }, position: { riskLevel: 'HIGH' } }],
+    });
+    mockPrisma.bpjsConfig.findMany.mockResolvedValue([kesConfig]);
+
+    const result = await service.calculate('t1', { employeeId: 'emp-1', baseSalary: 10000000 } as any);
+
+    const jkk = result.details.find((d: any) => d.bpjsType === 'JKK');
+    expect(jkk.employerAmount).toBe(Math.round(10000000 * 0.0127));
+  });
+
+  it('config JKK per program menang atas baris legacy KET', async () => {
+    mockEmployeeService.findById.mockResolvedValue({
+      id: 'emp-1',
+      fullName: 'Budi',
+      employments: [{ grade: { level: 8 } }],
+    });
+    mockPrisma.bpjsConfig.findMany.mockResolvedValue([
+      { ...kesConfig, effectiveDate: new Date('2026-01-01') },
+      { type: 'KET', jkkRate: 0.0054, jkmRate: 0.003, effectiveDate: new Date('2026-01-01') },
+      { type: 'JKK', jkkRate: 0.0127, effectiveDate: new Date('2026-06-01') },
+    ]);
+    mockPrisma.payrollPeriod.findFirst.mockResolvedValue({ endDate: new Date('2026-08-31') });
+
+    const result = await service.calculate('t1', {
+      employeeId: 'emp-1',
+      baseSalary: 10000000,
+      periodId: 'period-1',
+    } as any);
+
+    const jkk = result.details.find((d: any) => d.bpjsType === 'JKK');
+    expect(jkk.employerAmount).toBe(Math.round(10000000 * 0.0127));
+    const jkm = result.details.find((d: any) => d.bpjsType === 'JKM');
+    expect(jkm.employerAmount).toBe(Math.round(10000000 * 0.003));
+  });
+
+  describe('getMonthlyIuran', () => {
+    it('meneruskan tenantId dan membebankan JKK ke pemberi kerja', async () => {
+      mockEmployeeService.findById.mockResolvedValue({
+        id: 'emp-1',
+        fullName: 'Budi',
+        employments: [{ grade: { level: 8, baseSalary: 20000000 } }],
+      });
+      mockPrisma.bpjsConfig.findMany.mockResolvedValue([kesConfig]);
+
+      const result = await service.getMonthlyIuran('t1', 'emp-1', 8, 2026);
+
+      expect(mockEmployeeService.findById).toHaveBeenCalledWith('t1', 'emp-1');
+      expect(mockPrisma.bpjsConfig.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 't1', status: 'ACTIVE' }),
+        }),
+      );
+      // Kesehatan capped 12jt; JKK LOW PP 44/2015 dari 20jt * 0.54%
+      const expectedJkk = Math.round(20000000 * 0.0054);
+      expect(result.kesehatan.wageBase).toBe(12000000);
+      expect(result.jkk.employer).toBe(expectedJkk);
+      expect(result.jkk.employee).toBe(0);
+      expect(result.totalEmployer).toBe(Math.round(12000000 * 0.04) + expectedJkk);
+      expect(result.totalEmployee).toBe(Math.round(12000000 * 0.01));
+      expect(result.totalCombined).toBe(result.totalEmployer + result.totalEmployee);
+    });
   });
 });

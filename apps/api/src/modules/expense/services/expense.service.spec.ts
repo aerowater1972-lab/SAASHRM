@@ -129,12 +129,24 @@ describe('ExpenseService', () => {
     it('should submit a draft claim successfully', async () => {
       mockPrisma.expenseClaim.findFirst.mockResolvedValue({ ...mockClaim, status: 'DRAFT' as any, submittedAt: null });
       mockPrisma.expenseItem.findMany.mockResolvedValue([
-        { id: 'item-1', amount: { toNumber: () => 100 } },
+        { id: 'item-1', amount: { toNumber: () => 100 }, receiptUrl: 'http://x/r.jpg' },
       ]);
       mockPrisma.expenseClaim.update.mockResolvedValue({ ...mockClaim, status: RequestStatus.PENDING, submittedAt: new Date() });
 
       const result = await service.submit('default', 'claim-1', { employeeId: 'emp-1', permissions: [] });
       expect(result.status).toBe(RequestStatus.PENDING);
+    });
+
+    it('should reject submit when any item lacks receipt', async () => {
+      mockPrisma.expenseClaim.findFirst.mockResolvedValue({ ...mockClaim, status: 'DRAFT' as any, submittedAt: null });
+      mockPrisma.expenseItem.findMany.mockResolvedValue([
+        { id: 'item-1', amount: { toNumber: () => 100 }, receiptUrl: 'http://x/r.jpg' },
+        { id: 'item-2', amount: { toNumber: () => 50 }, receiptUrl: null },
+      ]);
+      await expect(
+        service.submit('default', 'claim-1', { employeeId: 'emp-1', permissions: [] }),
+      ).rejects.toThrow(/struk/);
+      expect(mockPrisma.expenseClaim.update).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when submitting non-draft claim', async () => {

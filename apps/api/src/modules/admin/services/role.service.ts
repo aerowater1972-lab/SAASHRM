@@ -65,45 +65,59 @@ export class RoleService {
   async assignPermissions(tenantId: string, roleId: string, dto: AssignPermissionDto) {
     await this.findById(tenantId, roleId);
 
+    const whereClause = (key: string) => {
+      // Permission keys are 3-segment (admin:audit:read). Split on the LAST
+      // colon so module keeps its namespace (same as seed + JWT builder).
+      const idx = key.lastIndexOf(':');
+      if (idx <= 0) return { module: key, action: key };
+      return { module: key.slice(0, idx), action: key.slice(idx + 1) };
+    };
+
     const permissions = await this.prisma.permission.findMany({
-      where: {
-        OR: dto.permissionKeys.map((key) => {
-          const [module, action] = key.split(':');
-          return { module, action: action || key };
-        }),
-      },
+      where: { OR: dto.permissionKeys.map(whereClause) },
     });
 
     const existingKeys = permissions.map((p) => `${p.module}:${p.action}`);
     const missing = dto.permissionKeys.filter((k) => !existingKeys.includes(k));
     if (missing.length > 0) {
       await this.prisma.permission.createMany({
-        data: missing.map((key) => {
-          const [module, action] = key.split(':');
-          return { module, action: action || key };
-        }),
+        data: missing.map((key) => whereClause(key)),
         skipDuplicates: true,
       });
     }
 
     const allPermissions = await this.prisma.permission.findMany({
-      where: {
-        OR: dto.permissionKeys.map((key) => {
-          const [module, action] = key.split(':');
-          return { module, action: action || key };
-        }),
-      },
+      where: { OR: dto.permissionKeys.map(whereClause) },
     });
+    const requestedPermissionIds = new Set(allPermissions.map((p) => p.id));
 
-    await this.prisma.rolePermission.deleteMany({ where: { roleId } });
-
-    await this.prisma.rolePermission.createMany({
-      data: allPermissions.map((p) => ({
-        roleId,
-        permissionId: p.id,
-        scope: dto.scope || 'ALL',
-      })),
+    // Remove assignments that are no longer requested (idempotent).
+    const existingRolePerms = await this.prisma.rolePermission.findMany({
+      where: { roleId },
+      select: { permissionId: true },
     });
+    const toRemove = existingRolePerms
+      .filter((rp) => !requestedPermissionIds.has(rp.permissionId))
+      .map((rp) => rp.permissionId);
+    if (toRemove.length > 0) {
+      await this.prisma.rolePermission.deleteMany({
+        where: { roleId, permissionId: { in: toRemove } },
+      });
+    }
+
+    // Upsert requested assignments (create where the link does not already exist).
+    const existingRolePermIds = new Set(existingRolePerms.map((rp) => rp.permissionId));
+    const toCreate = allPermissions.filter((p) => !existingRolePermIds.has(p.id));
+    if (toCreate.length > 0) {
+      await this.prisma.rolePermission.createMany({
+        data: toCreate.map((p) => ({
+          roleId,
+          permissionId: p.id,
+          scope: dto.scope || 'ALL',
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     return this.findById(tenantId, roleId);
   }

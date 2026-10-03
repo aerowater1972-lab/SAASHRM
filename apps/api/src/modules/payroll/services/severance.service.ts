@@ -32,6 +32,37 @@ const CAUSE_MULTIPLIERS: Record<string, { up: number; upmk: number; uph: boolean
 
 export const SEVERANCE_CAUSES = [...Object.keys(CAUSE_MULTIPLIERS), 'CONTRACT_END'];
 
+/**
+ * PPh 21 final atas uang pesangon/UPMK/UPH (PP 68/2009):
+ * - 0% untuk bruto s.d. Rp50jt
+ * - 5% untuk Rp50-100jt
+ * - 15% untuk Rp100-500jt
+ * - 25% di atas Rp500jt
+ * Uang pisah (pisahAmount, sesuai PKB/kontrak) BUKAN objek pajak pesangon
+ * bila dibayar terpisah dari program pesangon — dihitung terpisah di sini
+ * hanya bila `includePisah=true` diminta eksplisit.
+ */
+export function calculateSeveranceTax(bruto: number): { brackets: Array<{ upTo: number; rate: number; taxable: number; tax: number }>; total: number } {
+  const brackets = [
+    { upTo: 50_000_000, rate: 0 },
+    { upTo: 100_000_000, rate: 0.05 },
+    { upTo: 500_000_000, rate: 0.15 },
+    { upTo: Number.POSITIVE_INFINITY, rate: 0.25 },
+  ];
+  let prev = 0;
+  let total = 0;
+  const detail = [];
+  for (const b of brackets) {
+    if (bruto <= prev) break;
+    const taxable = Math.min(bruto, b.upTo) - prev;
+    const tax = Math.round(taxable * b.rate);
+    total += tax;
+    detail.push({ upTo: b.upTo, rate: b.rate, taxable, tax });
+    prev = b.upTo;
+  }
+  return { brackets: detail, total };
+}
+
 @Injectable()
 export class SeveranceService {
   constructor(
@@ -88,6 +119,8 @@ export class SeveranceService {
     let uph = 0;
     if (dto.cause === 'CONTRACT_END') {
       // Kompensasi PKWT: proporsional bulan/12 x upah (termasuk kontrak 5 tahun = 5 bln upah).
+      // Catatan pajak: kompensasi PKWT BUKAN objek PPh final pesangon (PP 68/2009)
+      // — dipajaki sebagai penghasilan biasa (TER/progresif) saat dibayarkan.
       const compensation = Math.round((wageBase * tenureMonths) / 12);
       const total = compensation + pisah;
       return this.prisma.severanceCase.create({
@@ -106,13 +139,18 @@ export class SeveranceService {
     uph = mult.uph ? Math.round(0.15 * (up + upmk)) : 0;
     const total = up + upmk + uph + pisah;
 
-    return this.prisma.severanceCase.create({
+    const created: any = await this.prisma.severanceCase.create({
       data: {
         tenantId, employeeId: dto.employeeId, cause: dto.cause, terminationDate,
         tenureMonths, wageBase, upAmount: up, upmkAmount: upmk, uphAmount: uph,
         pisahAmount: pisah, totalAmount: total, notes: dto.notes, decidedBy: userId,
       } as any,
     });
+
+    // Objek PPh final = UP+UPMK+UPH (tanpa uang pisah). Disertakan agar
+    // Finance langsung tahu neto yang dibayarkan ke karyawan.
+    const tax = calculateSeveranceTax(up + upmk + uph);
+    return { ...created, incomeTax: tax.total, incomeTaxBrackets: tax.brackets, netPayout: total - tax.total };
   }
 
   async findAll(tenantId: string, employeeId?: string) {

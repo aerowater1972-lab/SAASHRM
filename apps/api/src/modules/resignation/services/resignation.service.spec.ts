@@ -24,9 +24,10 @@ describe('ResignationService', () => {
 
   const resignationTransitions: Record<string, Record<string, string>> = {
     PENDING: { APPROVE: 'APPROVED', REJECT: 'REJECTED', CANCEL: 'CANCELLED' },
-    APPROVED: { OFFBOARD: 'CANCELLED', CANCEL: 'CANCELLED' },
+    APPROVED: { OFFBOARD: 'COMPLETED', CANCEL: 'CANCELLED' },
     REJECTED: {},
     CANCELLED: {},
+    COMPLETED: {},
   };
   const mockWorkflow = {
     transition: jest.fn((_key: string, from: string, action: string) => {
@@ -54,6 +55,13 @@ describe('ResignationService', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+    },
+    finalSettlement: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    severanceCase: {
+      findFirst: jest.fn(),
     },
   };
 
@@ -187,9 +195,15 @@ describe('ResignationService', () => {
     it('should publish RESIGNATION_EFFECTIVE and OFFBOARDING_COMPLETED', async () => {
       mockPrisma.resignationRequest.findFirst.mockResolvedValue({ ...mockResignation, status: RequestStatus.APPROVED });
       mockPrisma.offboardingTask.findMany.mockResolvedValue([]);
-      mockPrisma.resignationRequest.update.mockResolvedValue({ ...mockResignation, status: RequestStatus.CANCELLED });
+      mockPrisma.resignationRequest.update.mockResolvedValue({ ...mockResignation, status: RequestStatus.COMPLETED });
+      mockPrisma.finalSettlement.findFirst.mockResolvedValue({ id: 'fs-1' });
 
-      await service.offboard('default', 'res-1');
+      const res = await service.offboard('default', 'res-1');
+
+      expect(mockPrisma.resignationRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: RequestStatus.COMPLETED }) }),
+      );
+      expect(res.employeeId).toBe('emp-1');
 
       expect(mockEventBus.publishTyped).toHaveBeenCalledWith(
         DomainEventType.RESIGNATION_EFFECTIVE,
@@ -208,6 +222,23 @@ describe('ResignationService', () => {
       mockPrisma.offboardingTask.findMany.mockResolvedValue([{ id: 'task-1', status: 'PENDING' as any }]);
 
       await expect(service.offboard('default', 'res-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should auto-create a settlement draft when missing', async () => {
+      mockPrisma.resignationRequest.findFirst.mockResolvedValue({ ...mockResignation, status: RequestStatus.APPROVED });
+      mockPrisma.offboardingTask.findMany.mockResolvedValue([]);
+      mockPrisma.resignationRequest.update.mockResolvedValue({ ...mockResignation, status: RequestStatus.COMPLETED });
+      mockPrisma.finalSettlement.findFirst.mockResolvedValue(null);
+      mockPrisma.severanceCase.findFirst.mockResolvedValue({ totalAmount: 64400000 });
+      mockPrisma.finalSettlement.create.mockResolvedValue({ id: 'fs-new', status: 'draft' });
+
+      await service.offboard('default', 'res-1');
+
+      expect(mockPrisma.finalSettlement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ resignationId: 'res-1', severanceAmount: 64400000 }),
+        }),
+      );
     });
   });
 });

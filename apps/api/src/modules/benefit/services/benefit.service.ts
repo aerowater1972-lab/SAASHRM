@@ -120,6 +120,29 @@ export class BenefitService {
       throw new ConflictException('Employee already has an active enrollment for this benefit');
     }
 
+    // Aturan eligibility: bila benefit punya baris aturan, karyawan harus
+    // cocok minimal satu (grade ATAU departemen dari employment aktif).
+    // Tanpa baris aturan -> terbuka untuk semua (kompatibilitas mundur).
+    const rules = await this.prisma.benefitEligibilityRule.findMany({
+      where: { benefitId: dto.benefitId },
+    });
+    if (rules.length > 0) {
+      const emp = await this.employeeService.findById(tenantId, dto.employeeId);
+      const active = (emp?.employments ?? []).filter((e: any) => e.isActive !== false);
+      const ok = active.some((e: any) =>
+        rules.some(
+          (r) =>
+            (!r.gradeId || r.gradeId === e.gradeId) &&
+            (!r.departmentId || r.departmentId === e.departmentId),
+        ),
+      );
+      if (!ok) {
+        throw new BadRequestException(
+          'Karyawan tidak memenuhi syarat eligibility benefit ini (grade/departemen).',
+        );
+      }
+    }
+
     const data: any = {
       tenantId,
       employeeId: dto.employeeId,

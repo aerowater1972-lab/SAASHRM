@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
@@ -133,6 +133,68 @@ export class GoalService {
       where: { id },
       data: updateData,
     });
+  }
+
+  /**
+   * PIP 90 hari berbasis Goal (tanpa tabel baru): kumpulan target terukur
+   * bertanda `[PIP]` + batas waktu. Hasil akhir: ACHIEVED semua = lulus;
+   * ada yang kedaluwarsa/gagal = keputusan HR (lanjut/rotasi/PHK prosedural).
+   */
+  static readonly PIP_PREFIX = '[PIP]';
+  static readonly PIP_DAYS = 90;
+
+  async startPip(
+    tenantId: string,
+    employeeId: string,
+    dto: { goals: Array<{ title: string; metric?: string; targetValue?: number }>; endDate?: string; reviewId?: string },
+  ) {
+    const employee = await this.employeeService.findById(tenantId, employeeId);
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (!dto.goals || dto.goals.length === 0) {
+      throw new BadRequestException('PIP membutuhkan minimal 1 target terukur');
+    }
+    const end = dto.endDate ? new Date(dto.endDate) : new Date(Date.now() + GoalService.PIP_DAYS * 86400000);
+    const created = [];
+    for (const g of dto.goals) {
+      created.push(
+        await this.prisma.goal.create({
+          data: {
+            tenantId,
+            employeeId,
+            title: `${GoalService.PIP_PREFIX} ${g.title}`,
+            metric: g.metric,
+            targetValue: g.targetValue,
+            startDate: new Date(),
+            endDate: end,
+            reviewId: dto.reviewId,
+            status: GoalStatus.IN_PROGRESS,
+          },
+        }),
+      );
+    }
+    return { employeeId, pipEndDate: end, goals: created };
+  }
+
+  async pipStatus(tenantId: string, employeeId: string) {
+    const goals = await this.prisma.goal.findMany({
+      where: { tenantId, employeeId, title: { startsWith: GoalService.PIP_PREFIX } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    if (goals.length === 0) return { employeeId, active: false, goals: [] };
+    const now = new Date();
+    const achieved = goals.filter((g) => g.status === GoalStatus.ACHIEVED).length;
+    const expired = goals.filter((g) => g.status !== GoalStatus.ACHIEVED && g.endDate && new Date(g.endDate) < now).length;
+    return {
+      employeeId,
+      active: achieved < goals.length,
+      total: goals.length,
+      achieved,
+      expired,
+      passed: achieved === goals.length,
+      pipEndDate: goals[0].endDate,
+      goals,
+    };
   }
 
   async updateProgress(tenantId: string, id: string, dto: GoalProgressDto) {

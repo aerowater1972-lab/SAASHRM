@@ -6,11 +6,16 @@ import { OvertimeController } from './controllers/overtime.controller';
 import { OvertimeApiController, OvertimeRecordsApiController } from './controllers/overtime-api.controller';
 import { LeaveController } from './controllers/leave.controller';
 import { BiometricController } from './controllers/biometric.controller';
+import { LiveTrackingController } from './controllers/live-tracking.controller';
+import { ShiftRotationController } from './controllers/shift-rotation.controller';
 import { AttendanceService } from './services/attendance.service';
 import { ShiftService } from './services/shift.service';
 import { OvertimeService } from './services/overtime.service';
 import { LeaveService } from './services/leave.service';
 import { BiometricService } from './services/biometric.service';
+import { LiveTrackingService } from './services/live-tracking.service';
+import { ShiftRotationService } from './services/shift-rotation.service';
+import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adjustment.service';
 
 @Module({
   imports: [EmployeeModule],
@@ -22,6 +27,8 @@ import { BiometricService } from './services/biometric.service';
     OvertimeRecordsApiController,
     LeaveController,
     BiometricController,
+    LiveTrackingController,
+    ShiftRotationController,
   ],
   providers: [
     AttendanceService,
@@ -29,6 +36,9 @@ import { BiometricService } from './services/biometric.service';
     OvertimeService,
     LeaveService,
     BiometricService,
+    LiveTrackingService,
+    ShiftRotationService,
+    PayrollAdjustmentService,
   ],
   exports: [
     AttendanceService,
@@ -36,6 +46,8 @@ import { BiometricService } from './services/biometric.service';
     OvertimeService,
     LeaveService,
     BiometricService,
+    LiveTrackingService,
+    ShiftRotationService,
   ],
 })
 export class AttendanceModule {}
