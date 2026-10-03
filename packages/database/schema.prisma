@@ -23,37 +23,45 @@ model Tenant {
   updatedAt DateTime     @updatedAt
   deletedAt DateTime?
 
-  entities             TenantEntity[]
-  users                User[]
-  roles                Role[]
-  featureFlags         FeatureFlag[]
-  workflows            WorkflowDefinition[]
-  integrations         Integration[]
-  auditLogs            AuditLog[]
+  entities              TenantEntity[]
+  users                 User[]
+  roles                 Role[]
+  featureFlags          FeatureFlag[]
+  workflows             WorkflowDefinition[]
+  integrations          Integration[]
+  auditLogs             AuditLog[]
   systemHealthSnapshots SystemHealthSnapshot[]
-  backupRecords        BackupRecord[]
-  maintenanceWindows   MaintenanceWindow[]
-  trainings            Training[]
-  courses              Course[]
-  feedback360s         Feedback360[]
-  idps                 IndividualDevelopmentPlan[]
-  provincialWages      ProvincialMinimumWage[]
-  violationCategories  ViolationCategory[]
-  disciplinaryCases    DisciplinaryCase[]
-  incidentReports      IncidentReport[]
-  ppeAssignments       PpeAssignment[]
-  tenantBranding       TenantBranding?
-  locationPings        LocationPing[]
-  fieldTerritories     FieldTerritory[]
-  liveTrackingSettings LiveTrackingSettings?
-  documents            Document[]
-  announcements        Announcement[]
-  documentCategories   DocumentCategory[]
-  talentPools          TalentPool[]
-  successionPlans      SuccessionPlan[]
-  territoryViolations  TerritoryViolation[]
-  engagementSurveys    EngagementSurvey[]
-  manpowerPlans        ManpowerPlan[]
+  backupRecords         BackupRecord[]
+  maintenanceWindows    MaintenanceWindow[]
+  trainings             Training[]
+  courses               Course[]
+  feedback360s          Feedback360[]
+  idps                  IndividualDevelopmentPlan[]
+  provincialWages       ProvincialMinimumWage[]
+  violationCategories   ViolationCategory[]
+  disciplinaryCases     DisciplinaryCase[]
+  incidentReports       IncidentReport[]
+  ppeAssignments        PpeAssignment[]
+  tenantBranding        TenantBranding?
+  locationPings         LocationPing[]
+  fieldTerritories      FieldTerritory[]
+  liveTrackingSettings  LiveTrackingSettings?
+  documents             Document[]
+  announcements         Announcement[]
+  documentCategories    DocumentCategory[]
+  talentPools           TalentPool[]
+  successionPlans       SuccessionPlan[]
+  territoryViolations   TerritoryViolation[]
+  engagementSurveys     EngagementSurvey[]
+  manpowerPlans         ManpowerPlan[]
+  GrievanceCase         GrievanceCase[]
+  BipartiteSession      BipartiteSession[]
+  BpjsClaim             BpjsClaim[]
+  BpjsKetenagakerjaanClaim BpjsKetenagakerjaanClaim[]
+  wfhRequests           WfhRequest[]
+  wfhPolicies           WfhPolicy[]
+  Alumni                Alumni[]
+  ShiftGroup            ShiftGroup[]
 }
 
 model TenantEntity {
@@ -104,12 +112,12 @@ model User {
   employeeId String?   @unique
   employee   Employee? @relation(fields: [employeeId], references: [id])
 
-  userRoles                 UserRole[]
-  notifications             Notification[]
-  auditLogs                 AuditLog[]
-  approvedDisciplinaryCases  DisciplinaryCase[]  @relation("approved_disciplinary")
-  escalatedDisciplinaryCases DisciplinaryCase[]  @relation("escalated_disciplinary")
-  reportedIncidents          IncidentReport[]    @relation("reported_incidents")
+  userRoles                  UserRole[]
+  notifications              Notification[]
+  auditLogs                  AuditLog[]
+  approvedDisciplinaryCases  DisciplinaryCase[]    @relation("approved_disciplinary")
+  escalatedDisciplinaryCases DisciplinaryCase[]    @relation("escalated_disciplinary")
+  reportedIncidents          IncidentReport[]      @relation("reported_incidents")
   documentsCreated           Document[]
   documentVersionsCreated    DocumentVersion[]
   documentPermissionsCreated DocumentPermission[]
@@ -117,8 +125,8 @@ model User {
   documentActivities         DocumentActivity[]
   announcementsCreated       Announcement[]
   talentPoolMembershipsAdded TalentPoolMember[]
-  successionPlansCreated     SuccessionPlan[]       @relation("succession_creator")
-  successionCandidatesAdded  SuccessionCandidate[]  @relation("succession_candidate_adder")
+  successionPlansCreated     SuccessionPlan[]      @relation("succession_creator")
+  successionCandidatesAdded  SuccessionCandidate[] @relation("succession_candidate_adder")
 
   @@unique([tenantId, email])
 }
@@ -313,8 +321,8 @@ model AuditLog {
   ipAddress String?
   userAgent String?
 
-  tenant Tenant   @relation(fields: [tenantId], references: [id])
-  user   User?    @relation(fields: [changedBy], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User?  @relation(fields: [changedBy], references: [id])
 
   @@index([tenantId, module, entity, entityId])
   @@index([tenantId, changedAt])
@@ -342,6 +350,9 @@ model Employee {
   idCardNumber         String? // NIK (encrypted)
   taxIdNumber          String? // NPWP (encrypted)
   socialSecurityNumber String? // BPJS (encrypted)
+  bankName             String? // Bank payroll (BCA/MANDIRI/BRI/...)
+  bankAccountNumber    String? // Nomor rekening gaji
+  bankAccountName      String? // Nama pemilik rekening
   bloodType            String?
   allergies            String?
   medicalNotes         String? // encrypted
@@ -360,7 +371,7 @@ model Employee {
   updatedAt            DateTime       @updatedAt
   deletedAt            DateTime?
 
-  tenantEntity                   TenantEntity              @relation(fields: [tenantId], references: [id]) // via tenantId ref
+  tenantEntity                   TenantEntity                @relation(fields: [tenantId], references: [id]) // via tenantId ref
   user                           User?
   employments                    Employment[]
   documents                      EmployeeDocument[]
@@ -375,7 +386,7 @@ model Employee {
   payslips                       Payslip[]
   performanceReviews             PerformanceReview[]
   goals                          Goal[]
-  goalsApproved                  Goal[]                    @relation("goal_approver")
+  goalsApproved                  Goal[]                      @relation("goal_approver")
   expenseClaims                  ExpenseClaim[]
   assetAssignments               AssetAssignment[]
   employeeBenefits               EmployeeBenefit[]
@@ -386,14 +397,14 @@ model Employee {
   applications                   Application[]
   contact                        EmployeeContact?
   medical                        EmployeeMedical?
-  attendanceCorrectionsRequested AttendanceCorrection[]    @relation("correction_requester")
-  attendanceCorrectionsApproved  AttendanceCorrection[]    @relation("correction_approver")
-  calibrationSessionsFacilitated CalibrationSession[]      @relation("calibration_facilitator")
-  finalScoresCalibrated          FinalScore[]              @relation("final_score_calibrator")
+  attendanceCorrectionsRequested AttendanceCorrection[]      @relation("correction_requester")
+  attendanceCorrectionsApproved  AttendanceCorrection[]      @relation("correction_approver")
+  calibrationSessionsFacilitated CalibrationSession[]        @relation("calibration_facilitator")
+  finalScoresCalibrated          FinalScore[]                @relation("final_score_calibrator")
   payrollAdjustments             PayrollAdjustment[]
-  thrRecords                   ThrRecord[]
-  annualTaxRecords             AnnualTaxRecord[]
-  severanceCases               SeveranceCase[]
+  thrRecords                     ThrRecord[]
+  annualTaxRecords               AnnualTaxRecord[]
+  severanceCases                 SeveranceCase[]
   finalScores                    FinalScore[]
   movementRequests               MovementRequest[]
   essNotifications               EssNotification[]
@@ -402,7 +413,7 @@ model Employee {
   essProfileChangeRequests       EssProfileChangeRequest[]
   salaryComponents               SalaryComponent[]
   payrollRunItems                PayrollRunItem[]
-  jobRequisitionsApproved        JobRequisition[]          @relation("requisition_approver")
+  jobRequisitionsApproved        JobRequisition[]            @relation("requisition_approver")
   disciplinaryCases              DisciplinaryCase[]
   incidentReports                IncidentReport[]
   ppeAssignments                 PpeAssignment[]
@@ -410,19 +421,27 @@ model Employee {
   courseTrainees                 CourseTrainee[]
   quizAttempts                   QuizAttempt[]
   // 360° Feedback
-  feedback360sAsReviewee         Feedback360[]             @relation("feedback_reviewee")
-  feedback360sAsReviewer         Feedback360[]             @relation("feedback_reviewer")
+  feedback360sAsReviewee         Feedback360[]               @relation("feedback_reviewee")
+  feedback360sAsReviewer         Feedback360[]               @relation("feedback_reviewer")
   // IDP
   individualDevelopmentPlans     IndividualDevelopmentPlan[]
   workLocationId                 String?
-  workLocation                   WorkLocation?             @relation(fields: [workLocationId], references: [id])
-  isFieldWorker                  Boolean                   @default(false)
+  workLocation                   WorkLocation?               @relation(fields: [workLocationId], references: [id])
+  isFieldWorker                  Boolean                     @default(false)
   locationPings                  LocationPing[]
   fieldTerritory                 FieldTerritory?
   territoryViolations            TerritoryViolation[]
   talentPoolMemberships          TalentPoolMember[]
-  successionPlansIncumbent         SuccessionPlan[]            @relation("succession_incumbent")
-  successionCandidates            SuccessionCandidate[]
+  successionPlansIncumbent       SuccessionPlan[]            @relation("succession_incumbent")
+  successionCandidates           SuccessionCandidate[]
+  GrievanceCase                  GrievanceCase[]
+  BpjsClaim                      BpjsClaim[]
+  BpjsKetenagakerjaanClaim       BpjsKetenagakerjaanClaim[]
+  ClearanceCertificate           ClearanceCertificate[]
+  wfhRequests                    WfhRequest[]
+  alumni                         Alumni[]
+  shiftGroup                     ShiftGroup?                 @relation(fields: [shiftGroupId], references: [id])
+  shiftGroupId                   String?
 
   @@unique([tenantId, employeeId])
   @@unique([tenantId, email])
@@ -437,6 +456,7 @@ model Employment {
   positionId     String
   departmentId   String
   gradeId        String?
+  shiftGroupId   String?
   entityId       String?
   type           EmploymentType @default(PERMANENT)
   startDate      DateTime
@@ -448,10 +468,11 @@ model Employment {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  employee   Employee   @relation(fields: [employeeId], references: [id])
-  position   Position   @relation(fields: [positionId], references: [id])
-  department Department @relation(fields: [departmentId], references: [id])
-  grade      Grade?     @relation(fields: [gradeId], references: [id])
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  position   Position    @relation(fields: [positionId], references: [id])
+  department Department  @relation(fields: [departmentId], references: [id])
+  grade      Grade?      @relation(fields: [gradeId], references: [id])
+  shiftGroup ShiftGroup? @relation(fields: [shiftGroupId], references: [id])
 }
 
 model EmployeeDocument {
@@ -523,20 +544,22 @@ model Organization {
 }
 
 model Department {
-  id             String     @id @default(uuid())
-  tenantId       String
-  organizationId String
-  entityId       String?
-  name           String
-  code           String
-  headEmployeeId String?
-  parentId       String?
-  level          Int        @default(0)
-  effectiveDate  DateTime   @default(now())
-  status         DeptStatus @default(ACTIVE)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  deletedAt      DateTime?
+  id                 String     @id @default(uuid())
+  tenantId           String
+  organizationId     String
+  entityId           String?
+  name               String
+  code               String
+  headEmployeeId     String?
+  parentId           String?
+  level              Int        @default(0)
+  effectiveDate      DateTime   @default(now())
+  status             DeptStatus @default(ACTIVE)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+  cutOffTime         String? // HH:mm format, department-level clock-in cut-off
+  cutOffGraceMinutes Int        @default(15) // grace minutes for late clock-in
 
   organization            Organization             @relation(fields: [organizationId], references: [id])
   entity                  TenantEntity?            @relation(fields: [entityId], references: [id])
@@ -564,6 +587,7 @@ model Position {
   description  String?
   isHead       Boolean   @default(false)
   maxHeadCount Int?
+  riskLevel    String? // VERY_LOW|LOW|MEDIUM|HIGH|VERY_HIGH — risiko JKK (PP 44/2015)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
@@ -578,17 +602,19 @@ model Position {
 }
 
 model Grade {
-  id          String    @id @default(uuid())
-  tenantId    String
-  name        String
-  code        String
-  level       Int
-  description String?
-  minSalary   Float?    // FR-03: salary range lower bound for manpower cost estimation
-  maxSalary   Float?    // FR-03: salary range upper bound
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id                       String    @id @default(uuid())
+  tenantId                 String
+  name                     String
+  code                     String
+  level                    Int
+  description              String?
+  minSalary                Float? // FR-03: salary range lower bound for manpower cost estimation
+  maxSalary                Float? // FR-03: salary range upper bound
+  maxOvertimeHoursPerMonth Int? // GRANTED: maksimal lembur per bulan per grade
+  riskLevel                String? // VERY_LOW|LOW|MEDIUM|HIGH|VERY_HIGH — risiko JKK (PP 44/2015), fallback bila Position kosong
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
 
   positions               Position[]
   employments             Employment[]
@@ -622,7 +648,32 @@ model Shift {
   updatedAt                  DateTime    @updatedAt
   deletedAt                  DateTime?
 
+  shiftGroupId  String?
+  shiftGroup    ShiftGroup?   @relation(fields: [shiftGroupId], references: [id])
   rosterEntries RosterEntry[]
+
+  @@index([tenantId, shiftGroupId])
+}
+
+model ShiftGroup {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String
+  description String?
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  shifts     Shift[]
+  Employee   Employee[]
+  Employment Employment[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
 }
 
 model Roster {
@@ -683,8 +734,8 @@ model AttendanceRecord {
   clockOutMethod    String?
   clockInLat        Decimal?         @db.Decimal(10, 8)
   clockInLng        Decimal?         @db.Decimal(11, 8)
-  clockInAccuracy   Float?           // GPS accuracy in meters reported by the client
-  clockInClientTs   DateTime?        // client-side capture timestamp (spoof/time-travel detection)
+  clockInAccuracy   Float? // GPS accuracy in meters reported by the client
+  clockInClientTs   DateTime? // client-side capture timestamp (spoof/time-travel detection)
   clockOutLat       Decimal?         @db.Decimal(10, 8)
   clockOutLng       Decimal?         @db.Decimal(11, 8)
   clockOutAccuracy  Float?
@@ -694,7 +745,7 @@ model AttendanceRecord {
   clockInFlags      String[]         @default([]) // anti-spoof suspicion reasons at clock-in
   clockOutFlags     String[]         @default([]) // anti-spoof suspicion reasons at clock-out
   isSuspicious      Boolean          @default(false) // true when any anti-spoof flag is present
-  spoofReviewedBy   String?          // HR user who reviewed the suspicious record
+  spoofReviewedBy   String? // HR user who reviewed the suspicious record
   spoofReviewedAt   DateTime?
   spoofReviewNote   String?
   shiftId           String?
@@ -719,15 +770,15 @@ model AttendanceRecord {
 // Biometric enrollment for fingerprint (from attendance machines) and face (on-prem embedding).
 // `reference` stores the fingerprint template (device format) or the face embedding vector (JSON).
 model BiometricCredential {
-  id          String   @id @default(uuid())
-  tenantId    String
-  employeeId  String
-  type        String // FINGERPRINT | FACE
-  reference   String // fingerprint template OR face embedding (JSON array of floats)
-  deviceId    String? // originating attendance machine id
-  isActive    Boolean  @default(true)
-  enrolledAt  DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  tenantId   String
+  employeeId String
+  type       String // FINGERPRINT | FACE
+  reference  String // fingerprint template OR face embedding (JSON array of floats)
+  deviceId   String? // originating attendance machine id
+  isActive   Boolean  @default(true)
+  enrolledAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
@@ -769,24 +820,72 @@ model WorkLocation {
   @@index([tenantId])
 }
 
-model OvertimeRequest {
-  id            String        @id @default(uuid())
-  tenantId      String
-  employeeId    String
-  date          DateTime
-  startTime     DateTime
-  endTime       DateTime
-  totalMinutes  Int
-  reason        String
-  status        RequestStatus @default(PENDING)
-  approvedBy    String?
-  approvedAt    DateTime?
-  notes         String?
-  rejectedReason String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+enum WfhRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
 
+model WfhRequest {
+  id             String           @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  startDate      DateTime
+  endDate        DateTime
+  reason         String
+  status         WfhRequestStatus @default(PENDING)
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, startDate])
+}
+
+model WfhPolicy {
+  id               String    @id @default(uuid())
+  tenantId         String
+  name             String
+  description      String?
+  maxDaysPerWeek   Int       @default(2)
+  requiresApproval Boolean   @default(true)
+  eligibleGrades   String[] // grade IDs yang eligible
+  startDate        DateTime
+  endDate          DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, isActive])
+}
+
+model OvertimeRequest {
+  id             String        @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  date           DateTime
+  startTime      DateTime
+  endTime        DateTime
+  totalMinutes   Int
+  reason         String
+  status         RequestStatus @default(PENDING)
+  approvedBy     String?
+  approvedAt     DateTime?
+  notes          String?
+  rejectedReason String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  employee Employee         @relation(fields: [employeeId], references: [id])
   records  OvertimeRecord[]
 
   @@index([tenantId])
@@ -794,7 +893,7 @@ model OvertimeRequest {
 }
 
 model OvertimeRecord {
-  id                String         @id @default(uuid())
+  id                String          @id @default(uuid())
   tenantId          String
   employeeId        String
   overtimeRequestId String?
@@ -803,12 +902,12 @@ model OvertimeRecord {
   actualMinutes     Int
   payableMinutes    Int
   dayType           OvertimeDayType @default(HARI_KERJA)
-  isRetroactive     Boolean        @default(false)
-  isPaid            Boolean        @default(true)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  isRetroactive     Boolean         @default(false)
+  isPaid            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  employee       Employee        @relation(fields: [employeeId], references: [id])
+  employee        Employee         @relation(fields: [employeeId], references: [id])
   overtimeRequest OvertimeRequest? @relation(fields: [overtimeRequestId], references: [id])
 
   @@index([tenantId])
@@ -892,26 +991,26 @@ model LeaveRequest {
 // =======================================================================
 
 model PayrollComponent {
-  id          String                   @id @default(uuid())
-  tenantId    String
-  name        String
-  code        String
-  type        PayrollComponentType // ALLOWANCE, DEDUCTION, BPJS_KES, BPJS_KET, PPH21
-  category    PayrollComponentCategory @default(FIXED)
-  description String?
-  formula     String? // calculation formula (used when calculationMethod = FORMULA)
-  calculationMethod String? @map("calculation_method") // FIXED | PERCENTAGE | FORMULA (mirrors API DTO)
-  defaultValue Decimal? @map("default_value") @db.Decimal(18, 2) // used when calculationMethod = FIXED
-  percentage Decimal? @db.Decimal(5, 2) // used when calculationMethod = PERCENTAGE
-  maxCap     Decimal? @map("max_cap") @db.Decimal(18, 2)
-  sortOrder  Int?     @map("sort_order")
-  isTaxable   Boolean                  @default(true)
-  isProrated  Boolean                  @default(false)
-  value       Decimal?                 @db.Decimal(18, 2)
-  isActive    Boolean                  @default(true)
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
-  deletedAt   DateTime?
+  id                String                   @id @default(uuid())
+  tenantId          String
+  name              String
+  code              String
+  type              PayrollComponentType // ALLOWANCE, DEDUCTION, BPJS_KES, BPJS_KET, PPH21
+  category          PayrollComponentCategory @default(FIXED)
+  description       String?
+  formula           String? // calculation formula (used when calculationMethod = FORMULA)
+  calculationMethod String?                  @map("calculation_method") // FIXED | PERCENTAGE | FORMULA (mirrors API DTO)
+  defaultValue      Decimal?                 @map("default_value") @db.Decimal(18, 2) // used when calculationMethod = FIXED
+  percentage        Decimal?                 @db.Decimal(5, 2) // used when calculationMethod = PERCENTAGE
+  maxCap            Decimal?                 @map("max_cap") @db.Decimal(18, 2)
+  sortOrder         Int?                     @map("sort_order")
+  isTaxable         Boolean                  @default(true)
+  isProrated        Boolean                  @default(false)
+  value             Decimal?                 @db.Decimal(18, 2)
+  isActive          Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  deletedAt         DateTime?
 
   payrollItems              PayrollItem[]
   employeeBenefitComponents EmployeeBenefitComponent[]
@@ -1085,6 +1184,106 @@ model BpjsConfig {
   @@unique([tenantId, type, effectiveDate])
 }
 
+// BPJS Kesehatan Claim (rawat inap/paru): pencatatan klaim BPJS Kesehatan
+// untuk keperluan rekonsiliasi dan laporan BPJS.
+model BpjsClaim {
+  id             String          @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  claimNumber    String // nomor klaim BPJS
+  claimType      BpjsClaimType // RAWAT_INAP, RAWAT_JALAN, KUNING, MERAH, dst
+  diagnosisCode  String? // kode ICD-10
+  diagnosisName  String?
+  admissionDate  DateTime?
+  dischargeDate  DateTime?
+  daysOfCare     Int?
+  hospitalCode   String? // kode rumah sakit BPJS
+  hospitalName   String?
+  claimAmount    Decimal         @db.Decimal(18, 2) // total tagihan
+  approvedAmount Decimal?        @db.Decimal(18, 2) // yang disetujui BPJS
+  patientShare   Decimal?        @db.Decimal(18, 2) // biaya peserta (jika ada)
+  status         BpjsClaimStatus @default(SUBMITTED) // SUBMITTED, PROCESSING, APPROVED, REJECTED, PAID
+  submittedAt    DateTime        @default(now())
+  processedAt    DateTime?
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, claimNumber])
+}
+
+model BpjsKetenagakerjaanClaim {
+  id                    String                                    @id @default(uuid())
+  tenantId              String
+  employeeId            String
+  claimNumber           String // nomor klaim BPJS TK
+  claimType             BpjsKetenagakerjaanClaimType // JKK, JKM, JHT, JP
+  diagnosisCode         String? // kode ICD-10
+  diagnosisName         String?
+  admissionDate         DateTime?
+  dischargeDate         DateTime?
+  daysOfCare            Int?
+  hospitalCode          String? // kode rumah sakit BPJS
+  hospitalName          String?
+  claimAmount           Decimal         @db.Decimal(18, 2) // total tagihan
+  approvedAmount        Decimal?        @db.Decimal(18, 2) // yang disetujui BPJS TK
+  patientShare          Decimal?        @db.Decimal(18, 2) // biaya peserta (jika ada)
+  status                BpjsKetenagakerjaanClaimStatus @default(SUBMITTED)
+  submittedAt           DateTime        @default(now())
+  processedAt           DateTime?
+  paidAt                DateTime?
+  notes                 String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, claimNumber])
+}
+
+enum BpjsKetenagakerjaanClaimType {
+  JKK
+  JKM
+  JHT
+  JP
+}
+
+enum BpjsKetenagakerjaanClaimStatus {
+  SUBMITTED
+  PROCESSING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum BpjsClaimType {
+  RAWAT_INAP
+  RAWAT_JALAN
+  KUNING
+  MERAH
+  KELAHIRAN
+  LAINNYA
+}
+
+enum BpjsClaimStatus {
+  SUBMITTED
+  PROCESSING
+  APPROVED
+  REJECTED
+  PAID
+}
+
 model TaxConfig {
   id            String          @id @default(uuid())
   tenantId      String
@@ -1103,27 +1302,27 @@ model TaxConfig {
 // monthly: gema 12 entri {month, gross, bpjsEmployee, otherDeductions, terWithheld}.
 // adjustment = annualTax - totalWithheld (negatif = lebih bayar, dikompensasi).
 model AnnualTaxRecord {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tenantId        String
   employeeId      String
   year            Int
-  grossAnnual     Decimal  @db.Decimal(18, 2)
-  biayaJabatan    Decimal  @db.Decimal(18, 2)
-  bpjsAnnual      Decimal  @db.Decimal(18, 2)
-  otherDeductions Decimal  @default(0) @db.Decimal(18, 2)
-  netAnnual       Decimal  @db.Decimal(18, 2)
+  grossAnnual     Decimal   @db.Decimal(18, 2)
+  biayaJabatan    Decimal   @db.Decimal(18, 2)
+  bpjsAnnual      Decimal   @db.Decimal(18, 2)
+  otherDeductions Decimal   @default(0) @db.Decimal(18, 2)
+  netAnnual       Decimal   @db.Decimal(18, 2)
   ptkpCategory    String
-  ptkp            Decimal  @db.Decimal(18, 2)
-  pkp             Decimal  @db.Decimal(18, 2)
-  annualTax       Decimal  @db.Decimal(18, 2)
-  totalWithheld   Decimal  @db.Decimal(18, 2)
-  adjustment      Decimal  @db.Decimal(18, 2)
-  status          String   @default("DRAFT") // DRAFT | FINAL
+  ptkp            Decimal   @db.Decimal(18, 2)
+  pkp             Decimal   @db.Decimal(18, 2)
+  annualTax       Decimal   @db.Decimal(18, 2)
+  totalWithheld   Decimal   @db.Decimal(18, 2)
+  adjustment      Decimal   @db.Decimal(18, 2)
+  status          String    @default("DRAFT") // DRAFT | FINAL
   finalizedBy     String?
   finalizedAt     DateTime?
   monthly         Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
@@ -1154,15 +1353,15 @@ model ThrRun {
 }
 
 model ThrRecord {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   runId        String
   employeeId   String
   monthsWorked Int // 1..12 (0 = tidak eligible, tidak dibuat)
-  wageBase     Decimal  @db.Decimal(18, 2)
-  amount       Decimal  @db.Decimal(18, 2)
-  status       String   @default("calculated") // calculated | approved | paid
+  wageBase     Decimal   @db.Decimal(18, 2)
+  amount       Decimal   @db.Decimal(18, 2)
+  status       String    @default("calculated") // calculated | approved | paid
   paidAt       DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   run      ThrRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id])
@@ -1185,25 +1384,25 @@ enum ThrRunStatus {
 // biro hukum sebelum dipakai untuk kasus sengketa).
 // CONTRACT_END = kompensasi PKWT (1 bln upah per 12 bln, proporsional).
 model SeveranceCase {
-  id             String   @id @default(uuid())
-  tenantId       String
-  employeeId     String
-  cause          String // RESIGNATION | TERMINATION | EFFICIENCY | RETIREMENT | DEATH | MISCONDUCT | ILLNESS | CONTRACT_END
-  terminationDate DateTime @map("termination_date") @db.Date
-  tenureMonths   Int      @map("tenure_months")
-  wageBase       Decimal  @db.Decimal(18, 2)
-  upAmount       Decimal  @default(0) @map("up_amount") @db.Decimal(18, 2)
-  upmkAmount     Decimal  @default(0) @map("upmk_amount") @db.Decimal(18, 2)
-  uphAmount      Decimal  @default(0) @map("uph_amount") @db.Decimal(18, 2)
-  pisahAmount    Decimal  @default(0) @map("pisah_amount") @db.Decimal(18, 2)
-  totalAmount    Decimal  @db.Decimal(18, 2)
-  status         String   @default("DRAFT") // DRAFT | APPROVED | PAID | CANCELLED
-  decidedBy      String?  @map("decided_by")
-  decidedAt      DateTime? @map("decided_at")
-  paidAt         DateTime? @map("paid_at")
-  notes          String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  cause           String // RESIGNATION | TERMINATION | EFFICIENCY | RETIREMENT | DEATH | MISCONDUCT | ILLNESS | CONTRACT_END
+  terminationDate DateTime  @map("termination_date") @db.Date
+  tenureMonths    Int       @map("tenure_months")
+  wageBase        Decimal   @db.Decimal(18, 2)
+  upAmount        Decimal   @default(0) @map("up_amount") @db.Decimal(18, 2)
+  upmkAmount      Decimal   @default(0) @map("upmk_amount") @db.Decimal(18, 2)
+  uphAmount       Decimal   @default(0) @map("uph_amount") @db.Decimal(18, 2)
+  pisahAmount     Decimal   @default(0) @map("pisah_amount") @db.Decimal(18, 2)
+  totalAmount     Decimal   @db.Decimal(18, 2)
+  status          String    @default("DRAFT") // DRAFT | APPROVED | PAID | CANCELLED
+  decidedBy       String?   @map("decided_by")
+  decidedAt       DateTime? @map("decided_at")
+  paidAt          DateTime? @map("paid_at")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
@@ -1216,19 +1415,19 @@ model SeveranceCase {
 // =======================================================================
 
 model JobRequisition {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  title               String
-  departmentId        String
-  status              String   @default("pending_approval") // pending_approval, approved, rejected, closed
-  approvedBy          String?
-  manpowerPlanItemId  String?  // Link to approved manpower plan item (FR-04)
-  createdAt           DateTime @default(now())
+  id                 String   @id @default(uuid())
+  tenantId           String
+  title              String
+  departmentId       String
+  status             String   @default("pending_approval") // pending_approval, approved, rejected, closed
+  approvedBy         String?
+  manpowerPlanItemId String? // Link to approved manpower plan item (FR-04)
+  createdAt          DateTime @default(now())
 
-  department         Department          @relation(fields: [departmentId], references: [id])
-  approver           Employee?           @relation("requisition_approver", fields: [approvedBy], references: [id])
-  manpowerPlanItem   ManpowerPlanItem?   @relation(fields: [manpowerPlanItemId], references: [id])
-  postings           JobPosting[]
+  department       Department        @relation(fields: [departmentId], references: [id])
+  approver         Employee?         @relation("requisition_approver", fields: [approvedBy], references: [id])
+  manpowerPlanItem ManpowerPlanItem? @relation(fields: [manpowerPlanItemId], references: [id])
+  postings         JobPosting[]
 
   @@index([tenantId, status])
 }
@@ -1573,16 +1772,16 @@ model EmployeeBenefitComponent {
 // =======================================================================
 
 model ReviewCycle {
-  id                String              @id @default(uuid())
-  tenantId          String
-  name              String
-  period            String // Q1_2026, H1_2026, YEARLY_2026
-  startDate         DateTime
-  endDate           DateTime
-  type              ReviewCycleType     // QUARTERLY, SEMI_ANNUAL, ANNUAL
-  status            CycleStatus         @default(UPCOMING)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id        String          @id @default(uuid())
+  tenantId  String
+  name      String
+  period    String // Q1_2026, H1_2026, YEARLY_2026
+  startDate DateTime
+  endDate   DateTime
+  type      ReviewCycleType // QUARTERLY, SEMI_ANNUAL, ANNUAL
+  status    CycleStatus     @default(UPCOMING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   reviews             PerformanceReview[]
   calibrationSessions CalibrationSession[]
@@ -1681,25 +1880,25 @@ model FinalScore {
 // =======================================================================
 
 model TalentPool {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   tenantId    String
   name        String
   description String?
   criteria    String?
   status      TalentPoolStatus @default(ACTIVE)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   deletedAt   DateTime?
 
-  tenant    Tenant               @relation(fields: [tenantId], references: [id])
-  members   TalentPoolMember[]
+  tenant  Tenant             @relation(fields: [tenantId], references: [id])
+  members TalentPoolMember[]
 
   @@unique([tenantId, name])
   @@index([tenantId, status])
 }
 
 model TalentPoolMember {
-  id              String       @id @default(uuid())
+  id              String          @id @default(uuid())
   poolId          String
   employeeId      String
   performanceBand String? // HIGH, MID, LOW
@@ -1707,7 +1906,7 @@ model TalentPoolMember {
   readiness       TalentReadiness @default(NOT_READY)
   notes           String?
   addedById       String
-  addedAt         DateTime     @default(now())
+  addedAt         DateTime        @default(now())
 
   pool     TalentPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
   employee Employee   @relation(fields: [employeeId], references: [id])
@@ -1718,42 +1917,42 @@ model TalentPoolMember {
 }
 
 model SuccessionPlan {
-  id                 String          @id @default(uuid())
-  tenantId           String
-  positionId         String
-  departmentId       String?
-  currentEmployeeId  String? // incumbent
-  status             SuccessionPlanStatus @default(DRAFT)
+  id                String               @id @default(uuid())
+  tenantId          String
+  positionId        String
+  departmentId      String?
+  currentEmployeeId String? // incumbent
+  status            SuccessionPlanStatus @default(DRAFT)
   riskCode          String? // LOW / MEDIUM / HIGH (vacancy risk)
-  targetReadyDate    DateTime?
-  notes              String?
-  createdById        String
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  deletedAt          DateTime?
+  targetReadyDate   DateTime?
+  notes             String?
+  createdById       String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  deletedAt         DateTime?
 
-  tenant           Tenant               @relation(fields: [tenantId], references: [id])
-  position         Position             @relation(fields: [positionId], references: [id])
-  department       Department?          @relation(fields: [departmentId], references: [id])
-  currentHolder    Employee?            @relation("succession_incumbent", fields: [currentEmployeeId], references: [id])
-  createdBy        User                 @relation("succession_creator", fields: [createdById], references: [id])
-  candidates       SuccessionCandidate[]
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  position      Position              @relation(fields: [positionId], references: [id])
+  department    Department?           @relation(fields: [departmentId], references: [id])
+  currentHolder Employee?             @relation("succession_incumbent", fields: [currentEmployeeId], references: [id])
+  createdBy     User                  @relation("succession_creator", fields: [createdById], references: [id])
+  candidates    SuccessionCandidate[]
 
   @@unique([tenantId, positionId])
   @@index([tenantId, status])
 }
 
 model SuccessionCandidate {
-  id              String           @id @default(uuid())
+  id              String          @id @default(uuid())
   planId          String
   employeeId      String
-  readiness       TalentReadiness  @default(NOT_READY)
-  rank            Int              @default(0)
+  readiness       TalentReadiness @default(NOT_READY)
+  rank            Int             @default(0)
   assessmentNotes String?
   decision        String? // PROMOTED / PENDING / NOT_SELECTED
   addedById       String
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   plan     SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   employee Employee       @relation(fields: [employeeId], references: [id])
@@ -1785,12 +1984,12 @@ model Training {
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
 
   participants                   TrainingParticipant[]
-  recommendedViolationCategory   ViolationCategory? @relation("recommended_k3_training", fields: [recommendedViolationCategoryId], references: [id])
+  recommendedViolationCategory   ViolationCategory?    @relation("recommended_k3_training", fields: [recommendedViolationCategoryId], references: [id])
   recommendedViolationCategoryId String?
 
   // LMS enhancements
-  courseId     String?
-  course       Course?          @relation(fields: [courseId], references: [id])
+  courseId String?
+  course   Course? @relation(fields: [courseId], references: [id])
 }
 
 // LMS Course — structured learning path with modules and lessons
@@ -1801,15 +2000,15 @@ model Course {
   description String?
   category    String?  @default("GENERAL")
   imageUrl    String?
-  duration    Int?     // duration in minutes
+  duration    Int? // duration in minutes
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
 
-  modules          CourseModule[]
-  trainees         CourseTrainee[]
-  trainings        Training[]
+  modules   CourseModule[]
+  trainees  CourseTrainee[]
+  trainings Training[]
 }
 
 model CourseModule {
@@ -1818,85 +2017,85 @@ model CourseModule {
   title       String
   description String?
   order       Int      @default(0)
-  duration    Int?     // minutes
+  duration    Int? // minutes
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  course   Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons  Lesson[]
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
 }
 
 model Lesson {
   id          String   @id @default(uuid())
   moduleId    String
   title       String
-  content     String?  // HTML/text content or URL to video/material
+  content     String? // HTML/text content or URL to video/material
   contentType String?  @default("TEXT") // TEXT, VIDEO, PDF, LINK
-  duration    Int?     // minutes
+  duration    Int? // minutes
   order       Int      @default(0)
   isRequired  Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  module     CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  quizzes    Quiz[]
+  module  CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  quizzes Quiz[]
 }
 
 model Quiz {
-  id          String   @id @default(uuid())
-  lessonId    String
-  title       String
-  description String?
-  maxScore    Int      @default(100)
-  passingScore Int     @default(70)
-  timeLimit   Int?     // minutes
-  attemptsAllowed Int @default(3)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid())
+  lessonId        String
+  title           String
+  description     String?
+  maxScore        Int      @default(100)
+  passingScore    Int      @default(70)
+  timeLimit       Int? // minutes
+  attemptsAllowed Int      @default(3)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  lesson   Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson    Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   questions QuizQuestion[]
   attempts  QuizAttempt[]
 }
 
 model QuizQuestion {
-  id         String   @id @default(uuid())
-  quizId     String
-  question   String
-  questionType String @default("MULTIPLE_CHOICE") // MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER
-  options    String?  // JSON array for multiple choice
+  id            String   @id @default(uuid())
+  quizId        String
+  question      String
+  questionType  String   @default("MULTIPLE_CHOICE") // MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER
+  options       String? // JSON array for multiple choice
   correctAnswer String
-  points     Int      @default(1)
-  order      Int      @default(0)
-  createdAt  DateTime @default(now())
+  points        Int      @default(1)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
 
   quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
 }
 
 model QuizAttempt {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   quizId      String
   traineeId   String
   score       Int
   passed      Boolean
-  answers     String   // JSON: { questionId: answer, ... }
-  submittedAt DateTime @default(now())
+  answers     String // JSON: { questionId: answer, ... }
+  submittedAt DateTime  @default(now())
   completedAt DateTime?
 
-  quiz  Quiz   @relation(fields: [quizId], references: [id])
+  quiz    Quiz     @relation(fields: [quizId], references: [id])
   trainee Employee @relation(fields: [traineeId], references: [id])
 
   @@unique([quizId, traineeId])
 }
 
 model CourseTrainee {
-  id          String   @id @default(uuid())
+  id          String                 @id @default(uuid())
   courseId    String
   employeeId  String
   status      CourseEnrollmentStatus @default(ENROLLED) // ENROLLED, IN_PROGRESS, COMPLETED, DROPPED
-  progress    Int      @default(0) // percentage
-  score       Decimal? @db.Decimal(5, 2)
-  enrolledAt  DateTime @default(now())
+  progress    Int                    @default(0) // percentage
+  score       Decimal?               @db.Decimal(5, 2)
+  enrolledAt  DateTime               @default(now())
   completedAt DateTime?
 
   course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
@@ -1907,91 +2106,93 @@ model CourseTrainee {
 
 // 360° Feedback
 model Feedback360 {
-  id             String   @id @default(uuid())
-  tenantId       String
-  reviewCycleId  String
-  revieweeId     String
-  reviewerId     String   // the person giving feedback
-  reviewerType   FeedbackReviewerType // SELF, MANAGER, PEER, DIRECT_REPORT, CUSTOM
-  status         FeedbackStatus @default(PENDING)
-  submittedAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String               @id @default(uuid())
+  tenantId      String
+  reviewCycleId String
+  revieweeId    String
+  reviewerId    String // the person giving feedback
+  reviewerType  FeedbackReviewerType // SELF, MANAGER, PEER, DIRECT_REPORT, CUSTOM
+  status        FeedbackStatus       @default(PENDING)
+  submittedAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
-  cycle   ReviewCycle @relation(fields: [reviewCycleId], references: [id])
-  reviewee Employee   @relation("feedback_reviewee", fields: [revieweeId], references: [id])
-  reviewer Employee   @relation("feedback_reviewer", fields: [reviewerId], references: [id])
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  cycle    ReviewCycle @relation(fields: [reviewCycleId], references: [id])
+  reviewee Employee    @relation("feedback_reviewee", fields: [revieweeId], references: [id])
+  reviewer Employee    @relation("feedback_reviewer", fields: [reviewerId], references: [id])
+  tenant   Tenant      @relation(fields: [tenantId], references: [id])
 
   questions Feedback360Question[]
+
   @@unique([reviewCycleId, revieweeId, reviewerId])
 }
 
 model Feedback360Question {
-  id              String   @id @default(uuid())
-  feedback360Id   String
-  questionText    String
-  questionType    String   @default("LIKERT_5") // LIKERT_5, NA, TEXT
-  rating          Int?     // 1-5 for Likert
-  comment         String?
-  order            Int     @default(0)
-  createdAt       DateTime @default(now())
+  id            String   @id @default(uuid())
+  feedback360Id String
+  questionText  String
+  questionType  String   @default("LIKERT_5") // LIKERT_5, NA, TEXT
+  rating        Int? // 1-5 for Likert
+  comment       String?
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
 
   feedback360 Feedback360 @relation(fields: [feedback360Id], references: [id], onDelete: Cascade)
 }
 
 // Individual Development Plan
 model IndividualDevelopmentPlan {
-  id              String   @id @default(uuid())
-  tenantId        String
-  employeeId      String
-  reviewCycleId   String?
-  title           String
-  description     String?
-  skillsGap       String?  // JSON: identified skill gaps
-  objectives      String   // JSON array of development objectives
-  startDate       DateTime
-  endDate         DateTime
-  status          IDPStatus @default(DRAFT) // DRAFT, ACTIVE, COMPLETED, CANCELLED
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String    @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  reviewCycleId String?
+  title         String
+  description   String?
+  skillsGap     String? // JSON: identified skill gaps
+  objectives    String // JSON array of development objectives
+  startDate     DateTime
+  endDate       DateTime
+  status        IDPStatus @default(DRAFT) // DRAFT, ACTIVE, COMPLETED, CANCELLED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  employee Employee? @relation(fields: [employeeId], references: [id])
+  employee Employee?    @relation(fields: [employeeId], references: [id])
   cycle    ReviewCycle? @relation(fields: [reviewCycleId], references: [id])
-  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  tenant   Tenant       @relation(fields: [tenantId], references: [id])
 
   activities IDPActivity[]
+
   @@index([tenantId, employeeId])
 }
 
 model IDPActivity {
-  id              String   @id @default(uuid())
-  idpId           String
-  title           String
-  description     String?
-  type            IDPActivityType @default(TRAINING) // TRAINING, MENTORING, PROJECT, CERTIFICATION, SELF_STUDY, CROSS_TRAINING
-  targetDate      DateTime?
-  status          IDPActivityStatus @default(PENDING) // PENDING, IN_PROGRESS, COMPLETED
-  progress        Int @default(0) // percentage
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          String            @id @default(uuid())
+  idpId       String
+  title       String
+  description String?
+  type        IDPActivityType   @default(TRAINING) // TRAINING, MENTORING, PROJECT, CERTIFICATION, SELF_STUDY, CROSS_TRAINING
+  targetDate  DateTime?
+  status      IDPActivityStatus @default(PENDING) // PENDING, IN_PROGRESS, COMPLETED
+  progress    Int               @default(0) // percentage
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   idp IndividualDevelopmentPlan @relation(fields: [idpId], references: [id], onDelete: Cascade)
 }
 
 // UMK/UMP Provincial Minimum Wage
 model ProvincialMinimumWage {
-  id              String   @id @default(uuid())
-  tenantId        String
-  province        String
-  year            Int
-  minimumWage     Decimal  @db.Decimal(18, 2)
-  effectiveDate   DateTime
-  source          String?  // government regulation reference
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  tenantId      String
+  province      String
+  year          Int
+  minimumWage   Decimal  @db.Decimal(18, 2)
+  effectiveDate DateTime
+  source        String? // government regulation reference
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, province, year])
   @@index([tenantId, province])
@@ -2047,10 +2248,11 @@ model ResignationRequest {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  employee         Employee          @relation(fields: [employeeId], references: [id])
-  exitInterview    ExitInterview?
-  offboardingTasks OffboardingTask[]
-  finalSettlement  FinalSettlement?
+  employee             Employee              @relation(fields: [employeeId], references: [id])
+  exitInterview        ExitInterview?
+  offboardingTasks     OffboardingTask[]
+  finalSettlement      FinalSettlement?
+  ClearanceCertificate ClearanceCertificate?
 }
 
 model ExitInterview {
@@ -2093,6 +2295,58 @@ model FinalSettlement {
   createdAt         DateTime @default(now())
 
   resignation ResignationRequest @relation(fields: [resignationId], references: [id], onDelete: Cascade)
+}
+
+model ClearanceCertificate {
+  id            String    @id @default(uuid())
+  tenantId      String
+  resignationId String    @unique
+  employeeId    String
+  issuedBy      String
+  issuedAt      DateTime  @default(now())
+  validUntil    DateTime?
+  status        String    @default("draft") // draft, issued, revoked
+  reason        String // reason for leaving: RESIGNATION, RETIREMENT, TERMINATION, END_OF_CONTRACT
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  resignation ResignationRequest @relation(fields: [resignationId], references: [id], onDelete: Cascade)
+  employee    Employee           @relation(fields: [employeeId], references: [id])
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+}
+
+model Alumni {
+  id                   String    @id @default(uuid())
+  tenantId             String
+  employeeId           String
+  employeeCode         String
+  fullName             String
+  lastPosition         String?
+  lastDepartment       String?
+  lastGrade            String?
+  resignationDate      DateTime
+  resignationType      String
+  personalEmail        String?
+  personalPhone        String?
+  linkedinUrl          String?
+  currentCompany       String?
+  currentPosition      String?
+  isAvailableForRehire Boolean   @default(true)
+  referralCount        Int       @default(0)
+  notes                String?
+  joinedAt             DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, isAvailableForRehire])
 }
 
 model MovementRequest {
@@ -2317,6 +2571,7 @@ enum RequestStatus {
   APPROVED
   REJECTED
   CANCELLED
+  COMPLETED
 }
 
 enum PayrollComponentType {
@@ -2375,6 +2630,10 @@ enum PayslipStatus {
 enum BpjsType {
   KES
   KET
+  JKK
+  JKM
+  JHT
+  JP
 }
 
 enum BpjsConfigStatus {
@@ -2800,16 +3059,16 @@ enum ManpowerType {
 }
 
 model ViolationCategory {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   name        String
   code        String
   description String?
-  severity    Int      @default(1) // 1=MILD, 2=MODERATE, 3=SEVERE
-  canSkipSP1  Boolean  @default(false) // pelanggaran berat → langsung SP2/SP3
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  severity    Int       @default(1) // 1=MILD, 2=MODERATE, 3=SEVERE
+  canSkipSP1  Boolean   @default(false) // pelanggaran berat → langsung SP2/SP3
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
   tenant               Tenant             @relation(fields: [tenantId], references: [id])
@@ -2832,18 +3091,18 @@ model DisciplinaryCase {
   status              DisciplinaryStatus @default(DRAFT)
   approvedById        String?
   acknowledgedAt      DateTime?
-  escalatedAt         DateTime?         // BR-05: otomatis jika >3 hari tidak diakui
-  escalatedToId       String?           // atasan / HR yang dieskalasi
+  escalatedAt         DateTime? // BR-05: otomatis jika >3 hari tidak diakui
+  escalatedToId       String? // atasan / HR yang dieskalasi
   notes               String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   deletedAt           DateTime?
 
-  tenant           Tenant           @relation(fields: [tenantId], references: [id])
-  employee         Employee         @relation(fields: [employeeId], references: [id])
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  employee          Employee          @relation(fields: [employeeId], references: [id])
   violationCategory ViolationCategory @relation(fields: [violationCategoryId], references: [id])
-  approvedBy       User?            @relation("approved_disciplinary", fields: [approvedById], references: [id])
-  escalatedTo      User?            @relation("escalated_disciplinary", fields: [escalatedToId], references: [id])
+  approvedBy        User?             @relation("approved_disciplinary", fields: [approvedById], references: [id])
+  escalatedTo       User?             @relation("escalated_disciplinary", fields: [escalatedToId], references: [id])
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -2851,26 +3110,26 @@ model DisciplinaryCase {
 }
 
 model IncidentReport {
-  id                     String           @id @default(uuid())
-  tenantId               String
-  employeeId             String           // pelapor
-  location               String
-  incidentDate           DateTime
-  severity               IncidentSeverity
-  category               IncidentCategory
-  description            String
-  reportedById           String?
-  status                 IncidentStatus   @default(REPORTED)
+  id                      String           @id @default(uuid())
+  tenantId                String
+  employeeId              String // pelapor
+  location                String
+  incidentDate            DateTime
+  severity                IncidentSeverity
+  category                IncidentCategory
+  description             String
+  reportedById            String?
+  status                  IncidentStatus   @default(REPORTED)
   authorityReportDeadline DateTime?
-  authorityReportedAt    DateTime?
-  resolutionNotes        String?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
-  deletedAt              DateTime?
+  authorityReportedAt     DateTime?
+  resolutionNotes         String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  deletedAt               DateTime?
 
-  tenant     Tenant     @relation(fields: [tenantId], references: [id])
-  employee   Employee   @relation(fields: [employeeId], references: [id])
-  reportedBy User?      @relation("reported_incidents", fields: [reportedById], references: [id])
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  reportedBy User?    @relation("reported_incidents", fields: [reportedById], references: [id])
 
   @@index([tenantId, status])
   @@index([tenantId, severity])
@@ -2900,6 +3159,52 @@ model PpeAssignment {
 }
 
 // =======================================================================
+// HUBUNGAN INDUSTRIAL KOLEKTIF — Grievance & LKS Bipartit (UU 13/2003,
+// UU 2/2004 Penyelesaian Perselisihan Hubungan Industrial)
+// =======================================================================
+
+model GrievanceCase {
+  id             String    @id @default(uuid())
+  tenantId       String
+  reporterId     String // karyawan pelapor
+  handlerId      String? // penangan (wajib beda dari pelapor)
+  category       String // UPAH | JADWAL | KEKERASAN | DISKRIMINASI | K3 | LAINNYA
+  subject        String
+  description    String
+  isConfidential Boolean   @default(true)
+  status         String    @default("REPORTED") // REPORTED | IN_REVIEW | MEDIATION | RESOLVED | CLOSED | REJECTED
+  resolution     String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  reporter Employee @relation(fields: [reporterId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([reporterId])
+}
+
+model BipartiteSession {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  sessionDate         DateTime
+  topic               String
+  managementAttendees String // JSON array nama perwakilan pengusaha
+  workerAttendees     String // JSON array nama perwakilan pekerja/serikat
+  minutes             String?
+  followUps           String? // JSON array {task, owner, dueDate, done}
+  status              String   @default("SCHEDULED") // SCHEDULED | HELD | FOLLOW_UP | CLOSED
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, sessionDate])
+}
+
+// =======================================================================
 // SYSTEM ADMINISTRATION — v1.2 Addendum: Tenant Branding
 // =======================================================================
 
@@ -2920,19 +3225,19 @@ model TenantBranding {
 // =======================================================================
 
 model DocumentCategory {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   name        String
   description String?
   icon        String?
-  color       String?  @default("#6366F1")
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  color       String?   @default("#6366F1")
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
   documents Document[]
 
   @@unique([tenantId, name])
@@ -2940,33 +3245,33 @@ model DocumentCategory {
 }
 
 model Document {
-  id          String   @id @default(uuid())
-  tenantId    String
-  categoryId  String?
-  title       String
-  description String?
-  content     String?   // Markdown/HTML content
-  version     Int      @default(1)
-  status      DocumentStatus @default(DRAFT)
-  accessLevel DocumentAccessLevel @default(TENANT)
+  id           String              @id @default(uuid())
+  tenantId     String
+  categoryId   String?
+  title        String
+  description  String?
+  content      String? // Markdown/HTML content
+  version      Int                 @default(1)
+  status       DocumentStatus      @default(DRAFT)
+  accessLevel  DocumentAccessLevel @default(TENANT)
   departmentId String?
-  tags        String[] @default([])
-  isTemplate  Boolean  @default(false)
-  templateId  String?
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  publishedAt DateTime?
+  tags         String[]            @default([])
+  isTemplate   Boolean             @default(false)
+  templateId   String?
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  deletedAt    DateTime?
+  publishedAt  DateTime?
 
-  tenant       Tenant           @relation(fields: [tenantId], references: [id])
-  category     DocumentCategory? @relation(fields: [categoryId], references: [id])
-  department   Department?      @relation(fields: [departmentId], references: [id])
-  creator      User             @relation(fields: [createdById], references: [id])
-  versions     DocumentVersion[]
-  signatures   DocumentSignature[]
-  permissions  DocumentPermission[]
-  activities   DocumentActivity[]
+  tenant      Tenant               @relation(fields: [tenantId], references: [id])
+  category    DocumentCategory?    @relation(fields: [categoryId], references: [id])
+  department  Department?          @relation(fields: [departmentId], references: [id])
+  creator     User                 @relation(fields: [createdById], references: [id])
+  versions    DocumentVersion[]
+  signatures  DocumentSignature[]
+  permissions DocumentPermission[]
+  activities  DocumentActivity[]
 
   @@index([tenantId, status])
   @@index([tenantId, categoryId])
@@ -2976,14 +3281,14 @@ model Document {
 }
 
 model DocumentVersion {
-  id         String   @id @default(uuid())
-  documentId String
-  version    Int
-  content    String
-  title      String
-  changeLog  String?
+  id          String   @id @default(uuid())
+  documentId  String
+  version     Int
+  content     String
+  title       String
+  changeLog   String?
   createdById String
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   creator  User     @relation(fields: [createdById], references: [id])
@@ -2993,13 +3298,13 @@ model DocumentVersion {
 }
 
 model DocumentPermission {
-  id            String   @id @default(uuid())
-  documentId    String
+  id             String                  @id @default(uuid())
+  documentId     String
   permissionType DocumentPermissionType // ROLE, USER, DEPARTMENT
-  targetId      String   // Role ID, User ID, Department ID
-  permission    DocumentPermissionLevel @default(VIEW)
-  createdAt     DateTime @default(now())
-  createdById   String
+  targetId       String // Role ID, User ID, Department ID
+  permission     DocumentPermissionLevel @default(VIEW)
+  createdAt      DateTime                @default(now())
+  createdById    String
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   creator  User     @relation(fields: [createdById], references: [id])
@@ -3009,65 +3314,66 @@ model DocumentPermission {
 }
 
 model DocumentSignature {
-  id            String   @id @default(uuid())
-  documentId    String
+  id              String          @id @default(uuid())
+  documentId      String
   documentVersion Int?
-  userId        String
-  status        SignatureStatus @default(PENDING)
-  signatureData String?
-  signedAt      DateTime?
-  expiresAt     DateTime?
-  ipAddress     String?
-  userAgent     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  userId          String
+  status          SignatureStatus @default(PENDING)
+  signatureData   String?
+  signedAt        DateTime?
+  expiresAt       DateTime?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 
   @@index([documentId, userId])
   @@index([documentId, status])
 }
 
 model DocumentActivity {
-  id          String   @id @default(uuid())
-  documentId  String
-  userId      String
-  action      DocumentAction
-  details     Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id         String         @id @default(uuid())
+  documentId String
+  userId     String
+  action     DocumentAction
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime       @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 
   @@index([documentId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
 }
 
 model Announcement {
-  id          String   @id @default(uuid())
-  tenantId    String
-  title       String
-  content     String
-  type        AnnouncementType @default(GENERAL)
-  priority    AnnouncementPriority @default(NORMAL)
-  status      AnnouncementStatus @default(DRAFT)
-  targetAudience AnnouncementAudience @default(ALL)
-  targetIds   String[] @default([])
-  publishAt   DateTime?
-  expireAt    DateTime?
-  attachmentUrls String[] @default([])
-  readReceiptRequired Boolean @default(false)
-  allowComments Boolean @default(true)
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
+  id                  String               @id @default(uuid())
+  tenantId            String
+  title               String
+  content             String
+  type                AnnouncementType     @default(GENERAL)
+  priority            AnnouncementPriority @default(NORMAL)
+  status              AnnouncementStatus   @default(DRAFT)
+  targetAudience      AnnouncementAudience @default(ALL)
+  targetIds           String[]             @default([])
+  publishAt           DateTime?
+  expireAt            DateTime?
+  attachmentUrls      String[]             @default([])
+  readReceiptRequired Boolean              @default(false)
+  allowComments       Boolean              @default(true)
+  createdById         String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id])
-  creator      User               @relation(fields: [createdById], references: [id])
+  tenant  Tenant @relation(fields: [tenantId], references: [id])
+  creator User   @relation(fields: [createdById], references: [id])
+
   @@index([tenantId, status, publishAt(sort: Desc)])
   @@index([tenantId, type])
   @@index([tenantId, createdById])
@@ -3151,18 +3457,18 @@ enum AnnouncementStatus {
 // =======================================================================
 
 model SystemHealthSnapshot {
-  id             String   @id @default(uuid())
-  tenantId       String
-  cpuUsage       Float?   // 0-100
-  memoryUsedMb   Float?
-  memoryTotalMb  Float?
-  diskUsedMb     Float?
-  diskTotalMb    Float?
-  uptimeSeconds  Int?
-  activeUsers    Int?     @default(0)
-  apiLatencyMs   Float?   // p95 in ms
-  errorRate      Float?   // percentage
-  snapshotAt     DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenantId      String
+  cpuUsage      Float? // 0-100
+  memoryUsedMb  Float?
+  memoryTotalMb Float?
+  diskUsedMb    Float?
+  diskTotalMb   Float?
+  uptimeSeconds Int?
+  activeUsers   Int?     @default(0)
+  apiLatencyMs  Float? // p95 in ms
+  errorRate     Float? // percentage
+  snapshotAt    DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -3170,16 +3476,16 @@ model SystemHealthSnapshot {
 }
 
 model BackupRecord {
-  id          String     @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
-  startedAt   DateTime   @default(now())
+  startedAt   DateTime  @default(now())
   completedAt DateTime?
   sizeBytes   BigInt?
-  status      String     @default("RUNNING") // RUNNING, SUCCESS, FAILED
-  location    String?    // file path / S3 key
+  status      String    @default("RUNNING") // RUNNING, SUCCESS, FAILED
+  location    String? // file path / S3 key
   errorLog    String?
-  triggeredBy String?    // userId or "SCHEDULED"
-  createdAt   DateTime   @default(now())
+  triggeredBy String? // userId or "SCHEDULED"
+  createdAt   DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -3219,48 +3525,48 @@ model LocationPing {
 }
 
 model FieldTerritory {
-  id            String   @id @default(uuid())
-  tenantId      String
-  employeeId    String   @unique
-  territoryName String
+  id              String   @id @default(uuid())
+  tenantId        String
+  employeeId      String   @unique
+  territoryName   String
   boundaryGeoJson String // GeoJSON Polygon/MultiPolygon
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  employee            Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   territoryViolations TerritoryViolation[]
 
   @@index([tenantId])
 }
 
 model LiveTrackingSettings {
-  id                String   @id @default(uuid())
-  tenantId          String   @unique
-  pingIntervalMinutes Int     @default(15)
-  enabled           Boolean  @default(true)
-  retentionDays     Int      @default(90)
-  requireConsent    Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  pingIntervalMinutes Int      @default(15)
+  enabled             Boolean  @default(true)
+  retentionDays       Int      @default(90)
+  requireConsent      Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 }
 
 model TerritoryViolation {
-  id            String   @id @default(uuid())
-  tenantId      String
-  employeeId    String
-  territoryId   String
-  lat           Float
-  lng           Float
+  id             String   @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  territoryId    String
+  lat            Float
+  lng            Float
   distanceMeters Float
-  recordedAt    DateTime @default(now())
-  notified      Boolean  @default(false)
+  recordedAt     DateTime @default(now())
+  notified       Boolean  @default(false)
 
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  territory  FieldTerritory @relation(fields: [territoryId], references: [id])
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  employee  Employee       @relation(fields: [employeeId], references: [id])
+  territory FieldTerritory @relation(fields: [territoryId], references: [id])
 
   @@index([tenantId, employeeId, recordedAt(sort: Desc)])
 }
@@ -3270,21 +3576,21 @@ model TerritoryViolation {
 // =======================================================================
 
 model EngagementSurvey {
-  id           String            @id @default(uuid())
-  tenantId     String
-  title        String
-  type         SurveyType        @default(PULSE)
-  isAnonymous  Boolean           @default(true)
-  targetScope  String?           // JSON: department_ids, grade_ids, etc.
-  startDate    DateTime
-  endDate      DateTime
-  status       SurveyStatus      @default(DRAFT)
-  createdBy    String
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  deletedAt    DateTime?
+  id          String       @id @default(uuid())
+  tenantId    String
+  title       String
+  type        SurveyType   @default(PULSE)
+  isAnonymous Boolean      @default(true)
+  targetScope String? // JSON: department_ids, grade_ids, etc.
+  startDate   DateTime
+  endDate     DateTime
+  status      SurveyStatus @default(DRAFT)
+  createdBy   String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
 
-  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
   questions   SurveyQuestion[]
   responses   SurveyResponse[]
   actionItems SurveyActionItem[]
@@ -3294,33 +3600,33 @@ model EngagementSurvey {
 }
 
 model SurveyQuestion {
-  id          String         @id @default(uuid())
-  surveyId    String
+  id           String       @id @default(uuid())
+  surveyId     String
   questionText String
   questionType QuestionType
-  options     String?        // JSON array for multiple choice
-  isRequired  Boolean        @default(true)
-  order       Int            @default(0)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  options      String? // JSON array for multiple choice
+  isRequired   Boolean      @default(true)
+  order        Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   responses SurveyResponse[]
 
   @@index([surveyId, order])
 }
 
 model SurveyResponse {
-  id           String       @id @default(uuid())
+  id           String   @id @default(uuid())
   surveyId     String
   questionId   String
   employeeId   String?
-  respondentId String?      // Anonymous dedup token — UUID generated per submission (null for identified)
+  respondentId String? // Anonymous dedup token — UUID generated per submission (null for identified)
   answerValue  String
-  submittedAt  DateTime     @default(now())
+  submittedAt  DateTime @default(now())
 
-  survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  question  SurveyQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  question SurveyQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([surveyId, employeeId])
   @@index([surveyId, respondentId])
@@ -3328,17 +3634,17 @@ model SurveyResponse {
 }
 
 model SurveyActionItem {
-  id          String        @id @default(uuid())
+  id          String       @id @default(uuid())
   surveyId    String
   title       String
   description String?
   assigneeId  String
   dueDate     DateTime
-  status      ActionStatus  @default(PENDING)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  status      ActionStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
   @@index([surveyId, assigneeId])
 }
@@ -3348,38 +3654,38 @@ model SurveyActionItem {
 // =======================================================================
 
 model ManpowerPlan {
-  id          String          @id @default(uuid())
-  tenantId    String
+  id           String             @id @default(uuid())
+  tenantId     String
   departmentId String
-  period      String          // e.g., "2026-H1", "2026-Q3"
-  version     Int             @default(1)
-  status      ManpowerPlanStatus @default(DRAFT)
-  submittedBy String
-  approvedBy  String?
-  approvedAt  DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  deletedAt   DateTime?
+  period       String // e.g., "2026-H1", "2026-Q3"
+  version      Int                @default(1)
+  status       ManpowerPlanStatus @default(DRAFT)
+  submittedBy  String
+  approvedBy   String?
+  approvedAt   DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  deletedAt    DateTime?
 
-  tenant      Tenant          @relation(fields: [tenantId], references: [id])
-  items       ManpowerPlanItem[]
+  tenant Tenant             @relation(fields: [tenantId], references: [id])
+  items  ManpowerPlanItem[]
 
   @@index([tenantId, departmentId, period])
   @@index([tenantId, status])
 }
 
 model ManpowerPlanItem {
-  id                String          @id @default(uuid())
-  manpowerPlanId    String
-  positionTitle     String
-  gradeId           String?
-  quantity          Int             @default(1)
-  type              ManpowerType    @default(NEW)
-  estimatedCost     Float?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id             String       @id @default(uuid())
+  manpowerPlanId String
+  positionTitle  String
+  gradeId        String?
+  quantity       Int          @default(1)
+  type           ManpowerType @default(NEW)
+  estimatedCost  Float?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  manpowerPlan  ManpowerPlan     @relation(fields: [manpowerPlanId], references: [id], onDelete: Cascade)
+  manpowerPlan    ManpowerPlan     @relation(fields: [manpowerPlanId], references: [id], onDelete: Cascade)
   jobRequisitions JobRequisition[]
 
   @@index([manpowerPlanId])
