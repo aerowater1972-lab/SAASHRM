@@ -29,10 +29,11 @@ describe('AuthService', () => {
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue?: any) => {
       const config: Record<string, string> = {
-        JWT_SECRET: 'test-secret',
+        JWT_SECRET: 'test-jwt-secret-32-chars-minimum!',
         JWT_EXPIRES_IN: '15m',
-        JWT_REFRESH_SECRET: 'test-refresh-secret',
+        JWT_REFRESH_SECRET: 'test-refresh-secret-32-chars-min!',
         JWT_REFRESH_EXPIRES_IN: '7d',
+        ALLOW_PUBLIC_REGISTER: 'true',
       };
       return config[key] ?? defaultValue;
     }),
@@ -82,6 +83,7 @@ describe('AuthService', () => {
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (jwt.sign as jest.Mock).mockReturnValue('mock-jwt-token');
     mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    mockPrisma.tenant.findUnique.mockResolvedValue({ id: 'default', name: 'Default' });
   });
 
   afterEach(() => {
@@ -109,6 +111,14 @@ describe('AuthService', () => {
       const dto = { email: 'test@example.com', password: 'password123', fullName: 'Test User' };
       await expect(service.register('default', dto)).rejects.toThrow(ConflictException);
       expect(mockPrisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException for unknown tenant', async () => {
+      mockPrisma.tenant.findUnique.mockResolvedValueOnce(null);
+
+      const dto = { email: 'new@example.com', password: 'password123', fullName: 'New User' };
+      await expect(service.register('no-such-tenant', dto)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when ALLOW_PUBLIC_REGISTER=false', async () => {

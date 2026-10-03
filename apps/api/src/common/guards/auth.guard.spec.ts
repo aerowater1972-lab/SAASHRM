@@ -11,8 +11,10 @@ describe('AuthGuard', () => {
   let reflector: any;
   let configService: any;
 
+  const TEST_JWT_SECRET = 'test-jwt-secret-min-32-chars-long!';
+
   const mockConfigService = {
-    get: jest.fn().mockReturnValue('test-secret'),
+    get: jest.fn().mockReturnValue(TEST_JWT_SECRET),
   };
 
   const mockReflector = {
@@ -102,7 +104,9 @@ describe('AuthGuard', () => {
       const result = guard.canActivate(context);
 
       expect(result).toBe(true);
-      expect(jwt.verify).toHaveBeenCalledWith('cookie-token', 'test-secret');
+      expect(jwt.verify).toHaveBeenCalledWith('cookie-token', TEST_JWT_SECRET, {
+        algorithms: ['HS256'],
+      });
     });
   });
 });
