@@ -64,6 +64,40 @@ export class BpjsService {
 
     const configs = await this.getEffectiveConfigs(tenantId, await this.resolvePeriodDate(tenantId, dto.periodId));
 
+    const { details, totals } = this.computeDetails(employee, baseSalary, configs);
+
+    return {
+      employeeId: dto.employeeId,
+      employeeName: employee.fullName,
+      baseSalary,
+      periodId: dto.periodId,
+      details,
+      totals,
+    };
+  }
+
+  /**
+   * Batch variant: same math as calculate(), but the caller supplies the
+   * already-fetched employee row and configs — zero queries inside.
+   */
+  async calculateWithConfigs(
+    tenantId: string,
+    dto: { employee: any; periodId: string; baseSalary: number; configs: any[] },
+  ) {
+    if (!dto.employee) throw new NotFoundException('Employee not found');
+    const { details, totals } = this.computeDetails(dto.employee, dto.baseSalary, dto.configs);
+    return {
+      employeeId: dto.employee.id,
+      employeeName: dto.employee.fullName,
+      baseSalary: dto.baseSalary,
+      periodId: dto.periodId,
+      details,
+      totals,
+    };
+  }
+
+  private computeDetails(employee: any, baseSalary: number, configs: any[]) {
+
     const results: any[] = [];
     let totalEmployer = 0;
     let totalEmployee = 0;
@@ -140,10 +174,6 @@ export class BpjsService {
     totalEmployee += results[results.length - 1].employeeAmount;
 
     return {
-      employeeId: dto.employeeId,
-      employeeName: employee.fullName,
-      baseSalary,
-      periodId: dto.periodId,
       details: results,
       totals: {
         employer: totalEmployer,
@@ -209,7 +239,7 @@ export class BpjsService {
     };
   }
 
-  private async getEffectiveConfigs(tenantId: string, atDate: Date): Promise<any[]> {
+  async getEffectiveConfigs(tenantId: string, atDate: Date): Promise<any[]> {
     const rows: any[] = await this.prisma.bpjsConfig.findMany({
       where: { tenantId, status: 'ACTIVE', effectiveDate: { lte: atDate } } as any,
       orderBy: { effectiveDate: 'desc' } as any,

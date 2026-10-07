@@ -88,8 +88,28 @@ export class PayrollAdjustmentService {
     });
   }
 
-  async markApplied(ids: string[], runId: string) {
-    if (ids.length === 0) return;
+  /**
+   * Batch variant of getActiveForEmployee: all pending adjustments effective
+   * within the period, grouped by employeeId — one query regardless of headcount.
+   */
+  async getActiveForPeriod(
+    tenantId: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ) {
+    return this.prisma.payrollAdjustment.findMany({
+      where: {
+        tenantId,
+        status: 'PENDING' as any,
+        type: { in: ['EARNING', 'DEDUCTION'] as any },
+        effectiveDate: { lte: periodEnd },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: periodStart } }],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async markApplied(ids: string[], runId: string) {    if (ids.length === 0) return;
     const run = await this.prisma.payrollRun.findFirst({ where: { id: runId } });
     if ((run as any)?.status === 'LOCKED') {
       throw new ForbiddenException('Cannot apply adjustments to a locked payroll run');

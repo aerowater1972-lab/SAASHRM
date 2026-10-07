@@ -94,7 +94,10 @@ export class RunService {
     try {
       const period = (run as any).period;
       const employees = await this.employeeService.findActive(tenantId, {
-        employments: { where: { isActive: true }, include: { grade: true } },
+        employments: {
+          where: { isActive: true },
+          include: { department: true, position: true, grade: true },
+        },
         loans: { where: { status: 'PENDING' as any } },
       } as any);
 
@@ -103,45 +106,112 @@ export class RunService {
         orderBy: { createdAt: 'asc' },
       });
 
+      // Prefetch everything the per-employee calc needs: 5 queries total,
+      // independent of headcount (was: ~7 queries PER employee).
+      const periodEnd = new Date(period.endDate);
+      const periodStart = new Date(period.startDate);
+      const [bpjsConfigs, taxConfig, unionDuesRows, adjustmentRows, provincialWages] =
+        await Promise.all([
+          this.bpjsService.getEffectiveConfigs(tenantId, periodEnd),
+          this.taxService.getEffectiveConfig(tenantId, periodEnd),
+          this.prisma.salaryComponent.findMany({
+            where: {
+              employee: { tenantId },
+              componentType: 'union_dues',
+              effectiveDate: { lte: period.endDate },
+              OR: [{ endDate: null }, { endDate: { gte: period.startDate } }],
+            },
+          }),
+          this.adjustments.getActiveForPeriod(tenantId, periodStart, periodEnd),
+          this.prisma.provincialMinimumWage.findMany({
+            where: { tenantId, year: periodEnd.getFullYear() },
+          }),
+        ]);
+
+      const unionDuesByEmployee = new Map<string, any[]>();
+      for (const dues of unionDuesRows) {
+        const list = unionDuesByEmployee.get(dues.employeeId) ?? [];
+        list.push(dues);
+        unionDuesByEmployee.set(dues.employeeId, list);
+      }
+      const adjustmentsByEmployee = new Map<string, any[]>();
+      for (const adj of adjustmentRows as any[]) {
+        const list = adjustmentsByEmployee.get(adj.employeeId) ?? [];
+        list.push(adj);
+        adjustmentsByEmployee.set(adj.employeeId, list);
+      }
+      const wageByProvince = new Map<string, any>(
+        provincialWages.map((w: any) => [w.province, w]),
+      );
+
       const appliedAdjustmentIds: string[] = [];
 
+      // Pure-CPU per employee: no queries inside this loop.
+      const computed: Array<{ employee: any; payslipData: any }> = [];
       for (const employee of employees) {
-        const payslipData = await this.calculateEmployeePayroll(
-          tenantId, employee, period, components, id, appliedAdjustmentIds,
+        const payslipData = await this.computePayslipData(
+          tenantId, employee, period, components,
+          { bpjsConfigs, taxConfig, unionDuesByEmployee, adjustmentsByEmployee, wageByProvince },
+          appliedAdjustmentIds,
         );
-        // Rincian komponen disimpan ke PayrollItem, bukan kolom payslip.
-        const { items, ...payslipFields } = payslipData as any;
+        computed.push({ employee, payslipData });
+      }
 
-        const existingPayslip = await this.prisma.payslip.findFirst({
-          where: { runId: id, employeeId: employee.id },
+      // Batch writes: 1 find + 1 tx-update + 1 createMany + 1 deleteMany + 1 createMany.
+      const employeeIds = employees.map((e: any) => e.id);
+      const existingPayslips = employeeIds.length
+        ? await this.prisma.payslip.findMany({
+          where: { runId: id, employeeId: { in: employeeIds } },
+          select: { id: true, employeeId: true },
+        })
+        : [];
+      const payslipIdByEmployee = new Map(existingPayslips.map((p) => [p.employeeId, p.id]));
+
+      const updates = computed
+        .filter(({ employee }) => payslipIdByEmployee.has(employee.id))
+        .map(({ employee, payslipData }) => {
+          const { items, ...fields } = payslipData as any;
+          return this.prisma.payslip.update({
+            where: { id: payslipIdByEmployee.get(employee.id)! },
+            data: fields as any,
+          });
         });
+      if (updates.length > 0) {
+        await this.prisma.$transaction(updates);
+      }
 
-        const payslipId = existingPayslip
-          ? (await this.prisma.payslip.update({
-            where: { id: existingPayslip.id },
-            data: payslipFields as any,
-          })).id
-          : (await this.prisma.payslip.create({
-            data: {
-              tenantId,
-              runId: id,
-              employeeId: employee.id,
-              ...payslipFields,
-            } as any,
-          })).id;
+      const toCreate = computed.filter(({ employee }) => !payslipIdByEmployee.has(employee.id));
+      if (toCreate.length > 0) {
+        const created = await this.prisma.payslip.createManyAndReturn({
+          data: toCreate.map(({ employee, payslipData }) => {
+            const { items, ...fields } = payslipData as any;
+            return { tenantId, runId: id, employeeId: employee.id, ...fields } as any;
+          }),
+          select: { id: true, employeeId: true },
+        });
+        for (const c of created) payslipIdByEmployee.set(c.employeeId, c.id);
+      }
 
-        // Sinkronisasi rincian: hapus lama, tulis ulang dari komponen aktif.
-        // Idempoten untuk process() ulang pada run yang sama.
-        await this.prisma.payrollItem.deleteMany({ where: { payslipId } });
-        if (Array.isArray(items) && items.length > 0) {
-          await this.prisma.payrollItem.createMany({
-            data: items.map((it: any) => ({
+      // Rincian komponen disimpan ke PayrollItem, bukan kolom payslip.
+      // Sinkronisasi: hapus lama, tulis ulang dari komponen aktif.
+      // Idempoten untuk process() ulang pada run yang sama.
+      const allPayslipIds = [...payslipIdByEmployee.values()];
+      if (allPayslipIds.length > 0) {
+        await this.prisma.payrollItem.deleteMany({ where: { payslipId: { in: allPayslipIds } } });
+        const itemRows: any[] = [];
+        for (const { employee, payslipData } of computed) {
+          const payslipId = payslipIdByEmployee.get(employee.id)!;
+          for (const it of (payslipData as any).items as any[]) {
+            itemRows.push({
               payslipId,
               componentId: it.componentId,
               amount: it.amount,
               description: it.description,
-            })),
-          });
+            });
+          }
+        }
+        if (itemRows.length > 0) {
+          await this.prisma.payrollItem.createMany({ data: itemRows });
         }
       }
 
@@ -179,6 +249,149 @@ export class RunService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Batch variant of calculateEmployeePayroll: identical math, but every input
+   * comes from the prefetched maps — zero queries inside. Kept separate (not a
+   * refactor of the original) so existing behavior/tests stay untouched.
+   */
+  private async computePayslipData(
+    tenantId: string,
+    employee: any,
+    period: any,
+    components: any[],
+    prefetch: {
+      bpjsConfigs: any[];
+      taxConfig: any;
+      unionDuesByEmployee: Map<string, any[]>;
+      adjustmentsByEmployee: Map<string, any[]>;
+      wageByProvince: Map<string, any>;
+    },
+    appliedAdjustmentIds: string[],
+  ) {
+    const employment = employee.employments?.[0];
+    // Samakan derivasi dengan bpjs.service / payroll-event.consumer:
+    // prefer grade.baseSalary bila ada, fallback level x Rp1jt.
+    const grade: any = employment?.grade;
+    const baseSalary = Number(grade?.baseSalary ?? (Number(grade?.level || 0) * 1000000)) || 0;
+
+    let totalEarnings = 0;
+    let totalDeductions = 0;
+    const items: any[] = [];
+
+    for (const comp of components) {
+      let amount = 0;
+
+      if (comp.calculationMethod === 'FIXED') {
+        amount = Number(comp.defaultValue) || 0;
+      } else if (comp.calculationMethod === 'PERCENTAGE') {
+        amount = Math.round(baseSalary * ((comp.percentage || 0) / 100));
+      } else if (comp.calculationMethod === 'FORMULA') {
+        amount = await this.evaluateFormula(comp.formula, baseSalary);
+      }
+
+      if (comp.isProrated) {
+        amount = Math.round(amount * 1);
+      }
+
+      if (comp.maxCap && amount > comp.maxCap) {
+        amount = comp.maxCap;
+      }
+
+      if (comp.type === 'EARNING' || comp.type === 'ALLOWANCE') {
+        totalEarnings += amount;
+      } else {
+        totalDeductions += amount;
+      }
+
+      items.push({
+        componentId: comp.id,
+        amount,
+        description: comp.name,
+      });
+    }
+
+    const bpjsResult = await this.bpjsService.calculateWithConfigs(tenantId, {
+      employee,
+      periodId: period.id,
+      baseSalary,
+      configs: prefetch.bpjsConfigs,
+    });
+
+    for (const bpjs of bpjsResult.details) {
+      if (bpjs.employeeAmount > 0) {
+        totalDeductions += bpjs.employeeAmount;
+      }
+    }
+
+    const grossIncome = totalEarnings;
+    const bpjsDeduction = bpjsResult.totals.employee;
+
+    const taxResult = await this.taxService.calculateWithConfigs(tenantId, {
+      employee,
+      periodId: period.id,
+      grossIncome,
+      bpjsDeduction,
+      otherDeductions: totalDeductions - bpjsDeduction,
+      config: prefetch.taxConfig,
+    });
+
+    if (taxResult.monthlyPph21 > 0) {
+      totalDeductions += taxResult.monthlyPph21;
+    }
+
+    // Fold in event-sourced payroll adjustments (expense reimbursement, benefit
+    // allowance, performance bonus, loan installment) published by other modules.
+    for (const adj of prefetch.adjustmentsByEmployee.get(employee.id) ?? []) {
+      const amount = Number(adj.amount || 0);
+      if (adj.type === 'DEDUCTION') {
+        totalDeductions += amount;
+      } else if (adj.type === 'EARNING') {
+        totalEarnings += amount;
+      }
+      appliedAdjustmentIds.push(adj.id);
+    }
+
+    // Addendum Serikat Pekerja: potongan iuran serikat (union_dues) dari
+    // SalaryComponent per-karyawan, aktif dalam rentang periode payroll.
+    for (const dues of prefetch.unionDuesByEmployee.get(employee.id) ?? []) {
+      totalDeductions += Number(dues.amount || 0);
+    }
+
+    const netPay = totalEarnings - totalDeductions;
+
+    // Kepatuhan UMP (PP 36/2021) non-blokir: bila upah pokok di bawah
+    // minimum provinsi domisili, tulis peringatan ke employeeNotes agar
+    // terlihat di slip — payroll tetap diproses, HR wajib tindak lanjut.
+    let employeeNotes: string | undefined;
+    try {
+      const province = (employee as any)?.province as string | undefined;
+      const year = period?.endDate ? new Date(period.endDate).getFullYear()
+        : period?.startDate ? new Date(period.startDate).getFullYear()
+        : new Date().getFullYear();
+      if (province) {
+        const entry = prefetch.wageByProvince.get(province);
+        const minimum = Number((entry as any)?.minimumWage || 0);
+        if (minimum > 0 && baseSalary < minimum) {
+          employeeNotes =
+            `PERINGATAN UMP: gaji pokok Rp${baseSalary.toLocaleString('id-ID')} ` +
+            `di bawah UM provinsi ${province} ${year} Rp${minimum.toLocaleString('id-ID')}. ` +
+            `Perlu penyesuaian (PP 36/2021).`;
+        }
+      }
+    } catch {
+      // Kepatuhan tidak boleh menggagalkan payroll.
+    }
+
+    return {
+      baseSalary,
+      grossPay: totalEarnings,
+      totalDeductions,
+      netPay,
+      items,
+      ...(employeeNotes ? { employeeNotes } : {}),
+    };
   }
 
   private async calculateEmployeePayroll(

@@ -130,7 +130,7 @@ export class TaxService {
    * Config pajak efektif per tanggal periode (ACTIVE + effectiveDate <=
    * tanggal, terbaru). Menutup nondeterminisme findFirst tanpa order.
    */
-  private async getEffectiveConfig(tenantId: string, atDate: Date): Promise<any | null> {
+  async getEffectiveConfig(tenantId: string, atDate: Date): Promise<any | null> {
     return this.prisma.taxConfig.findFirst({
       where: { tenantId, status: 'ACTIVE', effectiveDate: { lte: atDate } },
       orderBy: { effectiveDate: 'desc' },
@@ -149,9 +149,57 @@ export class TaxService {
     const employee = await this.employeeService.findById(tenantId, dto.employeeId);
     if (!employee) throw new NotFoundException('Employee not found');
 
-    const grossIncome = dto.grossIncome ?? 0;
-    const bpjsDeduction = dto.bpjsDeduction ?? 0;
-    const otherDeductions = dto.otherDeductions ?? 0;
+    const config = dto.taxConfigId
+      ? await this.prisma.taxConfig.findFirst({ where: { id: dto.taxConfigId, tenantId } })
+      : await this.getEffectiveConfig(tenantId, await this.resolvePeriodDate(tenantId, dto.periodId));
+
+    const result = this.computeTax(employee, {
+      grossIncome: dto.grossIncome,
+      bpjsDeduction: dto.bpjsDeduction,
+      otherDeductions: dto.otherDeductions,
+      config,
+    });
+
+    return {
+      employeeId: dto.employeeId,
+      employeeName: employee.fullName,
+      periodId: dto.periodId,
+      ...result,
+    };
+  }
+
+  /**
+   * Batch variant: same math as calculate(), but the caller supplies the
+   * already-fetched employee row and config — zero queries inside.
+   */
+  async calculateWithConfigs(
+    tenantId: string,
+    dto: {
+      employee: any;
+      periodId: string;
+      grossIncome?: number;
+      bpjsDeduction?: number;
+      otherDeductions?: number;
+      config: any;
+    },
+  ) {
+    if (!dto.employee) throw new NotFoundException('Employee not found');
+    const result = this.computeTax(dto.employee, dto);
+    return {
+      employeeId: dto.employee.id,
+      employeeName: dto.employee.fullName,
+      periodId: dto.periodId,
+      ...result,
+    };
+  }
+
+  private computeTax(
+    employee: any,
+    input: { grossIncome?: number; bpjsDeduction?: number; otherDeductions?: number; config: any },
+  ) {
+    const grossIncome = input.grossIncome ?? 0;
+    const bpjsDeduction = input.bpjsDeduction ?? 0;
+    const otherDeductions = input.otherDeductions ?? 0;
 
     const netMonthly = grossIncome - bpjsDeduction - otherDeductions;
     const netAnnual = netMonthly * 12;
@@ -162,9 +210,7 @@ export class TaxService {
     const maritalStatus = parsed ? (parsed.married ? 'MARRIED' : 'SINGLE') : (employee.maritalStatus ?? 'SINGLE');
     const dependents = parsed ? parsed.dependents : 0;
 
-    const config = dto.taxConfigId
-      ? await this.prisma.taxConfig.findFirst({ where: { id: dto.taxConfigId, tenantId } })
-      : await this.getEffectiveConfig(tenantId, await this.resolvePeriodDate(tenantId, dto.periodId));
+    const config = input.config;
 
     const taxMethod = (config as any)?.taxMethod === 'PROGRESSIVE' ? 'PROGRESSIVE' : 'TER';
 
@@ -226,12 +272,7 @@ export class TaxService {
       };
     }
 
-    return {
-      employeeId: dto.employeeId,
-      employeeName: employee.fullName,
-      periodId: dto.periodId,
-      ...result,
-    };
+    return result;
   }
 
   /**
