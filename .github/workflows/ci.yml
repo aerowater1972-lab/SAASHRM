@@ -112,3 +112,74 @@ jobs:
 
       - name: Run e2e tests
         run: npm run test:e2e -w apps/api
+
+  web-e2e:
+    name: Web E2E (Playwright + PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flexy_hrms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flexy_hrms?schema=public
+      JWT_SECRET: ci-jwt-secret-min-32-chars-long-0001
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
+      DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
+      ALLOW_PUBLIC_REGISTER: "true"
+      NEXT_PUBLIC_API_BASE: http://localhost:3000/api/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --schema=packages/database/schema.prisma
+
+      - name: Seed database (base + demo tenant)
+        run: |
+          npm run db:seed
+          npx ts-node --transpile-only packages/database/seed-demo-nusantara.ts
+
+      - name: Build API and web
+        run: |
+          npm run build -w apps/api
+          npm run build -w apps/web
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Start API and web
+        run: |
+          (node apps/api/dist/main > /tmp/api.log 2>&1 &)
+          (npx next start apps/web -p 3001 > /tmp/web.log 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/v1/health && curl -sf http://localhost:3001/login && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api/v1/health
+          curl -sf http://localhost:3001/login
+
+      - name: Run Playwright tests
+        run: npm run test:e2e -w apps/web
