@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@common/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
@@ -154,8 +155,7 @@ export class AuthService {
     }
   }
 
-  async logout(userId: string, refreshToken?: string) {
-    this.logger.log(`User ${userId} logged out`);
+  async logout(userId: string, refreshToken?: string) {    this.logger.log(`User ${userId} logged out`);
     
     if (refreshToken) {
       try {
@@ -170,6 +170,19 @@ export class AuthService {
     }
     
     return { message: 'Logged out successfully' };
+  }
+
+  /**
+   * Prune expired refresh-token denylist rows so the table stays small.
+   * Runs daily; safe to invoke manually.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async pruneExpiredTokens(): Promise<number> {
+    const { count } = await this.prisma.refreshTokenBlacklist.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    if (count > 0) this.logger.log(`Pruned ${count} expired refresh token(s)`);
+    return count;
   }
 
   private generateTokens(

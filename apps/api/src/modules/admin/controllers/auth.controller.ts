@@ -148,6 +148,7 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(AuthGuard, PermissionGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiBearerAuth()
   @Permissions('admin:auth:change-password')
   @HttpCode(HttpStatus.OK)

@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { Permissions } from '@common/decorators/permissions.decorator';
@@ -134,6 +135,7 @@ export class AnalyticsController {
 
   @Post('export')
   @Permissions('analytics:read')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Export an analytics report as CSV/PDF' })
   exportReport(
     @TenantId() tenantId: string,

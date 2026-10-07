@@ -46,11 +46,14 @@ export default function PayrollRunDetailPage() {
       else if (action === 'approve') await approveMutate.mutateAsync(params.id as string);
       else if (action === 'publish') await publishMutate.mutateAsync(params.id as string);
       else if (action === 'generate-bank-transfer') {
-        const res = await bankTransferMutate.mutateAsync(params.id as string);
-        const blob = new Blob([JSON.stringify(res)], { type: 'text/csv' });
+        const res = (await bankTransferMutate.mutateAsync(params.id as string)) as any;
+        const content: string = res.content ?? '';
+        if (!content) throw new Error('Bank file kosong dari server');
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `bank-transfer-${params.id}.csv`; a.click();
+        const a = document.createElement('a'); a.href = url; a.download = `bank-transfer-${res.bank ?? 'CSV'}-${params.id}.csv`; a.click();
         URL.revokeObjectURL(url);
+        if (res.exceptions?.length) setActionError(`${res.exceptions.length} karyawan tanpa nomor rekening — tidak ikut dalam file.`);
       }
       refetch();
     } catch (e: any) { setActionError(e.message); }

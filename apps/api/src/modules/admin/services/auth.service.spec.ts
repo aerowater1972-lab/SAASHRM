@@ -27,6 +27,7 @@ describe('AuthService', () => {
     refreshTokenBlacklist: {
       findUnique: jest.fn(),
       create: jest.fn(),
+      deleteMany: jest.fn(),
     },
   };
 
@@ -210,6 +211,17 @@ describe('AuthService', () => {
     it('should return success message', async () => {
       const result = await service.logout('user-1');
       expect(result).toEqual({ message: 'Logged out successfully' });
+    });
+  });
+
+  describe('pruneExpiredTokens', () => {
+    it('should delete only expired denylist rows', async () => {
+      mockPrisma.refreshTokenBlacklist.deleteMany.mockResolvedValue({ count: 3 });
+      const count = await service.pruneExpiredTokens();
+      expect(count).toBe(3);
+      expect(mockPrisma.refreshTokenBlacklist.deleteMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) } },
+      });
     });
   });
 });

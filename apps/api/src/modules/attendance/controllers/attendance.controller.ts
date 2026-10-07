@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
@@ -130,6 +131,7 @@ export class AttendanceController {
 
   @Post('bulk')
   @Permissions('attendance:create')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Bulk create attendance records (HR admin)' })
   bulkCreate(
     @TenantId() tenantId: string,
