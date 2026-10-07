@@ -56,6 +56,6 @@ test.describe('Halaman baru audit integrasi (smoke)', () => {
     await authPage(page, token, '/attendance/rosters');
     await expect(page.getByRole('heading', { name: /^roster$/i }).first()).toBeVisible();
     await page.getByRole('button', { name: /buat roster/i }).click();
-    await expect(page.getByText('Buat Roster')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Buat Roster' })).toBeVisible();
   });
 });

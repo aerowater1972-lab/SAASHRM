@@ -1,6 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 
 async function main() {
   console.log('Seeding Flexy HRMS...\n');
@@ -40,27 +42,16 @@ async function main() {
   // because PermissionGuard reconstructs `${module}:${action}` and compares it against the
   // permission strings embedded in the JWT. We split on the LAST colon so strings like
   // 'admin:audit:read' become module='admin:audit', action='read'.
-  const permissionStrings = [
-    'admin:audit:export', 'admin:audit:read',
-    'admin:entity:create', 'admin:entity:read',
-    'admin:feature-flag:read', 'admin:feature-flag:create', 'admin:feature-flag:update',
-    'admin:integration:read', 'admin:integration:create', 'admin:integration:update', 'admin:integration:delete',
-    'admin:role:assign', 'admin:role:create', 'admin:role:delete', 'admin:role:read', 'admin:role:update',
-    'admin:tenant:create', 'admin:tenant:read', 'admin:tenant:update',
-    'admin:user:assign', 'admin:user:create', 'admin:user:read', 'admin:user:update', 'admin:user:reset-password',
-    'admin:workflow:create', 'admin:workflow:read', 'admin:workflow:update',
-    'attendance:create', 'attendance:period:close', 'attendance:correction:approve',
-    'employee:movement:create', 'employee:movement:read', 'employee:movement:approve',
-    'employee:medical:read', 'employee:medical:update',
-    'expense-claims:approve', 'expense-claims:pay',
-    'holidays:create',
-    'learning:create', 'learning:update',
-    'leave-requests:approve', 'leave-types:create', 'leave-types:update', 'leave-balances:update',
-    'loans:approve',
-    'overtime:approve',
-    'rosters:create', 'rosters:update',
-    'shifts:create', 'shifts:delete', 'shifts:update',
-  ];
+  //
+  // Single source of truth: packages/database/seed.ts `permissionStrings`.
+  // Reading it here (instead of duplicating the list) prevents catalog drift
+  // where controllers require permissions that no seed ever creates.
+  const seedTsPath = path.join(__dirname, '..', 'packages', 'database', 'seed.ts');
+  const seedTs = fs.readFileSync(seedTsPath, 'utf8');
+  const permBlock = seedTs.match(/const permissionStrings = \[([\s\S]*?)\];/);
+  if (!permBlock) throw new Error(`permissionStrings not found in ${seedTsPath}`);
+  const permissionStrings = [...permBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  console.log(`   (${permissionStrings.length} permission strings loaded from packages/database/seed.ts)`);
 
   for (const perm of permissionStrings) {
     const idx = perm.lastIndexOf(':');
