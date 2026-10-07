@@ -469,6 +469,28 @@ export class AttendanceService {
       select: { id: true },
     });
 
+    // Batch: one ranged query per 500-employee chunk instead of one query
+    // per employee, then aggregate in memory with identical rules.
+    const employeeIds = employees.map((e) => e.id);
+    const recordsByEmployee = new Map<string, any[]>();
+    const CHUNK_SIZE = 500;
+    for (let i = 0; i < employeeIds.length; i += CHUNK_SIZE) {
+      const chunk = employeeIds.slice(i, i + CHUNK_SIZE);
+      const rows = await this.prisma.attendanceRecord.findMany({
+        where: {
+          tenantId,
+          employeeId: { in: chunk },
+          date: { gte: period.startDate, lte: period.endDate },
+        },
+        select: { employeeId: true, clockIn: true, status: true, overtimeMinutes: true },
+      });
+      for (const r of rows) {
+        const list = recordsByEmployee.get(r.employeeId) ?? [];
+        list.push(r);
+        recordsByEmployee.set(r.employeeId, list);
+      }
+    }
+
     const summary: Array<{
       employeeId: string;
       presentDays: number;
@@ -478,14 +500,16 @@ export class AttendanceService {
       overtimeMinutes: number;
     }> = [];
 
+    const events: Array<{
+      name: string;
+      aggregateId: string;
+      aggregateType: string;
+      payload: Record<string, any>;
+      tenantId: string;
+    }> = [];
+
     for (const emp of employees) {
-      const records = await this.prisma.attendanceRecord.findMany({
-        where: {
-          tenantId,
-          employeeId: emp.id,
-          date: { gte: period.startDate, lte: period.endDate },
-        },
-      });
+      const records = recordsByEmployee.get(emp.id) ?? [];
 
       const presentDays = records.filter((r) => r.clockIn).length;
       const lateDays = records.filter((r) => r.status === AttendanceStatus.LATE).length;
@@ -507,7 +531,7 @@ export class AttendanceService {
         overtimeMinutes,
       });
 
-      await this.eventBus.publish({
+      events.push({
         name: 'attendance.period.closed',
         aggregateId: `${periodId}:${emp.id}`,
         aggregateType: 'attendance',
@@ -522,6 +546,11 @@ export class AttendanceService {
         },
         tenantId,
       });
+    }
+
+    // One bulk enqueue instead of one write per employee.
+    if (events.length > 0) {
+      await this.eventBus.publishMany(events);
     }
 
     const updated = await this.prisma.payrollPeriod.update({

@@ -51,7 +51,7 @@ describe('Attendance Geofence & Correction (e2e, BR-01 / FR-06)', () => {
     const login = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
+      .send({ email: 'admin@flexy.local', password: 'admin123' });
     adminToken = login.body?.accessToken;
 
     const emp = await request(app.getHttpServer())

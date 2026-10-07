@@ -54,7 +54,7 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
     const res = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
       .set('x-tenant-id', 'default')
-      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' });
+      .send({ email: 'admin@flexy.local', password: 'admin123' });
     adminToken = res.body.accessToken;
   });
 
@@ -63,7 +63,7 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
   });
 
   it(
-    'PayrollEventConsumer converts attendance.period.closed into overtime EARNING + late DEDUCTION',
+    'PayrollEventConsumer converts attendance.period.closed into overtime EARNING (late DEDUCTION intentionally disabled)',
     async () => {
     const employee = await prisma.employee.findFirst({ where: { tenantId: 'default' } });
     expect(employee).toBeDefined();
@@ -104,7 +104,7 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
     const period = `e2e-att-${Date.now()}`;
     const referenceId = `${period}:${employeeId}`;
 
-    const adminUser = await prisma.user.findFirst({ where: { email: 'admin@flexy-hrms.com' } });
+    const adminUser = await prisma.user.findFirst({ where: { email: 'admin@flexy.local' } });
     await eventBus.publishTyped(
       DomainEventType.ATTENDANCE_PERIOD_CLOSED,
       {
@@ -128,13 +128,21 @@ describe('Epic 3 — attendance.period.closed -> payroll adjustments (e2e)', () 
       const earning = items.find(
         (a) => a.referenceId === referenceId && a.type === 'EARNING' && Number(a.amount) > 0,
       );
-      const deduction = items.find(
-        (a) => a.referenceId === referenceId && a.type === 'DEDUCTION' && Number(a.amount) > 0,
-      );
-      return !!earning && !!deduction;
+      return !!earning;
     });
 
     expect(ok).toBe(true);
+
+    // Late-count must NOT auto-create a DEDUCTION (no legal basis for per-late
+    // wage cuts — see payroll-event.consumer.ts). Documented, not missing.
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/payroll/adjustments?employeeId=${employeeId}`)
+      .set('x-tenant-id', 'default')
+      .set(auth());
+    const items: any[] = Array.isArray(res.body) ? res.body : res.body?.data ?? [];
+    expect(
+      items.filter((a) => a.referenceId === referenceId && a.type === 'DEDUCTION'),
+    ).toHaveLength(0);
   },
     20000,
   );

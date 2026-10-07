@@ -86,6 +86,7 @@ describe('AttendanceService', () => {
 
   const mockEventBus = {
     publish: jest.fn(),
+    publishMany: jest.fn(),
   };
 
   const baseRecord = {
@@ -430,11 +431,12 @@ describe('AttendanceService', () => {
 
       expect(result.period.status).toBe('CLOSED');
       expect(result.summary).toHaveLength(2);
-      expect(mockEventBus.publish).toHaveBeenCalledTimes(2);
-      const event = mockEventBus.publish.mock.calls[0][0];
-      expect(event.name).toBe('attendance.period.closed');
-      expect(event.payload.employeeId).toBe('emp-1');
-      expect(event.payload.workedDays).toBeDefined();
+      expect(mockEventBus.publishMany).toHaveBeenCalledTimes(1);
+      const events = mockEventBus.publishMany.mock.calls[0][0];
+      expect(events).toHaveLength(2);
+      expect(events[0].name).toBe('attendance.period.closed');
+      expect(events[0].payload.employeeId).toBe('emp-1');
+      expect(events[0].payload.workedDays).toBeDefined();
     });
 
     it('should throw BadRequestException if the period is not OPEN', async () => {

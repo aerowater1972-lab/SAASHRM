@@ -23,7 +23,7 @@ describe('Feedback360 (e2e)', () => {
 
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/admin/auth/login')
-      .send({ email: 'admin@flexy-hrms.com', password: 'admin123' })
+      .send({ email: 'admin@flexy.local', password: 'admin123' })
       .expect(200);
     authToken = loginRes.body.accessToken;
     tenantId = loginRes.body.user.tenantId;
