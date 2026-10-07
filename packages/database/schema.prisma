@@ -131,6 +131,16 @@ model User {
   @@unique([tenantId, email])
 }
 
+model RefreshTokenBlacklist {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model Role {
   id          String    @id @default(uuid())
   tenantId    String

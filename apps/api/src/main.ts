@@ -46,30 +46,35 @@ async function bootstrap() {
 
   const port = configService.get<number>('PORT', 3000);
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Flexy HRMS API')
-    .setDescription('Enterprise Human Resource Management SaaS API')
-    .setVersion('1.0.0')
-    .setContact('Flexy HRMS Team', 'https://flexy-hrms.example.com', 'support@flexy-hrms.example.com')
-    .setLicense('MIT', 'https://opensource.org/licenses/MIT')
-    .addServer(`http://localhost:${port}`, 'Local Development')
-    .addBearerAuth(undefined, 'bearer')
-    .addApiKey({ type: 'apiKey', name: 'x-tenant-id', in: 'header', description: 'Tenant identifier for multi-tenant isolation' }, 'x-tenant-id')
-    .build();
+  const isProd = configService.get<string>('NODE_ENV') === 'production';
+  if (!isProd) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Flexy HRMS API')
+      .setDescription('Enterprise Human Resource Management SaaS API')
+      .setVersion('1.0.0')
+      .setContact('Flexy HRMS Team', 'https://flexy-hrms.example.com', 'support@flexy-hrms.example.com')
+      .setLicense('MIT', 'https://opensource.org/licenses/MIT')
+      .addServer(`http://localhost:${port}`, 'Local Development')
+      .addBearerAuth(undefined, 'bearer')
+      .addApiKey({ type: 'apiKey', name: 'x-tenant-id', in: 'header', description: 'Tenant identifier for multi-tenant isolation' }, 'x-tenant-id')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
 
-  const fs = await import('fs');
-  const path = await import('path');
-  const outputPath = path.resolve(process.cwd(), 'openapi.json');
-  fs.writeFileSync(outputPath, JSON.stringify(document, null, 2));
-  logger.log(`OpenAPI spec written to ${outputPath}`);
+    const fs = await import('fs');
+    const path = await import('path');
+    const outputPath = path.resolve(process.cwd(), 'openapi.json');
+    fs.writeFileSync(outputPath, JSON.stringify(document, null, 2));
+    logger.log(`OpenAPI spec written to ${outputPath}`);
+  }
 
   await app.listen(port);
 
   logger.log(`Application running on port ${port}`);
-  logger.log(`Swagger docs available at http://localhost:${port}/api/docs`);
+  if (!isProd) {
+    logger.log(`Swagger docs available at http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();

@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@common/prisma/prisma.module';
+import { CsrfGuard } from '@common/guards/csrf.guard';
 
 import { TenantController } from './controllers/tenant.controller';
 import { RoleController, UserRoleController, PermissionsController } from './controllers/role.controller';
@@ -55,6 +56,7 @@ import { BulkImportService } from './services/bulk-import.service';
     IntegrationService,
     UserManagementService,
     BulkImportService,
+    CsrfGuard,
   ],
   exports: [
     TenantService,

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@common/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -12,6 +13,31 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {}
+
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private async isTokenBlacklisted(token: string): Promise<boolean> {
+    const hash = this.hashToken(token);
+    const entry = await this.prisma.refreshTokenBlacklist.findUnique({
+      where: { tokenHash: hash },
+    });
+    return !!entry;
+  }
+
+  private async blacklistToken(token: string, expiresAt: Date): Promise<void> {
+    const hash = this.hashToken(token);
+    await this.prisma.refreshTokenBlacklist.create({
+      data: {
+        tokenHash: hash,
+        userId: '', // Will be set by caller
+        expiresAt,
+      },
+    }).catch(() => {
+      // Ignore duplicate key errors (already blacklisted)
+    });
+  }
 
   async register(
     tenantId: string,
@@ -104,6 +130,10 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     try {
+      if (await this.isTokenBlacklisted(refreshToken)) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
+
       const secret = this.requireJwtSecret('JWT_REFRESH_SECRET', true);
       const decoded = jwt.verify(refreshToken, secret, { algorithms: ['HS256'] }) as any;
 
@@ -112,6 +142,11 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
+      // Blacklist the old refresh token (rotation)
+      const decodedToken = jwt.decode(refreshToken) as any;
+      const expiresAt = new Date(decodedToken.exp * 1000);
+      await this.blacklistToken(refreshToken, expiresAt);
+
       const tokens = this.generateTokens(user, await this.loadPermissions(user.id));
       return { user: this.sanitizeUser(user), ...tokens };
     } catch {
@@ -119,8 +154,21 @@ export class AuthService {
     }
   }
 
-  async logout(userId: string) {
+  async logout(userId: string, refreshToken?: string) {
     this.logger.log(`User ${userId} logged out`);
+    
+    if (refreshToken) {
+      try {
+        const decoded = jwt.decode(refreshToken) as any;
+        if (decoded?.exp) {
+          const expiresAt = new Date(decoded.exp * 1000);
+          await this.blacklistToken(refreshToken, expiresAt);
+        }
+      } catch {
+        // Ignore decode errors
+      }
+    }
+    
     return { message: 'Logged out successfully' };
   }
 

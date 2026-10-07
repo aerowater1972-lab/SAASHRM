@@ -6,6 +6,7 @@ import { APP_GUARD } from '@nestjs/core';
 
 import { SharedModule } from './modules/shared/shared.module';
 import { AuthGuard } from './common/guards/auth.guard';
+import { CsrfGuard } from './common/guards/csrf.guard';
 import { WorkflowModule } from './modules/shared/workflow/workflow.module';
 import { HealthModule } from './modules/shared/health/health.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -88,6 +89,10 @@ import { SuccessionPlanningModule } from './modules/succession-planning/successi
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: CsrfGuard,
     },
   ],
 })

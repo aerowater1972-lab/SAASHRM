@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Res, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -13,6 +13,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { Public } from '@common/decorators/public.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
+import { SkipCsrf } from '@common/decorators/skip-csrf.decorator';
 
 @ApiTags('Admin - Authentication')
 @Controller('admin/auth')
@@ -40,12 +41,34 @@ export class AuthController {
     });
   }
 
+  private setCsrfCookie(res: Response, csrfToken: string) {
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    res.cookie('csrf_token', csrfToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    });
+  }
+
   private clearAccessCookie(res: Response) {
     res.clearCookie('access_token', { path: '/' });
   }
 
+  private clearCsrfCookie(res: Response) {
+    res.clearCookie('csrf_token', { path: '/' });
+  }
+
+  private generateCsrfToken(): string {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+
   @Post('register')
   @Public()
+  @SkipCsrf()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new admin user (tenant-aware via x-tenant-id)' })
@@ -56,11 +79,14 @@ export class AuthController {
   ) {
     const result = await this.authService.register(tenantId ?? 'default', dto);
     this.setAccessCookie(res, result.accessToken);
-    return result;
+    const csrfToken = this.generateCsrfToken();
+    this.setCsrfCookie(res, csrfToken);
+    return { ...result, csrfToken };
   }
 
   @Post('login')
   @Public()
+  @SkipCsrf()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
@@ -71,11 +97,14 @@ export class AuthController {
   ) {
     const result = await this.authService.login(tenantId, dto.email, dto.password);
     this.setAccessCookie(res, result.accessToken);
-    return result;
+    const csrfToken = this.generateCsrfToken();
+    this.setCsrfCookie(res, csrfToken);
+    return { ...result, csrfToken };
   }
 
   @Post('refresh')
   @Public()
+  @SkipCsrf()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
@@ -85,7 +114,20 @@ export class AuthController {
   ) {
     const result = await this.authService.refresh(refreshToken);
     this.setAccessCookie(res, result.accessToken);
-    return result;
+    const csrfToken = this.generateCsrfToken();
+    this.setCsrfCookie(res, csrfToken);
+    return { ...result, csrfToken };
+  }
+
+  @Get('csrf-token')
+  @Public()
+  @SkipCsrf()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get a new CSRF token' })
+  async getCsrfToken(@Res({ passthrough: true }) res: Response) {
+    const csrfToken = this.generateCsrfToken();
+    this.setCsrfCookie(res, csrfToken);
+    return { csrfToken };
   }
 
   @Post('logout')
@@ -96,10 +138,12 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout current user' })
   async logout(
     @CurrentUser('sub') userId: string,
+    @Body('refreshToken') refreshToken: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     this.clearAccessCookie(res);
-    return this.authService.logout(userId);
+    this.clearCsrfCookie(res);
+    return this.authService.logout(userId, refreshToken);
   }
 
   @Post('change-password')

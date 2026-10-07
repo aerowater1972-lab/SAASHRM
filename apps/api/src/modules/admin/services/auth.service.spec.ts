@@ -24,6 +24,10 @@ describe('AuthService', () => {
     tenant: {
       findUnique: jest.fn(),
     },
+    refreshTokenBlacklist: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
   };
 
   const mockConfigService = {
@@ -164,13 +168,25 @@ describe('AuthService', () => {
 
   describe('refresh', () => {
     it('should refresh token successfully', async () => {
-      (jwt.verify as jest.Mock).mockReturnValue({ sub: 'user-1', email: 'test@example.com' });
+      (jwt.verify as jest.Mock).mockReturnValue({ sub: 'user-1', email: 'test@example.com', exp: Math.floor(Date.now() / 1000) + 3600 });
+      (jwt.decode as jest.Mock).mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 7 * 86400 });
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.refreshTokenBlacklist.findUnique.mockResolvedValue(null);
+      mockPrisma.refreshTokenBlacklist.create.mockResolvedValue({ id: 'bl-1' });
 
       const result = await service.refresh('valid-refresh-token');
 
       expect(result.accessToken).toBe('mock-jwt-token');
       expect(result.user).toEqual(sanitizedUser);
+      expect(mockPrisma.refreshTokenBlacklist.create).toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException for blacklisted token', async () => {
+      (jwt.verify as jest.Mock).mockReturnValue({ sub: 'user-1', email: 'test@example.com', exp: Math.floor(Date.now() / 1000) + 3600 });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.refreshTokenBlacklist.findUnique.mockResolvedValue({ id: 'blacklist-1' });
+
+      await expect(service.refresh('blacklisted-token')).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException for invalid refresh token', async () => {
@@ -182,8 +198,9 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
-      (jwt.verify as jest.Mock).mockReturnValue({ sub: 'user-1' });
+      (jwt.verify as jest.Mock).mockReturnValue({ sub: 'user-1', email: 'test@example.com', exp: Math.floor(Date.now() / 1000) + 3600 });
       mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.refreshTokenBlacklist.findUnique.mockResolvedValue(null);
 
       await expect(service.refresh('valid-token')).rejects.toThrow(UnauthorizedException);
     });
