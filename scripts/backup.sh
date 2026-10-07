@@ -31,3 +31,10 @@ pg_dump --format=custom --no-owner --compress=9 \
   "$DATABASE_URL" > "$OUTPUT"
 
 echo "✅ Backup saved: $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
+
+# Retention prune (default: keep 30 days; 0 = keep all).
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+if [ "$RETENTION_DAYS" -gt 0 ] 2>/dev/null; then
+  find "$OUTPUT_DIR" -maxdepth 1 -name "${DB_NAME}_*.dump" -mtime "+$RETENTION_DAYS" -delete
+  echo "🧹 Pruned backups older than ${RETENTION_DAYS} days in $OUTPUT_DIR"
+fi

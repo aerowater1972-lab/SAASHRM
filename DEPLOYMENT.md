@@ -194,3 +194,36 @@ docker run -e DATABASE_URL=postgresql://user:pass@host:5432/flexy_hrms -e JWT_SE
 
 To run the whole stack (API + Postgres) you can also use `docker-compose.yml`
 after setting `DATABASE_URL` accordingly.
+
+## 12. Salary encryption at rest (opt-in)
+
+`Employment.salary` can be stored encrypted (AES-256-GCM) instead of plaintext.
+The `salary_enc` column already exists; the Prisma middleware in
+`apps/api/src/common/prisma/prisma.service.ts` encrypts on write and decrypts
+on read when enabled. To enable:
+
+```bash
+# 1. Set a 32+ char key (server refuses to boot in production without it)
+DATA_ENCRYPTION_KEY="<32+ random chars>"
+# 2. Backfill existing plaintext salaries into salary_enc, then
+#    verify reads return identical values on a non-prod copy first
+# 3. Enable the middleware
+SALARY_ENCRYPTION_ENABLED="true"
+```
+
+Keep the flag OFF until step 2 is verified; enabling with an empty key fails
+closed. NIK/NPWP/BPJS/bank/medical fields are still plaintext (see DB-005) —
+do not treat this flag as full PII encryption.
+
+## 13. RPO / RTO targets
+
+| Item | Target |
+|---|---|
+| Backup cadence | Daily (`scripts/backup.sh` via cron/systemd timer) |
+| Retention | 30 days (`BACKUP_RETENTION_DAYS`, `0` = keep all) |
+| RPO | ≤ 24 h (last daily dump) |
+| RTO | ≤ 4 h (provision → `scripts/restore.sh --force` → `migrate deploy` → smoke) |
+| Restore drill | Quarterly on a scratch DB; record result in `BackupRecord` |
+
+Non-interactive restore for automation: `scripts/restore.sh --force <file>`
+(verifies the archive with `pg_restore --list` before touching the database).

@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # Flexy HRMS — Database Restore Script
-# Usage:  scripts/restore.sh <backup_file>
+# Usage:  scripts/restore.sh [--force] <backup_file>
 #
 # Requires: pg_restore (PostgreSQL client), DATABASE_URL in .env or env
 # Warning: Overwrites existing data in the target database.
+#
+# --force skips the confirmation prompt (for CI/automation).
 
 set -euo pipefail
 
+FORCE=0
+if [ "${1:-}" = "--force" ] || [ "${1:-}" = "-f" ]; then
+  FORCE=1
+  shift
+fi
+
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <backup_file>"
+  echo "Usage: $0 [--force] <backup_file>"
   exit 1
 fi
 
@@ -32,10 +40,17 @@ fi
 
 echo "⚠️  About to restore $BACKUP_FILE into the database at DATABASE_URL"
 echo "   This will OVERWRITE existing data."
-read -rp "Continue? [y/N] " confirm
-if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-  echo "Cancelled."
-  exit 0
+
+# Verify the archive is readable before touching the database.
+pg_restore --list "$BACKUP_FILE" > /dev/null
+echo "✅ Archive verified."
+
+if [ "$FORCE" -ne 1 ]; then
+  read -rp "Continue? [y/N] " confirm
+  if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    echo "Cancelled."
+    exit 0
+  fi
 fi
 
 pg_restore --clean --if-exists --no-owner --no-acl \
