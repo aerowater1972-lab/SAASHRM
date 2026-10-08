@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { IDPStatus, IDPActivityType, IDPActivityStatus } from '@prisma/client';
+import { CreateIDPDto, UpdateIDPDto, UpdateIDPStatusDto, AddIDPActivityDto, UpdateActivityStatusDto } from '../dto/idp.dto';
 
 @Injectable()
 export class IDPService {
@@ -30,7 +31,7 @@ export class IDPService {
     return plan;
   }
 
-  async create(tenantId: string, userId: string, dto: any) {
+  async create(tenantId: string, userId: string, dto: CreateIDPDto) {
     const employee = await this.prisma.employee.findFirst({ where: { tenantId, id: dto.employeeId } });
     if (!employee) throw new NotFoundException('Employee not found');
     return this.prisma.individualDevelopmentPlan.create({
@@ -50,22 +51,29 @@ export class IDPService {
     });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: UpdateIDPDto) {
     const existing = await this.prisma.individualDevelopmentPlan.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('IDP not found');
     return this.prisma.individualDevelopmentPlan.update({
       where: { id },
-      data: { title: dto.title, description: dto.description, skillsGap: dto.skillsGap, objectives: dto.objectives, startDate: dto.startDate ? new Date(dto.startDate) : undefined, endDate: dto.endDate ? new Date(dto.endDate) : undefined },
+      data: { 
+        title: dto.title, 
+        description: dto.description, 
+        skillsGap: dto.skillsGap, 
+        objectives: dto.objectives, 
+        startDate: dto.startDate ? new Date(dto.startDate) : undefined, 
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      },
     });
   }
 
-  async updateStatus(tenantId: string, id: string, dto: any) {
+  async updateStatus(tenantId: string, id: string, dto: UpdateIDPStatusDto) {
     const existing = await this.prisma.individualDevelopmentPlan.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('IDP not found');
     return this.prisma.individualDevelopmentPlan.update({ where: { id }, data: { status: dto.status } });
   }
 
-  async addActivity(tenantId: string, id: string, dto: any) {
+  async addActivity(tenantId: string, id: string, dto: AddIDPActivityDto) {
     const plan = await this.prisma.individualDevelopmentPlan.findFirst({ where: { id, tenantId } });
     if (!plan) throw new NotFoundException('IDP not found');
     return this.prisma.iDPActivity.create({
@@ -81,7 +89,7 @@ export class IDPService {
     });
   }
 
-  async updateActivity(tenantId: string, id: string, activityId: string, dto: any) {
+  async updateActivity(tenantId: string, id: string, activityId: string, dto: UpdateActivityStatusDto) {
     const activity = await this.prisma.iDPActivity.findFirst({
       where: { id: activityId, idpId: id },
       include: { idp: true },
