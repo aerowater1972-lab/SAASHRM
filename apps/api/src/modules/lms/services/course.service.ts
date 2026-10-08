@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { CourseEnrollmentStatus } from '@prisma/client';
+import { CreateCourseDto, UpdateCourseDto, EnrollTraineeDto, BatchEnrollDto } from '../dto/course.dto';
 
 @Injectable()
 export class LmsService {
@@ -33,7 +34,7 @@ export class LmsService {
     return course;
   }
 
-  async create(tenantId: string, userId: string, dto: any) {
+  async create(tenantId: string, userId: string, dto: CreateCourseDto) {
     const { title, description, category, imageUrl, duration } = dto;
     return this.prisma.course.create({
       data: { title, description, category: category ?? 'GENERAL', imageUrl, duration, tenantId },
@@ -41,7 +42,7 @@ export class LmsService {
     });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: UpdateCourseDto) {
     const existing = await this.prisma.course.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('Course not found');
     return this.prisma.course.update({ where: { id }, data: dto, include: { modules: { include: { lessons: true } } } });
@@ -54,7 +55,7 @@ export class LmsService {
     return { deleted: true };
   }
 
-  async enrollTrainee(tenantId: string, courseId: string, dto: any) {
+  async enrollTrainee(tenantId: string, courseId: string, dto: EnrollTraineeDto) {
     const course = await this.prisma.course.findFirst({ where: { id: courseId, tenantId } });
     if (!course) throw new NotFoundException('Course not found');
     return this.prisma.courseTrainee.create({
@@ -66,7 +67,7 @@ export class LmsService {
     });
   }
 
-  async batchEnroll(tenantId: string, courseId: string, dto: any) {
+  async batchEnroll(tenantId: string, courseId: string, dto: BatchEnrollDto) {
     const course = await this.prisma.course.findFirst({ where: { id: courseId, tenantId } });
     if (!course) throw new NotFoundException('Course not found');
     const created = [];
