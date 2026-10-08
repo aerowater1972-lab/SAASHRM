@@ -187,7 +187,7 @@ export class EngagementSurveyService {
     return survey;
   }
 
-  async update(tenantId: string, id: string, dto: any, actorId: string) {
+  async update(tenantId: string, id: string, dto: UpdateEngagementSurveyDto, actorId: string) {
     const existing = await this.findOne(tenantId, id);
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Only DRAFT surveys can be updated');
@@ -196,7 +196,7 @@ export class EngagementSurveyService {
       throw new BadRequestException('Anonymous survey cannot be changed to identified (BR-01)');
     }
 
-    const questions = dto.questions ? dto.questions.map((q: any, idx: number) => ({
+    const questions = dto.questions ? dto.questions.map((q, idx) => ({
       questionText: q.questionText,
       questionType: q.questionType,
       options: q.options?.join(',') || null,
@@ -228,7 +228,7 @@ export class EngagementSurveyService {
       changedBy: actorId,
     });
 
-    if (dto.status === 'ACTIVE' && existing.status !== 'ACTIVE' as any) {
+    if (dto.status === 'ACTIVE' && String(existing.status) !== 'ACTIVE') {
       this.sendSurveyPublishedNotification(tenantId, survey).catch(err =>
         this.logger.warn(`Failed to send survey notification: ${err.message}`),
       );
@@ -444,13 +444,19 @@ export class EngagementSurveyService {
     return item;
   }
 
-  async updateActionItem(tenantId: string, id: string, dto: any, actorId: string) {
+  async updateActionItem(tenantId: string, id: string, dto: UpdateSurveyActionItemDto, actorId: string) {
     const item = await this.prisma.surveyActionItem.findFirst({ where: { id, survey: { tenantId } } });
     if (!item) throw new NotFoundException('Action item not found');
 
     const updated = await this.prisma.surveyActionItem.update({
       where: { id },
-      data: { title: dto.title, description: dto.description, assigneeId: dto.assigneeId, dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined, status: dto.status },
+      data: { 
+        title: dto.title, 
+        description: dto.description, 
+        assigneeId: dto.assigneeId, 
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined, 
+        status: dto.status,
+      },
     });
 
     await this.audit.ingest({
