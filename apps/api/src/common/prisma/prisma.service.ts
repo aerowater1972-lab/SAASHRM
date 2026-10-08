@@ -30,18 +30,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       this.$use(async (params, next) => {
         const tenant = getTenant();
         if (!tenant) return next(params);
-        try {
-          return await this.$transaction(async (tx) => {
+        return this.$transaction(
+          async (tx) => {
             await (tx as any).$executeRaw`SELECT set_config('app.current_tenant', ${tenant}, true)`;
-            const delegate = (tx as any)[params.model as string];
-            if (!delegate || typeof delegate[params.action] !== 'function') {
-              return next(params);
-            }
-            return delegate[params.action](params.args);
-          });
-        } catch {
-          return next(params);
-        }
+            return next(params);
+          },
+          { timeout: 5000 },
+        );
       });
     }
 
