@@ -3,52 +3,32 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import { getTenant } from '@common/tenant/tenant.context';
 import { encrypt, decrypt } from '@common/util/encryption.util';
+import { createRlsExtension } from './rls.extension';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor(configService: ConfigService) {
-    super({
+constructor(configService: ConfigService) {
+    const isDev = configService.get<string>('NODE_ENV') === 'development';
+    const options: any = {
       datasources: {
         db: {
           url: configService.get<string>('DATABASE_URL'),
         },
       },
-      log: configService.get<string>('NODE_ENV') === 'development'
-        ? ['query', 'info', 'warn', 'error']
-        : ['warn', 'error'],
-    });
+      log: isDev ? ['query', 'info', 'warn', 'error'] : ['warn', 'error'],
+    };
+
+    super(options);
 
     // Defense-in-depth multi-tenant RLS enforcement (F-02). Opt-in via env flag;
-    // safe to leave off until validated on a non-prod DB. When enabled, each
-    // operation sets the session tenant GUC using SET LOCAL (no nested transaction).
-    // This avoids the nested transaction issues while still enforcing RLS at DB level.
+    // safe to leave off until validated on a non-prod DB. When enabled, we apply
+    // a Prisma extension that sets the session tenant GUC using SET LOCAL before
+    // each query. This avoids the nested transaction issues of the old middleware.
     if (process.env.DB_RLS_ENABLED === 'true') {
-      this.$use(async (params, next) => {
-        const tenant = getTenant();
-        if (!tenant) return next(params);
-        
-        // Use SET LOCAL in the current transaction context.
-        // Prisma runs each operation in an implicit transaction, so SET LOCAL should work.
-        // If it fails (e.g., not in transaction), fall back to SET/RESET.
-        try {
-          await this.$executeRawUnsafe(`SET LOCAL "app.current_tenant" = $1`, tenant);
-        } catch (e) {
-          // Fallback: SET (session-level) + RESET after query
-          this.logger.debug(`RLS SET LOCAL failed, using SET/RESET: ${e instanceof Error ? e.message : String(e)}`);
-          try {
-            await this.$executeRawUnsafe(`SET "app.current_tenant" = $1`, tenant);
-            const result = await next(params);
-            await this.$executeRawUnsafe(`RESET "app.current_tenant"`);
-            return result;
-          } catch (e2) {
-            this.logger.error(`RLS fallback failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
-            return next(params);
-          }
-        }
-        return next(params);
-      });
+      const extended = (this as any).$extends(createRlsExtension());
+      Object.assign(this, extended);
     }
 
     // F-05: encrypt Employment.salary at rest. Opt-in via env flag so it can be
