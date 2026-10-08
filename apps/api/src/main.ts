@@ -1,4 +1,5 @@
-import './opentelemetry';
+import { initSentry } from './common/observability/sentry';
+import { initOtel } from './common/observability/otel';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +11,9 @@ import { AppModule } from './app.module';
 import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
+  initSentry();
+  initOtel();
+
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
