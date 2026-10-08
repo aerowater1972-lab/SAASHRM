@@ -62,7 +62,7 @@ describe('MovementService', () => {
     it('scopes employee lookup by tenantId', async () => {
       prisma.employee.findFirst.mockResolvedValue(null);
       await expect(
-        service.create('tenant-x', { employeeId: 'emp-1', type: 'PROMOTION' }),
+        service.create('tenant-x', { employeeId: 'emp-1', type: 'PROMOTION', effectiveDate: '2026-01-01' }),
       ).rejects.toThrow(NotFoundException);
       expect(prisma.employee.findFirst).toHaveBeenCalledWith({
         where: { id: 'emp-1', tenantId: 'tenant-x', deletedAt: null },
@@ -73,7 +73,7 @@ describe('MovementService', () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1' });
       prisma.movementRequest.findFirst.mockResolvedValue({ id: 'existing' });
       await expect(
-        service.create('tenant-x', { employeeId: 'emp-1', type: 'PROMOTION' }),
+        service.create('tenant-x', { employeeId: 'emp-1', type: 'PROMOTION', effectiveDate: '2026-01-01' }),
       ).rejects.toThrow(BadRequestException);
     });
 

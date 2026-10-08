@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
+import { CreateMovementRequestDto } from '../dto/movement.dto';
 
 @Injectable()
 export class MovementService {
@@ -37,7 +38,7 @@ export class MovementService {
     return req;
   }
 
-  async create(tenantId: string, dto: any) {
+  async create(tenantId: string, dto: CreateMovementRequestDto) {
     const employee = await this.prisma.employee.findFirst({
       where: { id: dto.employeeId, tenantId, deletedAt: null },
     });
