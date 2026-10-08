@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, IsEnum, IsArray, ValidateNested, Min, Max, MinLength, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsEnum, IsArray, ValidateNested, IsUUID, Min, Max, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ManpowerPlanStatus, ManpowerType } from '@prisma/client';
 
@@ -67,10 +67,10 @@ export class UpdateManpowerPlanDto {
   @Type(() => ManpowerPlanItemDto)
   items?: ManpowerPlanItemDto[];
 
-  @ApiPropertyOptional({ description: 'Plan status' })
+  @ApiPropertyOptional({ description: 'Plan status', enum: ManpowerPlanStatus })
   @IsOptional()
-  @IsEnum(['DRAFT', 'SUBMITTED', 'HR_REVIEW', 'FINANCE_REVIEW', 'APPROVED', 'REJECTED'])
-  status?: string;
+  @IsEnum(ManpowerPlanStatus)
+  status?: ManpowerPlanStatus;
 }
 
 export class ApproveManpowerPlanDto {

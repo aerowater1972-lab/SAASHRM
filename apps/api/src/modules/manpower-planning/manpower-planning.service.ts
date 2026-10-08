@@ -124,7 +124,7 @@ export class ManpowerPlanningService {
     return plan;
   }
 
-  async update(tenantId: string, id: string, dto: any, actorId: string) {
+  async update(tenantId: string, id: string, dto: UpdateManpowerPlanDto, actorId: string) {
     const plan = await this.findOne(tenantId, id);
     if (plan.status !== 'DRAFT') {
       throw new BadRequestException('Only DRAFT plans can be updated');
@@ -132,7 +132,7 @@ export class ManpowerPlanningService {
 
     const items = dto.items ? {
       deleteMany: {},
-      create: await Promise.all(dto.items.map(async (item: any) => {
+      create: await Promise.all(dto.items.map(async (item) => {
         const estimatedCost = item.estimatedCost ?? (await this.resolveSalaryEstimate(item.gradeId));
         return {
           positionTitle: item.positionTitle,
