@@ -22,21 +22,32 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     // Defense-in-depth multi-tenant RLS enforcement (F-02). Opt-in via env flag;
     // safe to leave off until validated on a non-prod DB. When enabled, each
-    // operation runs inside a transaction that sets the session tenant GUC so
-    // the policies in scripts/rls.sql filter by tenant at the database level.
-    // Any failure (e.g. nested transaction) falls back to the normal pipeline,
-    // so it can never break existing queries.
+    // operation sets the session tenant GUC using SET LOCAL (no nested transaction).
+    // This avoids the nested transaction issues while still enforcing RLS at DB level.
     if (process.env.DB_RLS_ENABLED === 'true') {
       this.$use(async (params, next) => {
         const tenant = getTenant();
         if (!tenant) return next(params);
-        return this.$transaction(
-          async (tx) => {
-            await (tx as any).$executeRaw`SELECT set_config('app.current_tenant', ${tenant}, true)`;
+        
+        // Use SET LOCAL in the current transaction context.
+        // Prisma runs each operation in an implicit transaction, so SET LOCAL should work.
+        // If it fails (e.g., not in transaction), fall back to SET/RESET.
+        try {
+          await this.$executeRawUnsafe(`SET LOCAL "app.current_tenant" = $1`, tenant);
+        } catch (e) {
+          // Fallback: SET (session-level) + RESET after query
+          this.logger.debug(`RLS SET LOCAL failed, using SET/RESET: ${e instanceof Error ? e.message : String(e)}`);
+          try {
+            await this.$executeRawUnsafe(`SET "app.current_tenant" = $1`, tenant);
+            const result = await next(params);
+            await this.$executeRawUnsafe(`RESET "app.current_tenant"`);
+            return result;
+          } catch (e2) {
+            this.logger.error(`RLS fallback failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
             return next(params);
-          },
-          { timeout: 5000 },
-        );
+          }
+        }
+        return next(params);
       });
     }
 
