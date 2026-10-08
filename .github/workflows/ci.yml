@@ -91,6 +91,8 @@ jobs:
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
       DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
       ALLOW_PUBLIC_REGISTER: "true"
+      SENTRY_DSN: disabled
+      OTEL_EXPORTER_OTLP_ENDPOINT: disabled
     steps:
       - uses: actions/checkout@v4
 
@@ -139,6 +141,8 @@ jobs:
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
       DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
       ALLOW_PUBLIC_REGISTER: "true"
+      SENTRY_DSN: disabled
+      OTEL_EXPORTER_OTLP_ENDPOINT: disabled
       NEXT_PUBLIC_API_BASE: http://localhost:3000/api/v1
     steps:
       - uses: actions/checkout@v4
@@ -211,6 +215,8 @@ jobs:
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
       DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
       ALLOW_PUBLIC_REGISTER: "true"
+      SENTRY_DSN: disabled
+      OTEL_EXPORTER_OTLP_ENDPOINT: disabled
     steps:
       - uses: actions/checkout@v4
 
@@ -280,6 +286,8 @@ jobs:
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
       DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
       ALLOW_PUBLIC_REGISTER: "true"
+      SENTRY_DSN: disabled
+      OTEL_EXPORTER_OTLP_ENDPOINT: disabled
     steps:
       - uses: actions/checkout@v4
 
