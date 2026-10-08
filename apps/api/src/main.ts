@@ -20,6 +20,13 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
+  // API Versioning & Deprecation Policy
+  // - All routes are prefixed with /api/v1/
+  // - Breaking changes require new version (v2, v3, etc.)
+  // - Deprecated endpoints marked with @Deprecated() decorator
+  // - 6-month deprecation notice before removal
+  // - Sunset header added to deprecated endpoints
+
   app.use(helmet());
   app.use(compression());
   app.use(cookieParser());

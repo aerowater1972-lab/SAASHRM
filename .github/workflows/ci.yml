@@ -30,6 +30,14 @@ jobs:
       - name: Lint
         run: npm run lint -w apps/api
 
+      - name: Secret scanning (TruffleHog)
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: ${{ github.sha }}
+          extra_args: --fail --json
+
       - name: Unit tests
         run: npm test -w apps/api
 

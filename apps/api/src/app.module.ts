@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { SharedModule } from './modules/shared/shared.module';
 import { AuthGuard } from './common/guards/auth.guard';
@@ -33,6 +33,7 @@ import { ProvincialWageModule } from './modules/provincial-wage/provincial-wage.
 import { DocumentManagementModule } from './modules/document-management/document-management.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
 import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
+import { DeprecationInterceptor } from './common/interceptors/deprecation.interceptor';
 
 @Module({
   imports: [
@@ -93,6 +94,10 @@ import { SuccessionPlanningModule } from './modules/succession-planning/successi
     {
       provide: APP_GUARD,
       useClass: CsrfGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DeprecationInterceptor,
     },
   ],
 })
