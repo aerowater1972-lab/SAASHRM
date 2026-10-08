@@ -1,12 +1,16 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { PermissionsResolver } from '@common/auth/permissions.resolver';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly permissions: PermissionsResolver,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
@@ -19,12 +23,17 @@ export class PermissionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user) {
+    if (!user?.sub) {
       throw new ForbiddenException('User not authenticated');
     }
 
+    // Authoritative: resolve fresh from role assignments, never trust the
+    // (slim, role-only) token payload for authorization decisions.
+    const resolved = await this.permissions.resolve(user.sub);
+    user.permissions = resolved;
+
     const hasPermission = requiredPermissions.some((permission) =>
-      user.permissions?.includes(permission),
+      resolved.includes(permission),
     );
 
     if (!hasPermission) {

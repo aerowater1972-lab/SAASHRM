@@ -6,9 +6,11 @@ const ADMIN_EMAIL = 'admin@flexy.local';
 const ADMIN_PASSWORD = 'admin123';
 
 test.describe('FR-11 — Training Compliance Dashboard', () => {
-  let accessToken: string;
+  let tokens: { accessToken: string; refreshToken: string };
 
-  test.beforeAll(async ({ request }) => {
+  // Fresh login per test: refresh tokens are single-use (rotated on every
+  // refresh), so sharing one token across tests would blacklist it.
+  test.beforeEach(async ({ request }) => {
     const res = await request.fetch(`${API_BASE}/admin/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': 'default' },
@@ -16,22 +18,26 @@ test.describe('FR-11 — Training Compliance Dashboard', () => {
     });
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    accessToken = body.accessToken;
-    expect(accessToken).toBeDefined();
+    expect(body.accessToken).toBeDefined();
+    tokens = { accessToken: body.accessToken, refreshToken: body.refreshToken };
   });
 
-  test('FR-11: Training compliance card visible on employee-relations dashboard', async ({ page }) => {
-    // Inject auth tokens
-    await page.goto(WEB_URL);
-    await page.evaluate((token) => {
-      window.localStorage.setItem('flexy.accessToken', token);
-      window.localStorage.setItem('flexy.refreshToken', token);
+  async function authPage(page: any, path: string) {
+    // Single navigation: AuthProvider restores once on boot (a second goto
+    // would re-trigger restore and burn the rotated refresh token).
+    await page.addInitScript(() => {
       window.localStorage.setItem('flexy.tenantId', 'default');
-    }, accessToken);
-
-    // Navigate to employee-relations dashboard (root)
-    await page.goto(`${WEB_URL}/employee-relations`);
+    });
+    await page.context().addCookies([
+      { name: 'access_token', value: tokens.accessToken, domain: 'localhost', path: '/' },
+      { name: 'refresh_token', value: tokens.refreshToken, domain: 'localhost', path: '/api/v1/admin/auth' },
+    ]);
+    await page.goto(`${WEB_URL}${path}`);
     await page.waitForLoadState('networkidle');
+  };
+
+  test('FR-11: Training compliance card visible on employee-relations dashboard', async ({ page }) => {
+    await authPage(page, '/employee-relations');
 
     // Verify the "Kepatuhan Pelatihan K3" card is present
     const complianceCard = page.getByText('Kepatuhan Pelatihan K3');
@@ -47,15 +53,7 @@ test.describe('FR-11 — Training Compliance Dashboard', () => {
   });
 
   test('FR-11: Department compliance chart renders', async ({ page }) => {
-    await page.goto(WEB_URL);
-    await page.evaluate((token) => {
-      window.localStorage.setItem('flexy.accessToken', token);
-      window.localStorage.setItem('flexy.refreshToken', token);
-      window.localStorage.setItem('flexy.tenantId', 'default');
-    }, accessToken);
-
-    await page.goto(`${WEB_URL}/employee-relations`);
-    await page.waitForLoadState('networkidle');
+    await authPage(page, '/employee-relations');
 
     // Verify the bar chart for "Kepatuhan Pelatihan per Departemen" is rendered
     // recharts renders SVG elements - look for the chart container or SVG
@@ -69,15 +67,7 @@ test.describe('FR-11 — Training Compliance Dashboard', () => {
   });
 
   test('FR-11: Export CSV button works for training compliance', async ({ page }) => {
-    await page.goto(WEB_URL);
-    await page.evaluate((token) => {
-      window.localStorage.setItem('flexy.accessToken', token);
-      window.localStorage.setItem('flexy.refreshToken', token);
-      window.localStorage.setItem('flexy.tenantId', 'default');
-    }, accessToken);
-
-    await page.goto(`${WEB_URL}/employee-relations`);
-    await page.waitForLoadState('networkidle');
+    await authPage(page, '/employee-relations');
 
     // Find the Export CSV button
     const exportBtn = page.getByRole('button', { name: /export csv/i });

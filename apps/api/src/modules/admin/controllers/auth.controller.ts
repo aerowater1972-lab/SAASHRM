@@ -1,9 +1,10 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Res, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Res, Get, Req, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthService } from '../services/auth.service';
+import { PermissionsResolver } from '@common/auth/permissions.resolver';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ChangePasswordDto } from '../dto/create-user.dto';
@@ -21,6 +22,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly permissions: PermissionsResolver,
   ) {}
 
   /**
@@ -52,6 +54,21 @@ export class AuthController {
     });
   }
 
+  private setRefreshCookie(res: Response, refreshToken: string) {
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/api/v1/admin/auth',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  private clearRefreshCookie(res: Response) {
+    res.clearCookie('refresh_token', { path: '/api/v1/admin/auth' });
+  }
+
   private clearAccessCookie(res: Response) {
     res.clearCookie('access_token', { path: '/' });
   }
@@ -79,6 +96,7 @@ export class AuthController {
   ) {
     const result = await this.authService.register(tenantId ?? 'default', dto);
     this.setAccessCookie(res, result.accessToken);
+    this.setRefreshCookie(res, result.refreshToken);
     const csrfToken = this.generateCsrfToken();
     this.setCsrfCookie(res, csrfToken);
     return { ...result, csrfToken };
@@ -97,6 +115,7 @@ export class AuthController {
   ) {
     const result = await this.authService.login(tenantId, dto.email, dto.password);
     this.setAccessCookie(res, result.accessToken);
+    this.setRefreshCookie(res, result.refreshToken);
     const csrfToken = this.generateCsrfToken();
     this.setCsrfCookie(res, csrfToken);
     return { ...result, csrfToken };
@@ -110,10 +129,16 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token' })
   async refresh(
     @Body('refreshToken') refreshToken: string,
+    @Req() req: Request & { cookies?: Record<string, string> },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.refresh(refreshToken);
+    const token = refreshToken || req.cookies?.refresh_token;
+    if (!token) {
+      throw new UnauthorizedException('Refresh token required');
+    }
+    const result = await this.authService.refresh(token);
     this.setAccessCookie(res, result.accessToken);
+    this.setRefreshCookie(res, result.refreshToken);
     const csrfToken = this.generateCsrfToken();
     this.setCsrfCookie(res, csrfToken);
     return { ...result, csrfToken };
@@ -139,11 +164,26 @@ export class AuthController {
   async logout(
     @CurrentUser('sub') userId: string,
     @Body('refreshToken') refreshToken: string,
+    @Req() req: Request & { cookies?: Record<string, string> },
     @Res({ passthrough: true }) res: Response,
   ) {
     this.clearAccessCookie(res);
+    this.clearRefreshCookie(res);
     this.clearCsrfCookie(res);
-    return this.authService.logout(userId, refreshToken);
+    return this.authService.logout(userId, refreshToken || req.cookies?.refresh_token);
+  }
+
+  @Get('me')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Current session identity (for cookie-based session restore)' })
+  async me(@CurrentUser() user: Record<string, unknown>) {
+    const { sub, email, tenantId, employeeId } = user;
+    return {
+      user: { id: sub, email, tenantId, employeeId: employeeId ?? null },
+      permissions: await this.permissions.resolve(String(sub)),
+    };
   }
 
   @Post('change-password')

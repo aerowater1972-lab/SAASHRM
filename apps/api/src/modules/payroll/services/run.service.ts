@@ -275,6 +275,7 @@ export class RunService {
     // prefer grade.baseSalary bila ada, fallback level x Rp1jt.
     const grade: any = employment?.grade;
     const baseSalary = Number(grade?.baseSalary ?? (Number(grade?.level || 0) * 1000000)) || 0;
+    const prorationFactor = this.prorationFactor(employee, period.startDate, period.endDate);
 
     let totalEarnings = 0;
     let totalDeductions = 0;
@@ -292,7 +293,7 @@ export class RunService {
       }
 
       if (comp.isProrated) {
-        amount = Math.round(amount * 1);
+        amount = Math.round(amount * prorationFactor);
       }
 
       if (comp.maxCap && amount > comp.maxCap) {
@@ -407,6 +408,7 @@ export class RunService {
     // prefer grade.baseSalary bila ada, fallback level x Rp1jt.
     const grade: any = employment?.grade;
     const baseSalary = Number(grade?.baseSalary ?? (Number(grade?.level || 0) * 1000000)) || 0;
+    const prorationFactor = this.prorationFactor(employee, period.startDate, period.endDate);
 
     let totalEarnings = 0;
     let totalDeductions = 0;
@@ -424,7 +426,7 @@ export class RunService {
       }
 
       if (comp.isProrated) {
-        amount = Math.round(amount * 1);
+        amount = Math.round(amount * prorationFactor);
       }
 
       if (comp.maxCap && amount > comp.maxCap) {
@@ -542,6 +544,28 @@ export class RunService {
       items,
       ...(employeeNotes ? { employeeNotes } : {}),
     };
+  }
+
+  /**
+   * Proration factor: share of the period the employee was actively employed,
+   * based on employee start/end dates. 1 for full-period employment.
+   */
+  private prorationFactor(employee: any, periodStart: Date, periodEnd: Date): number {
+    const start = new Date(periodStart);
+    const end = new Date(periodEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 1;
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    const empStart = employee?.startDate ? new Date(employee.startDate) : null;
+    const empEnd = employee?.endDate ? new Date(employee.endDate) : null;
+    if (empStart) empStart.setHours(0, 0, 0, 0);
+    if (empEnd) empEnd.setHours(0, 0, 0, 0);
+    const activeStart = empStart && empStart > start ? empStart : start;
+    const activeEnd = empEnd && empEnd < end ? empEnd : end;
+    if (activeEnd < activeStart) return 0;
+    const activeDays = Math.round((activeEnd.getTime() - activeStart.getTime()) / 86400000) + 1;
+    return Math.min(1, Math.max(0, activeDays / totalDays));
   }
 
   private async evaluateFormula(formula: string | null | undefined, baseSalary: number): Promise<number> {

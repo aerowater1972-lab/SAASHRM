@@ -6,9 +6,11 @@ const ADMIN_EMAIL = 'admin@flexy.local';
 const ADMIN_PASSWORD = 'admin123';
 
 test.describe('BR-05 — SP Auto-Escalation UI', () => {
-  let accessToken: string;
+  let tokens: { accessToken: string; refreshToken: string };
 
-  test.beforeAll(async ({ request }) => {
+  // Fresh login per test: refresh tokens are single-use (rotated on every
+  // refresh), so sharing one token across tests would blacklist it.
+  test.beforeEach(async ({ request }) => {
     const res = await request.fetch(`${API_BASE}/admin/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': 'default' },
@@ -16,39 +18,33 @@ test.describe('BR-05 — SP Auto-Escalation UI', () => {
     });
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    accessToken = body.accessToken;
-    expect(accessToken).toBeDefined();
+    expect(body.accessToken).toBeDefined();
+    tokens = { accessToken: body.accessToken, refreshToken: body.refreshToken };
   });
 
-  test('BR-05: Escalasi SP button visible for users with approve permission', async ({ page }) => {
-    await page.goto(WEB_URL);
-
-    // Inject auth tokens into localStorage before navigating to protected page
-    await page.evaluate((token) => {
-      window.localStorage.setItem('flexy.accessToken', token);
-      window.localStorage.setItem('flexy.refreshToken', token);
+  async function authPage(page: any, path: string) {
+    // Single navigation: AuthProvider restores once on boot (a second goto
+    // would re-trigger restore and burn the rotated refresh token).
+    await page.addInitScript(() => {
       window.localStorage.setItem('flexy.tenantId', 'default');
-    }, accessToken);
-
-    await page.goto(`${WEB_URL}/employee-relations/disciplinary-cases`);
+    });
+    await page.context().addCookies([
+      { name: 'access_token', value: tokens.accessToken, domain: 'localhost', path: '/' },
+      { name: 'refresh_token', value: tokens.refreshToken, domain: 'localhost', path: '/api/v1/admin/auth' },
+    ]);
+    await page.goto(`${WEB_URL}${path}`);
     await page.waitForLoadState('networkidle');
+  }
+
+  test('BR-05: Escalasi SP button visible for users with approve permission', async ({ page }) => {
+    await authPage(page, '/employee-relations/disciplinary-cases');
 
     const escalateButton = page.getByRole('button', { name: /eskalasi/i });
     await expect(escalateButton).toBeVisible();
   });
 
   test('BR-05: Click Eskalasi SP triggers escalation and shows toast', async ({ page }) => {
-    await page.goto(WEB_URL);
-
-    await page.evaluate((token) => {
-      window.localStorage.setItem('flexy.accessToken', token);
-      window.localStorage.setItem('flexy.refreshToken', token);
-      window.localStorage.setItem('flexy.tenantId', 'default');
-    }, accessToken);
-
-    // Wait for page to fully load with the SPA
-    await page.goto(`${WEB_URL}/employee-relations/disciplinary-cases`);
-    await page.waitForLoadState('networkidle');
+    await authPage(page, '/employee-relations/disciplinary-cases');
 
     const escalateButton = page.getByRole('button', { name: /eskalasi/i });
     await expect(escalateButton).toBeVisible();

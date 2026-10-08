@@ -47,8 +47,8 @@ export class PeriodService {
 
   async update(tenantId: string, id: string, dto: Partial<CreatePeriodDto>) {
     const period = await this.findOne(tenantId, id);
-    if ((period as any).status === 'LOCKED') {
-      throw new BadRequestException('Cannot modify a locked period');
+    if ((period as any).status === 'LOCKED' || (period as any).status === 'CLOSED') {
+      throw new BadRequestException('Cannot modify a closed or locked period');
     }
     return this.prisma.payrollPeriod.update({
       where: { id },

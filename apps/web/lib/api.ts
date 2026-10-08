@@ -3,18 +3,23 @@ export const API_BASE =
 
 export const DEFAULT_TENANT = 'default';
 
-const TOKEN_KEY = 'flexy.accessToken';
-const REFRESH_KEY = 'flexy.refreshToken';
 const TENANT_KEY = 'flexy.tenantId';
+
+// Session tokens live in memory only (never localStorage) so XSS cannot
+// persist them. The server also sets httpOnly cookies, which authenticate
+// requests via `credentials: include` even after a page reload.
+let memoryAccessToken: string | null = null;
+let memoryRefreshToken: string | null = null;
+let memoryPermissions: string[] | null = null;
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  return memoryAccessToken;
 }
 
 export function getRefreshToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(REFRESH_KEY);
+  return memoryRefreshToken;
 }
 
 export function getTenantId(): string {
@@ -23,13 +28,14 @@ export function getTenantId(): string {
 }
 
 function setTokens(accessToken: string, refreshToken: string) {
-  window.localStorage.setItem(TOKEN_KEY, accessToken);
-  window.localStorage.setItem(REFRESH_KEY, refreshToken);
+  memoryAccessToken = accessToken;
+  memoryRefreshToken = refreshToken;
 }
 
 export interface LoginResult {
   accessToken: string;
   refreshToken: string;
+  permissions?: string[];
   user: { id: string; email: string; fullName?: string; roles?: string[] };
 }
 
@@ -48,11 +54,14 @@ export const api = {
     return res.json();
   },
 
-  async logout(token: string): Promise<void> {
+  async logout(token: string | null): Promise<void> {
     await fetch(`${API_BASE}/admin/auth/logout`, {
       method: 'POST',
       credentials: 'include',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: token
+        ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
     }).catch(() => undefined);
   },
 
@@ -94,14 +103,16 @@ export function authHeaders(): Record<string, string> {
 }
 
 export function persistSession(result: LoginResult, tenantId: string): void {
-  window.localStorage.setItem(TOKEN_KEY, result.accessToken);
-  window.localStorage.setItem(REFRESH_KEY, result.refreshToken);
+  memoryAccessToken = result.accessToken;
+  memoryRefreshToken = result.refreshToken;
+  if (result.permissions) memoryPermissions = result.permissions;
   window.localStorage.setItem(TENANT_KEY, tenantId);
 }
 
 export function clearSession(): void {
-  window.localStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(REFRESH_KEY);
+  memoryAccessToken = null;
+  memoryRefreshToken = null;
+  memoryPermissions = null;
   window.localStorage.removeItem(TENANT_KEY);
 }
 
@@ -109,21 +120,24 @@ let refreshing: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshing) return refreshing;
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
   refreshing = (async () => {
     try {
+      // Prefer the in-memory refresh token; fall back to the httpOnly
+      // refresh cookie (sent automatically) after a page reload.
+      const body: Record<string, string> = {};
+      if (memoryRefreshToken) body.refreshToken = memoryRefreshToken;
       const res = await fetch(`${API_BASE}/admin/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) return null;
       const data = await res.json();
       const nextAccess = data.accessToken ?? data.access_token;
-      const nextRefresh = data.refreshToken ?? data.refresh_token ?? refreshToken;
+      const nextRefresh = data.refreshToken ?? data.refresh_token ?? memoryRefreshToken;
       if (!nextAccess) return null;
+      if (data.permissions) memoryPermissions = data.permissions;
       setTokens(nextAccess, nextRefresh);
       return nextAccess;
     } catch {
@@ -133,6 +147,33 @@ async function refreshAccessToken(): Promise<string | null> {
     }
   })();
   return refreshing;
+}
+
+export interface SessionIdentity {
+  user: { id: string; email: string; tenantId: string; employeeId?: string | null };
+  permissions: string[];
+}
+
+export async function fetchMe(): Promise<SessionIdentity> {
+  const res = await fetch(`${API_BASE}/admin/auth/me`, {
+    credentials: 'include',
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) throw new Error('Session expired. Please login again.');
+  return res.json();
+}
+
+/** Restore a session after reload using the httpOnly cookies. Returns identity or null. */
+export async function restoreSession(): Promise<SessionIdentity | null> {
+  const access = await refreshAccessToken();
+  if (!access) return null;
+  try {
+    const identity = await fetchMe();
+    if (identity.permissions?.length) memoryPermissions = identity.permissions;
+    return identity;
+  } catch {
+    return null;
+  }
 }
 
 async function request<T>(
@@ -190,6 +231,8 @@ export function decodeToken(): { sub: string; email: string; employeeId?: string
 
 export function hasPermission(perm: string): boolean {
   if (typeof window === 'undefined') return false;
+  // Authoritative list from login/me response (JWTs are slim by design).
+  if (memoryPermissions) return memoryPermissions.includes(perm);
   const token = getToken();
   if (!token) return false;
   try {

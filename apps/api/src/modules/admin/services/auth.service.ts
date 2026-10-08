@@ -81,7 +81,11 @@ export class AuthService {
       },
     });
 
-    const tokens = this.generateTokens(user, await this.loadPermissions(user.id));
+    const tokens = this.generateTokens(
+      user,
+      await this.loadPermissions(user.id),
+      await this.loadRoleIds(user.id),
+    );
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
@@ -125,7 +129,11 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    const tokens = this.generateTokens(user, await this.loadPermissions(user.id));
+    const tokens = this.generateTokens(
+      user,
+      await this.loadPermissions(user.id),
+      await this.loadRoleIds(user.id),
+    );
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
@@ -148,7 +156,11 @@ export class AuthService {
       const expiresAt = new Date(decodedToken.exp * 1000);
       await this.blacklistToken(refreshToken, expiresAt);
 
-      const tokens = this.generateTokens(user, await this.loadPermissions(user.id));
+      const tokens = this.generateTokens(
+      user,
+      await this.loadPermissions(user.id),
+      await this.loadRoleIds(user.id),
+    );
       return { user: this.sanitizeUser(user), ...tokens };
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -188,25 +200,30 @@ export class AuthService {
   private generateTokens(
     user: { id: string; email: string; tenantId: string; employeeId?: string | null },
     permissions: string[] = [],
+    roleIds: string[] = [],
   ) {
     const jwtSecret = this.requireJwtSecret('JWT_SECRET');
     const refreshSecret = this.requireJwtSecret('JWT_REFRESH_SECRET', true);
     const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN') || '15m';
     const refreshExpiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
 
+    // NOTE: permissions are intentionally NOT embedded in the JWT. With a full
+    // catalog they bloat tokens past browser cookie limits (~4KB). The guard
+    // resolves permissions per request from roleIds; clients receive the
+    // permission list in the JSON body / GET /me instead.
     const accessToken = jwt.sign(
-      { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, permissions },
+      { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, roles: roleIds },
       jwtSecret,
       { expiresIn: expiresIn as any, algorithm: 'HS256' },
     );
 
     const refreshToken = jwt.sign(
-      { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, permissions, type: 'refresh' },
+      { sub: user.id, email: user.email, tenantId: user.tenantId, employeeId: user.employeeId ?? null, roles: roleIds, type: 'refresh' },
       refreshSecret,
       { expiresIn: refreshExpiresIn as any, algorithm: 'HS256' },
     );
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, permissions };
   }
 
   private requireJwtSecret(key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET', allowFallbackToJwtSecret = false): string {
@@ -219,6 +236,15 @@ export class AuthService {
     throw new Error(
       `${key} is not configured (min 32 chars). Set it in environment; server refuses to start with insecure fallback.`,
     );
+  }
+
+  private async loadRoleIds(userId: string): Promise<string[]> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { userRoles: { select: { roleId: true } } },
+    });
+    if (!user) return [];
+    return [...new Set((user.userRoles || []).map((ur) => ur.roleId))];
   }
 
   private async loadPermissions(userId: string): Promise<string[]> {

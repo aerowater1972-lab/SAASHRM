@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api, LoginResult, persistSession, clearSession, getToken, getTenantId } from './api';
+import { api, LoginResult, persistSession, clearSession, getToken, getTenantId, restoreSession } from './api';
 
 interface AuthState {
   token: string | null;
@@ -21,9 +21,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setToken(getToken());
-    setTenantId(getTenantId());
-    setReady(true);
+    (async () => {
+      setTenantId(getTenantId());
+      if (getToken()) {
+        setToken(getToken());
+        setReady(true);
+        return;
+      }
+      // No in-memory token (e.g. after reload): try silent cookie restore.
+      try {
+        const identity = await restoreSession();
+        if (identity) {
+          setToken(getToken());
+          setTenantId(identity.user.tenantId || getTenantId());
+        }
+      } catch {
+        /* stay logged out */
+      } finally {
+        setReady(true);
+      }
+    })();
   }, []);
 
   async function login(email: string, password: string, tenant: string) {

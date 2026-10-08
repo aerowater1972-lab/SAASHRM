@@ -71,6 +71,7 @@ describe('AuthGuard', () => {
         tenantId: 'default',
         employeeId: null,
         role: undefined,
+        roles: [],
         permissions: [],
       });
     });

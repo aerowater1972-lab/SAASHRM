@@ -51,6 +51,9 @@ export class AuthGuard implements CanActivate {
         tenantId: decoded.tenantId,
         employeeId: decoded.employeeId ?? null,
         role: decoded.role,
+        roles: decoded.roles ?? [],
+        // Permissions are resolved per-request by PermissionGuard (tokens are
+        // slim by design). Legacy tokens may still carry them; prefer fresh.
         permissions: decoded.permissions || [],
       };
       setTenant(decoded.tenantId);

@@ -988,12 +988,12 @@ export class AttendanceService {
         tenantId,
         startDate: { lte: date },
         endDate: { gte: date },
-        status: PayrollPeriodStatus.LOCKED,
+        status: { in: [PayrollPeriodStatus.LOCKED, PayrollPeriodStatus.CLOSED] },
       },
     });
 
     if (period) {
-      throw new ForbiddenException('Cannot modify records in a locked payroll period');
+      throw new ForbiddenException('Cannot modify records in a closed or locked payroll period');
     }
   }
 
