@@ -29,6 +29,11 @@ export class CreateTalentPoolDto {
   @IsOptional()
   @IsString()
   criteria?: string;
+
+  @ApiPropertyOptional({ description: 'Pool status', enum: TalentPoolStatus, default: 'ACTIVE' })
+  @IsOptional()
+  @IsEnum(TalentPoolStatus)
+  status?: TalentPoolStatus;
 }
 
 export class UpdateTalentPoolDto {

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
-import { TalentPoolStatus, SuccessionPlanStatus } from '@prisma/client';
+import { TalentPoolStatus, SuccessionPlanStatus, TalentReadiness } from '@prisma/client';
+import { CreateTalentPoolDto, UpdateTalentPoolDto, AddPoolMemberDto, UpdatePoolMemberDto, CreateSuccessionPlanDto, UpdateSuccessionPlanDto, AddSuccessionCandidateDto, UpdateSuccessionCandidateDto } from '../dto/succession.dto';
 
 @Injectable()
 export class SuccessionPlanningService {
@@ -37,7 +38,7 @@ export class SuccessionPlanningService {
     return pool;
   }
 
-  async createPool(tenantId: string, dto: any) {
+  async createPool(tenantId: string, dto: CreateTalentPoolDto) {
     return this.prisma.talentPool.create({
       data: {
         tenantId,
@@ -49,7 +50,7 @@ export class SuccessionPlanningService {
     });
   }
 
-  async updatePool(tenantId: string, id: string, dto: any) {
+  async updatePool(tenantId: string, id: string, dto: UpdateTalentPoolDto) {
     const existing = await this.prisma.talentPool.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Talent pool not found');
     return this.prisma.talentPool.update({
@@ -70,7 +71,7 @@ export class SuccessionPlanningService {
     return { deleted: true };
   }
 
-  async addMember(tenantId: string, poolId: string, userId: string, dto: any) {
+  async addMember(tenantId: string, poolId: string, userId: string, dto: AddPoolMemberDto) {
     const pool = await this.prisma.talentPool.findFirst({ where: { id: poolId, tenantId, deletedAt: null } });
     if (!pool) throw new NotFoundException('Talent pool not found');
 
@@ -94,7 +95,7 @@ export class SuccessionPlanningService {
     });
   }
 
-  async updateMember(tenantId: string, poolId: string, employeeId: string, dto: any) {
+  async updateMember(tenantId: string, poolId: string, employeeId: string, dto: UpdatePoolMemberDto) {
     const member = await this.prisma.talentPoolMember.findFirst({
       where: { poolId, employeeId, pool: { tenantId } },
     });
@@ -164,7 +165,7 @@ export class SuccessionPlanningService {
     return plan;
   }
 
-  async createPlan(tenantId: string, userId: string, dto: any) {
+  async createPlan(tenantId: string, userId: string, dto: CreateSuccessionPlanDto) {
     const position = await this.prisma.position.findFirst({ where: { id: dto.positionId, tenantId } });
     if (!position) throw new BadRequestException('Invalid position');
 
@@ -192,7 +193,7 @@ export class SuccessionPlanningService {
     });
   }
 
-  async updatePlan(tenantId: string, id: string, dto: any) {
+  async updatePlan(tenantId: string, id: string, dto: UpdateSuccessionPlanDto) {
     const existing = await this.prisma.successionPlan.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Succession plan not found');
 
@@ -219,7 +220,7 @@ export class SuccessionPlanningService {
     return { deleted: true };
   }
 
-  async addCandidate(tenantId: string, planId: string, userId: string, dto: any) {
+  async addCandidate(tenantId: string, planId: string, userId: string, dto: AddSuccessionCandidateDto) {
     const plan = await this.prisma.successionPlan.findFirst({ where: { id: planId, tenantId, deletedAt: null } });
     if (!plan) throw new NotFoundException('Succession plan not found');
 
@@ -243,7 +244,7 @@ export class SuccessionPlanningService {
     });
   }
 
-  async updateCandidate(tenantId: string, planId: string, candidateId: string, dto: any) {
+  async updateCandidate(tenantId: string, planId: string, candidateId: string, dto: UpdateSuccessionCandidateDto) {
     const candidate = await this.prisma.successionCandidate.findFirst({
       where: { id: candidateId, planId, plan: { tenantId } },
     });
