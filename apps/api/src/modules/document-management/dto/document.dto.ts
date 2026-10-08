@@ -1,25 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsArray,
-  IsBoolean,
-  IsEnum,
-  IsOptional,
-  IsString,
-  MinLength,
-} from 'class-validator';
-import {
-  DocumentStatus,
-  DocumentAccessLevel,
-  DocumentPermissionLevel,
-  DocumentPermissionType,
-  DocumentAction,
-  SignatureStatus,
-} from '@prisma/client';
+import { IsString, IsOptional, IsArray, IsUUID, IsEnum, IsBoolean, IsDateString, IsInt } from 'class-validator';
+import { Type } from 'class-transformer';
+import { DocumentStatus, DocumentAction, SignatureStatus, DocumentAccessLevel, DocumentPermissionType } from '@prisma/client';
 
 export class CreateDocumentCategoryDto {
   @ApiProperty({ description: 'Category name' })
   @IsString()
-  @MinLength(1)
   name!: string;
 
   @ApiPropertyOptional({ description: 'Category description' })
@@ -27,21 +13,23 @@ export class CreateDocumentCategoryDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Category icon' })
+  @ApiPropertyOptional({ description: 'Icon name' })
   @IsOptional()
   @IsString()
   icon?: string;
 
-  @ApiPropertyOptional({ description: 'Category color hex' })
+  @ApiPropertyOptional({ description: 'Color hex', default: '#6366F1' })
   @IsOptional()
   @IsString()
   color?: string;
 
-  @ApiPropertyOptional({ description: 'Sort order' })
+  @ApiPropertyOptional({ description: 'Sort order', default: 0 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   sortOrder?: number;
 
-  @ApiPropertyOptional({ description: 'Active flag' })
+  @ApiPropertyOptional({ description: 'Is active', default: true })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
@@ -58,21 +46,23 @@ export class UpdateDocumentCategoryDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Category icon' })
+  @ApiPropertyOptional({ description: 'Icon name' })
   @IsOptional()
   @IsString()
   icon?: string;
 
-  @ApiPropertyOptional({ description: 'Category color hex' })
+  @ApiPropertyOptional({ description: 'Color hex' })
   @IsOptional()
   @IsString()
   color?: string;
 
   @ApiPropertyOptional({ description: 'Sort order' })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   sortOrder?: number;
 
-  @ApiPropertyOptional({ description: 'Active flag' })
+  @ApiPropertyOptional({ description: 'Is active' })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
@@ -81,7 +71,6 @@ export class UpdateDocumentCategoryDto {
 export class CreateDocumentDto {
   @ApiProperty({ description: 'Document title' })
   @IsString()
-  @MinLength(1)
   title!: string;
 
   @ApiPropertyOptional({ description: 'Document description' })
@@ -89,38 +78,38 @@ export class CreateDocumentDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Markdown/HTML content' })
+  @ApiPropertyOptional({ description: 'Document content (markdown/html)' })
   @IsOptional()
   @IsString()
   content?: string;
 
   @ApiPropertyOptional({ description: 'Category ID' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   categoryId?: string;
 
-  @ApiPropertyOptional({ description: 'Department ID scope' })
+  @ApiPropertyOptional({ description: 'Department ID' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   departmentId?: string;
 
-  @ApiPropertyOptional({ description: 'Access level' })
+  @ApiPropertyOptional({ description: 'Access level', enum: DocumentAccessLevel, default: 'TENANT' })
   @IsOptional()
   @IsEnum(DocumentAccessLevel)
   accessLevel?: DocumentAccessLevel;
 
-  @ApiPropertyOptional({ description: 'Tags' })
+  @ApiPropertyOptional({ description: 'Tags', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
 
-  @ApiPropertyOptional({ description: 'Is this a reusable template' })
+  @ApiPropertyOptional({ description: 'Is template', default: false })
   @IsOptional()
   @IsBoolean()
   isTemplate?: boolean;
 
-  @ApiPropertyOptional({ description: 'Initial status' })
+  @ApiPropertyOptional({ description: 'Initial status', enum: DocumentStatus, default: 'DRAFT' })
   @IsOptional()
   @IsEnum(DocumentStatus)
   status?: DocumentStatus;
@@ -137,101 +126,107 @@ export class UpdateDocumentDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Markdown/HTML content' })
+  @ApiPropertyOptional({ description: 'Document content (markdown/html)' })
   @IsOptional()
   @IsString()
   content?: string;
 
   @ApiPropertyOptional({ description: 'Category ID' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   categoryId?: string;
 
-  @ApiPropertyOptional({ description: 'Department ID scope' })
+  @ApiPropertyOptional({ description: 'Department ID' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   departmentId?: string;
 
-  @ApiPropertyOptional({ description: 'Access level' })
+  @ApiPropertyOptional({ description: 'Access level', enum: DocumentAccessLevel })
   @IsOptional()
   @IsEnum(DocumentAccessLevel)
   accessLevel?: DocumentAccessLevel;
 
-  @ApiPropertyOptional({ description: 'Tags' })
+  @ApiPropertyOptional({ description: 'Tags', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
-}
 
-export class CreateDocumentVersionDto {
-  @ApiProperty({ description: 'Version content (Markdown/HTML)' })
-  @IsString()
-  content!: string;
-
-  @ApiPropertyOptional({ description: 'Version title' })
-  @IsOptional()
-  @IsString()
-  title?: string;
-
-  @ApiPropertyOptional({ description: 'Change log description' })
+  @ApiPropertyOptional({ description: 'Change log for versioning' })
   @IsOptional()
   @IsString()
   changeLog?: string;
 }
 
 export class UpdateDocumentStatusDto {
-  @ApiProperty({ description: 'New document status' })
+  @ApiProperty({ description: 'New status', enum: DocumentStatus })
   @IsEnum(DocumentStatus)
   status!: DocumentStatus;
 }
 
-export class DocumentPermissionDto {
-  @ApiProperty({ description: 'Permission type' })
+export class CreateDocumentVersionDto {
+  @ApiPropertyOptional({ description: 'New title' })
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiProperty({ description: 'New content' })
+  @IsString()
+  content!: string;
+
+  @ApiPropertyOptional({ description: 'Change log' })
+  @IsOptional()
+  @IsString()
+  changeLog?: string;
+}
+
+export class AddDocumentPermissionDto {
+  @ApiProperty({ description: 'Permission type (user, department, role)', enum: DocumentPermissionType })
   @IsEnum(DocumentPermissionType)
   permissionType!: DocumentPermissionType;
 
-  @ApiProperty({ description: 'Target ID (role/user/department)' })
+  @ApiProperty({ description: 'Target ID (userId, departmentId, roleId)' })
   @IsString()
   targetId!: string;
 
-  @ApiPropertyOptional({ description: 'Permission level' })
+  @ApiPropertyOptional({ description: 'Permission level', enum: ['VIEW', 'EDIT', 'ADMIN'], default: 'VIEW' })
   @IsOptional()
-  @IsEnum(DocumentPermissionLevel)
-  permission?: DocumentPermissionLevel;
+  @IsEnum(['VIEW', 'EDIT', 'ADMIN'])
+  permission?: 'VIEW' | 'EDIT' | 'ADMIN';
 }
 
 export class UpdateDocumentPermissionDto {
-  @ApiPropertyOptional({ description: 'Permission level' })
+  @ApiPropertyOptional({ description: 'Permission level', enum: ['VIEW', 'EDIT', 'ADMIN'] })
   @IsOptional()
-  @IsEnum(DocumentPermissionLevel)
-  permission?: DocumentPermissionLevel;
+  @IsEnum(['VIEW', 'EDIT', 'ADMIN'])
+  permission?: 'VIEW' | 'EDIT' | 'ADMIN';
 }
 
 export class SignDocumentDto {
-  @ApiProperty({ description: 'Signature status' })
+  @ApiProperty({ description: 'Signature status', enum: SignatureStatus })
   @IsEnum(SignatureStatus)
   status!: SignatureStatus;
 
-  @ApiPropertyOptional({ description: 'Signature data (base64/hash)' })
+  @ApiPropertyOptional({ description: 'Signature data (base64 image)' })
   @IsOptional()
   @IsString()
   signatureData?: string;
 
-  @ApiPropertyOptional({ description: 'Expiration date' })
+  @ApiPropertyOptional({ description: 'Expiration date (ISO)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   expiresAt?: string;
 }
 
 export class LogDocumentActivityDto {
-  @ApiProperty({ description: 'Activity action' })
+  @ApiProperty({ description: 'Action', enum: DocumentAction })
   @IsEnum(DocumentAction)
   action!: DocumentAction;
 
-  @ApiPropertyOptional({ description: 'Activity details (JSON)' })
+  @ApiPropertyOptional({ description: 'Details (JSON)' })
   @IsOptional()
-  details?: Record<string, any>;
+  @IsString()
+  details?: string;
 
   @ApiPropertyOptional({ description: 'IP address' })
   @IsOptional()

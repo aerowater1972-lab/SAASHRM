@@ -4,7 +4,20 @@ import {
   DocumentStatus,
   DocumentAction,
   SignatureStatus,
+  DocumentAccessLevel,
 } from '@prisma/client';
+import {
+  CreateDocumentCategoryDto,
+  UpdateDocumentCategoryDto,
+  CreateDocumentDto,
+  UpdateDocumentDto,
+  UpdateDocumentStatusDto,
+  CreateDocumentVersionDto,
+  AddDocumentPermissionDto,
+  UpdateDocumentPermissionDto,
+  SignDocumentDto,
+  LogDocumentActivityDto,
+} from '../dto/document.dto';
 
 @Injectable()
 export class DocumentService {
@@ -28,7 +41,7 @@ export class DocumentService {
     return category;
   }
 
-  async createCategory(tenantId: string, userId: string, dto: any) {
+  async createCategory(tenantId: string, userId: string, dto: CreateDocumentCategoryDto) {
     return this.prisma.documentCategory.create({
       data: {
         tenantId,
@@ -42,7 +55,7 @@ export class DocumentService {
     });
   }
 
-  async updateCategory(tenantId: string, id: string, dto: any) {
+  async updateCategory(tenantId: string, id: string, dto: UpdateDocumentCategoryDto) {
     const existing = await this.prisma.documentCategory.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document category not found');
     return this.prisma.documentCategory.update({
@@ -120,7 +133,7 @@ export class DocumentService {
     return document;
   }
 
-  async create(tenantId: string, userId: string, dto: any) {
+  async create(tenantId: string, userId: string, dto: CreateDocumentDto) {
     if (dto.categoryId) {
       const category = await this.prisma.documentCategory.findFirst({ where: { id: dto.categoryId, tenantId, deletedAt: null } });
       if (!category) throw new BadRequestException('Invalid category');
@@ -137,7 +150,7 @@ export class DocumentService {
       content: dto.content ?? null,
       categoryId: dto.categoryId ?? null,
       departmentId: dto.departmentId ?? null,
-      accessLevel: dto.accessLevel ?? 'TENANT',
+      accessLevel: dto.accessLevel ?? DocumentAccessLevel.TENANT,
       tags: dto.tags ?? [],
       isTemplate: dto.isTemplate ?? false,
       createdById: userId,
@@ -169,7 +182,7 @@ export class DocumentService {
     return document;
   }
 
-  async update(tenantId: string, id: string, userId: string, dto: any) {
+  async update(tenantId: string, id: string, userId: string, dto: UpdateDocumentDto) {
     const existing = await this.prisma.document.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document not found');
 
@@ -200,13 +213,13 @@ export class DocumentService {
     const document = await this.prisma.document.update({ where: { id }, data });
 
     await this.prisma.documentActivity.create({
-      data: { documentId: id, userId, action: DocumentAction.UPDATED, details: dto },
+      data: { documentId: id, userId, action: DocumentAction.UPDATED, details: dto as any },
     });
 
     return document;
   }
 
-  async updateStatus(tenantId: string, id: string, userId: string, dto: any) {
+  async updateStatus(tenantId: string, id: string, userId: string, dto: UpdateDocumentStatusDto) {
     const existing = await this.prisma.document.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document not found');
 
@@ -240,7 +253,7 @@ export class DocumentService {
   }
 
   // ---------- Versions ----------
-  async createVersion(tenantId: string, id: string, userId: string, dto: any) {
+  async createVersion(tenantId: string, id: string, userId: string, dto: CreateDocumentVersionDto) {
     const existing = await this.prisma.document.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document not found');
 
@@ -269,7 +282,7 @@ export class DocumentService {
   }
 
   // ---------- Permissions ----------
-  async addPermission(tenantId: string, id: string, userId: string, dto: any) {
+  async addPermission(tenantId: string, id: string, userId: string, dto: AddDocumentPermissionDto) {
     const existing = await this.prisma.document.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document not found');
 
@@ -284,13 +297,13 @@ export class DocumentService {
     });
 
     await this.prisma.documentActivity.create({
-      data: { documentId: id, userId, action: DocumentAction.SHARED, details: dto },
+      data: { documentId: id, userId, action: DocumentAction.SHARED, details: dto as any },
     });
 
     return permission;
   }
 
-  async updatePermission(tenantId: string, id: string, permissionId: string, dto: any) {
+  async updatePermission(tenantId: string, id: string, permissionId: string, dto: UpdateDocumentPermissionDto) {
     const permission = await this.prisma.documentPermission.findFirst({
       where: { id: permissionId, documentId: id },
       include: { document: true },
@@ -332,7 +345,7 @@ export class DocumentService {
     return signature;
   }
 
-  async sign(tenantId: string, id: string, userId: string, dto: any) {
+  async sign(tenantId: string, id: string, userId: string, dto: SignDocumentDto) {
     const existing = await this.prisma.document.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document not found');
 
@@ -371,7 +384,7 @@ export class DocumentService {
     });
   }
 
-  async logActivity(tenantId: string, id: string, userId: string, dto: any) {
+  async logActivity(tenantId: string, id: string, userId: string, dto: LogDocumentActivityDto) {
     const existing = await this.prisma.document.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Document not found');
     return this.prisma.documentActivity.create({

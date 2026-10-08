@@ -25,7 +25,7 @@ import {
   UpdateDocumentDto,
   CreateDocumentVersionDto,
   UpdateDocumentStatusDto,
-  DocumentPermissionDto,
+  AddDocumentPermissionDto,
   UpdateDocumentPermissionDto,
   SignDocumentDto,
   LogDocumentActivityDto,
@@ -145,7 +145,7 @@ export class DocumentController {
   @Post(':id/permissions')
   @ApiOperation({ summary: 'Add permission grant' })
   @Permissions('documents:manage')
-  addPermission(@TenantId() tenantId: string, @Param('id') id: string, @CurrentUser() user: any, @Body() dto: DocumentPermissionDto) {
+  addPermission(@TenantId() tenantId: string, @Param('id') id: string, @CurrentUser() user: any, @Body() dto: AddDocumentPermissionDto) {
     return this.documentService.addPermission(tenantId, id, user.sub, dto);
   }
 
