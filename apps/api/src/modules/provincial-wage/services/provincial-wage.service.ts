@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '@common/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { computeWageBase } from '@modules/shared/utils/wage-base.util';
+import { CreateWageDto, UpdateWageDto } from '../dto/provincial-wage.dto';
 
 @Injectable()
 export class ProvincialWageService {
@@ -24,16 +25,15 @@ export class ProvincialWageService {
     return wage;
   }
 
-  async create(tenantId: string, dto: any) {
+  async create(tenantId: string, dto: CreateWageDto) {
     try {
       return await this.prisma.provincialMinimumWage.create({
         data: {
           tenantId,
           province: dto.province,
           year: dto.year,
-          minimumWage: dto.minimumWage ?? dto.amount,
-          effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : new Date(new Date().getFullYear(), 0, 1),
-          source: dto.source,
+          minimumWage: dto.amount,
+          effectiveDate: new Date(new Date().getFullYear(), 0, 1),
         },
       });
     } catch (error) {
@@ -44,10 +44,10 @@ export class ProvincialWageService {
     }
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: UpdateWageDto) {
     const existing = await this.prisma.provincialMinimumWage.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('Wage entry not found');
-    return this.prisma.provincialMinimumWage.update({ where: { id }, data: dto });
+    return this.prisma.provincialMinimumWage.update({ where: { id }, data: { minimumWage: dto.amount } });
   }
 
   async delete(tenantId: string, id: string) {
