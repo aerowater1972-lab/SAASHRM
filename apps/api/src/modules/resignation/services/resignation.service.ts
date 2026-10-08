@@ -14,6 +14,7 @@ import { Prisma, RequestStatus, TaskStatus, EmployeeStatus, ResignationRequest }
 import { CreateResignationDto, ResignationFilterDto } from '../dto/create-resignation.dto';
 import { CreateExitInterviewDto } from '../dto/create-exit-interview.dto';
 import { CreateOffboardingTaskDto } from '../dto/create-offboarding-task.dto';
+import { UpsertFinalSettlementDto } from '../dto/final-settlement.dto';
 
 @Injectable()
 export class ResignationService {
@@ -409,18 +410,18 @@ export class ResignationService {
     return settlement || null;
   }
 
-  async upsertFinalSettlement(tenantId: string, id: string, dto: any) {
+  async upsertFinalSettlement(tenantId: string, id: string, dto: UpsertFinalSettlementDto) {
     await this.findOne(tenantId, id);
     const existing = await this.prisma.finalSettlement.findFirst({
       where: { resignation: { id, tenantId } },
     });
 
     const data = {
-      unusedLeavePayout: dto.unusedLeavePayout || 0,
-      severanceAmount: dto.severanceAmount || 0,
-      loanDeduction: dto.loanDeduction || 0,
-      netPayout: dto.netPayout || 0,
-      status: dto.status || 'draft',
+      unusedLeavePayout: dto.unusedLeavePayout ?? 0,
+      severanceAmount: dto.severanceAmount ?? 0,
+      loanDeduction: dto.loanDeduction ?? 0,
+      netPayout: dto.netPayout ?? 0,
+      status: dto.status ?? 'draft',
     };
 
     if (existing) {
