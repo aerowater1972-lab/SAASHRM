@@ -156,7 +156,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, PermissionGuard)
   @ApiBearerAuth()
   @Permissions('admin:auth:logout')
   @HttpCode(HttpStatus.OK)
