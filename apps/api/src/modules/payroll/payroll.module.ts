@@ -21,6 +21,7 @@ import { PayrollAdjustmentService } from './services/payroll-adjustment.service'
 import { ThrService } from './services/thr.service';
 import { SeveranceService } from './services/severance.service';
 import { PayrollEventConsumer } from './services/payroll-event.consumer';
+import { RegulatorySyncService } from './services/regulatory-sync.service';
 
 @Module({
   imports: [EmployeeModule],
@@ -47,6 +48,7 @@ import { PayrollEventConsumer } from './services/payroll-event.consumer';
     PayrollAdjustmentService,
     ThrService,
     SeveranceService,
+    RegulatorySyncService,
     PayrollEventConsumer,
   ],
   exports: [
@@ -59,6 +61,7 @@ import { PayrollEventConsumer } from './services/payroll-event.consumer';
     PayrollAdjustmentService,
     ThrService,
     SeveranceService,
+    RegulatorySyncService,
   ],
 })
 export class PayrollModule implements OnModuleInit {
