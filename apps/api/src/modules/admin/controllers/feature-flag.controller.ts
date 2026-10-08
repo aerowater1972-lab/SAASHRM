@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
@@ -40,5 +40,19 @@ export class FeatureFlagController {
   @ApiOperation({ summary: 'Toggle a feature flag' })
   toggle(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.featureFlagService.toggle(tenantId, id);
+  }
+
+  @Get('evaluate')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Evaluate feature flag(s) for the current tenant (fail-closed)' })
+  async evaluate(
+    @TenantId() tenantId: string,
+    @Query('feature') feature?: string | string[],
+  ) {
+    const features = Array.isArray(feature) ? feature : feature ? [feature] : [];
+    if (features.length === 1) {
+      return { [features[0]]: await this.featureFlagService.isEnabled(tenantId, features[0]) };
+    }
+    return this.featureFlagService.evaluateMany(tenantId, features);
   }
 }

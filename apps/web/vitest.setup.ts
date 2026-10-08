@@ -23,18 +23,9 @@ vi.mock('next-auth/react', () => ({
   signOut: vi.fn(),
 }))
 
-// Mock TanStack Query
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn(),
-  useMutation: vi.fn(),
-  useQueryClient: () => ({
-    invalidateQueries: vi.fn(),
-    setQueryData: vi.fn(),
-    getQueryData: vi.fn(),
-  }),
-  QueryClient: vi.fn(),
-  QueryClientProvider: ({ children }: { children: React.ReactNode }) => children,
-}))
+// NOTE: Do NOT blanket-mock @tanstack/react-query here — hook tests rely
+// on the real QueryClient. Mock it per-test-file instead.
+// (A previous global `useQuery: vi.fn()` mock broke all hook tests.)
 
 // Mock Radix UI portals
 vi.mock('@radix-ui/react-dialog', () => ({

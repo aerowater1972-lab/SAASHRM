@@ -36,4 +36,30 @@ export class FeatureFlagService {
       data: { enabled: !flag.enabled },
     });
   }
+
+  /**
+   * Runtime evaluation for gradual rollouts. Missing flag = disabled
+   * (fail-closed), so new code paths stay off until explicitly enabled.
+   */
+  async isEnabled(tenantId: string, feature: string): Promise<boolean> {
+    const flag = await this.prisma.featureFlag.findFirst({
+      where: { tenantId, feature },
+      select: { enabled: true },
+    });
+    return flag?.enabled ?? false;
+  }
+
+  async evaluateMany(
+    tenantId: string,
+    features: string[],
+  ): Promise<Record<string, boolean>> {
+    const rows = await this.prisma.featureFlag.findMany({
+      where: { tenantId, feature: { in: features } },
+      select: { feature: true, enabled: true },
+    });
+    const out: Record<string, boolean> = {};
+    for (const f of features) out[f] = false;
+    for (const r of rows) out[r.feature] = r.enabled;
+    return out;
+  }
 }

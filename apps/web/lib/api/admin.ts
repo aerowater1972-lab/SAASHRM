@@ -101,6 +101,16 @@ export async function toggleFeatureFlag(id: string, enabled: boolean): Promise<F
   return api.put<FeatureFlag>(`/admin/feature-flags/${id}`, { enabled });
 }
 
+/**
+ * Evaluate feature flag(s) for the current tenant. Fail-closed:
+ * missing flag resolves to `false`.
+ */
+export async function evaluateFeatureFlags(features: string[]): Promise<Record<string, boolean>> {
+  if (features.length === 0) return {};
+  const qs = features.map((f) => `feature=${encodeURIComponent(f)}`).join('&');
+  return api.get<Record<string, boolean>>(`/admin/feature-flags/evaluate?${qs}`);
+}
+
 export async function fetchIntegrations(): Promise<Integration[]> {
   return api.get<Integration[]>('/admin/integrations');
 }
