@@ -1,81 +1,67 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsArray,
-  IsBoolean,
-  IsEnum,
-  IsOptional,
-  IsString,
-  MinLength,
-} from 'class-validator';
-import {
-  AnnouncementType,
-  AnnouncementPriority,
-  AnnouncementStatus,
-  AnnouncementAudience,
-} from '@prisma/client';
+import { IsString, IsOptional, IsArray, IsUUID, IsEnum, IsDateString, IsBoolean } from 'class-validator';
+import { AnnouncementStatus, AnnouncementAudience, AnnouncementType, AnnouncementPriority } from '@prisma/client';
 
 export class CreateAnnouncementDto {
   @ApiProperty({ description: 'Announcement title' })
   @IsString()
-  @MinLength(1)
   title!: string;
 
   @ApiProperty({ description: 'Announcement content' })
   @IsString()
-  @MinLength(1)
   content!: string;
 
-  @ApiPropertyOptional({ description: 'Announcement type' })
+  @ApiPropertyOptional({ description: 'Announcement type', default: 'GENERAL' })
   @IsOptional()
   @IsEnum(AnnouncementType)
   type?: AnnouncementType;
 
-  @ApiPropertyOptional({ description: 'Announcement priority' })
+  @ApiPropertyOptional({ description: 'Priority', enum: AnnouncementPriority, default: 'NORMAL' })
   @IsOptional()
   @IsEnum(AnnouncementPriority)
   priority?: AnnouncementPriority;
 
-  @ApiPropertyOptional({ description: 'Initial status' })
-  @IsOptional()
-  @IsEnum(AnnouncementStatus)
-  status?: AnnouncementStatus;
-
-  @ApiPropertyOptional({ description: 'Target audience' })
+  @ApiPropertyOptional({ description: 'Target audience', enum: AnnouncementAudience, default: 'ALL' })
   @IsOptional()
   @IsEnum(AnnouncementAudience)
   targetAudience?: AnnouncementAudience;
 
-  @ApiPropertyOptional({ description: 'Target IDs for restricted audience' })
+  @ApiPropertyOptional({ description: 'Target department/user IDs', type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('4', { each: true })
   targetIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Publish date (ISO string)' })
+  @ApiPropertyOptional({ description: 'Scheduled publish date (ISO)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   publishAt?: string;
 
-  @ApiPropertyOptional({ description: 'Expiration date (ISO string)' })
+  @ApiPropertyOptional({ description: 'Expiration date (ISO)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   expireAt?: string;
 
-  @ApiPropertyOptional({ description: 'Attachment URLs' })
+  @ApiPropertyOptional({ description: 'Attachment URLs', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   attachmentUrls?: string[];
 
-  @ApiPropertyOptional({ description: 'Require read receipts' })
+  @ApiPropertyOptional({ description: 'Require read receipt', default: false })
   @IsOptional()
   @IsBoolean()
   readReceiptRequired?: boolean;
 
-  @ApiPropertyOptional({ description: 'Allow comments' })
+  @ApiPropertyOptional({ description: 'Allow comments', default: true })
   @IsOptional()
   @IsBoolean()
   allowComments?: boolean;
+
+  @ApiPropertyOptional({ description: 'Initial status', enum: AnnouncementStatus })
+  @IsOptional()
+  @IsEnum(AnnouncementStatus)
+  status?: AnnouncementStatus;
 }
 
 export class UpdateAnnouncementDto {
@@ -94,39 +80,39 @@ export class UpdateAnnouncementDto {
   @IsEnum(AnnouncementType)
   type?: AnnouncementType;
 
-  @ApiPropertyOptional({ description: 'Announcement priority' })
+  @ApiPropertyOptional({ description: 'Priority', enum: AnnouncementPriority })
   @IsOptional()
   @IsEnum(AnnouncementPriority)
   priority?: AnnouncementPriority;
 
-  @ApiPropertyOptional({ description: 'Target audience' })
+  @ApiPropertyOptional({ description: 'Target audience', enum: AnnouncementAudience })
   @IsOptional()
   @IsEnum(AnnouncementAudience)
   targetAudience?: AnnouncementAudience;
 
-  @ApiPropertyOptional({ description: 'Target IDs for restricted audience' })
+  @ApiPropertyOptional({ description: 'Target department/user IDs', type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('4', { each: true })
   targetIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Publish date (ISO string)' })
+  @ApiPropertyOptional({ description: 'Scheduled publish date (ISO)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   publishAt?: string;
 
-  @ApiPropertyOptional({ description: 'Expiration date (ISO string)' })
+  @ApiPropertyOptional({ description: 'Expiration date (ISO)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   expireAt?: string;
 
-  @ApiPropertyOptional({ description: 'Attachment URLs' })
+  @ApiPropertyOptional({ description: 'Attachment URLs', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   attachmentUrls?: string[];
 
-  @ApiPropertyOptional({ description: 'Require read receipts' })
+  @ApiPropertyOptional({ description: 'Require read receipt' })
   @IsOptional()
   @IsBoolean()
   readReceiptRequired?: boolean;
@@ -138,7 +124,7 @@ export class UpdateAnnouncementDto {
 }
 
 export class UpdateAnnouncementStatusDto {
-  @ApiProperty({ description: 'New announcement status' })
+  @ApiProperty({ description: 'New status', enum: AnnouncementStatus })
   @IsEnum(AnnouncementStatus)
   status!: AnnouncementStatus;
 }

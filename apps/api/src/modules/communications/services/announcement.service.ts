@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
-import { AnnouncementStatus, AnnouncementAudience } from '@prisma/client';
+import { AnnouncementStatus, AnnouncementAudience, AnnouncementType, AnnouncementPriority } from '@prisma/client';
+import { CreateAnnouncementDto, UpdateAnnouncementDto, UpdateAnnouncementStatusDto } from '../dto/announcement.dto';
 
 @Injectable()
 export class AnnouncementService {
@@ -49,7 +50,7 @@ export class AnnouncementService {
     };
   }
 
-  async create(tenantId: string, userId: string, dto: any) {
+  async create(tenantId: string, userId: string, dto: CreateAnnouncementDto) {
     if (dto.targetAudience === AnnouncementAudience.DEPARTMENT && dto.targetIds?.length) {
       const departments = await this.prisma.department.findMany({
         where: { id: { in: dto.targetIds }, tenantId },
@@ -61,7 +62,8 @@ export class AnnouncementService {
     }
 
     const now = new Date();
-    const isScheduled = Boolean(dto.publishAt) && new Date(dto.publishAt) > now;
+    const publishAt = dto.publishAt ? new Date(dto.publishAt) : null;
+    const isScheduled = publishAt !== null && publishAt > now;
     const status = isScheduled && !dto.status
       ? AnnouncementStatus.SCHEDULED
       : (dto.status ?? AnnouncementStatus.DRAFT);
@@ -71,12 +73,12 @@ export class AnnouncementService {
         tenantId,
         title: dto.title,
         content: dto.content,
-        type: dto.type ?? 'GENERAL',
-        priority: dto.priority ?? 'NORMAL',
+        type: dto.type ?? AnnouncementType.GENERAL,
+        priority: dto.priority ?? AnnouncementPriority.NORMAL,
         status,
         targetAudience: dto.targetAudience ?? AnnouncementAudience.ALL,
         targetIds: dto.targetIds ?? [],
-        publishAt: dto.publishAt ? new Date(dto.publishAt) : null,
+        publishAt,
         expireAt: dto.expireAt ? new Date(dto.expireAt) : null,
         attachmentUrls: dto.attachmentUrls ?? [],
         readReceiptRequired: dto.readReceiptRequired ?? false,
@@ -87,7 +89,7 @@ export class AnnouncementService {
     });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: UpdateAnnouncementDto) {
     const existing = await this.prisma.announcement.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Announcement not found');
 
@@ -116,7 +118,7 @@ export class AnnouncementService {
     return announcement;
   }
 
-  async updateStatus(tenantId: string, id: string, dto: any) {
+  async updateStatus(tenantId: string, id: string, dto: UpdateAnnouncementStatusDto) {
     const existing = await this.prisma.announcement.findFirst({ where: { id, tenantId, deletedAt: null } });
     if (!existing) throw new NotFoundException('Announcement not found');
 
