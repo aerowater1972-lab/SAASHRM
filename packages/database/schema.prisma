@@ -80,8 +80,8 @@ model TenantEntity {
   updatedAt  DateTime  @updatedAt
   deletedAt  DateTime?
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id])
-  parent   TenantEntity?  @relation("EntityHierarchy", fields: [parentId], references: [id])
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  parent   TenantEntity?  @relation("EntityHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children TenantEntity[] @relation("EntityHierarchy")
 
   departments      Department[]
@@ -108,9 +108,9 @@ model User {
   updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
-  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   employeeId String?   @unique
-  employee   Employee? @relation(fields: [employeeId], references: [id])
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   userRoles                  UserRole[]
   notifications              Notification[]
@@ -151,7 +151,7 @@ model Role {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   userRoles       UserRole[]
   rolePermissions RolePermission[]
 
@@ -201,7 +201,7 @@ model FeatureFlag {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, feature])
 }
@@ -219,7 +219,7 @@ model Integration {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }
 
 // =======================================================================
@@ -237,7 +237,7 @@ model WorkflowDefinition {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  tenant    Tenant             @relation(fields: [tenantId], references: [id])
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   steps     WorkflowStep[]
   instances WorkflowInstance[]
 
@@ -273,7 +273,7 @@ model WorkflowInstance {
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
-  workflowDefinition WorkflowDefinition @relation(fields: [workflowDefId], references: [id])
+  workflowDefinition WorkflowDefinition @relation(fields: [workflowDefId], references: [id], onDelete: Restrict)
   approvals          WorkflowApproval[]
 }
 
@@ -310,7 +310,7 @@ model Notification {
   errorMessage String?
   createdAt    DateTime           @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 }
 
 // =======================================================================
@@ -331,8 +331,8 @@ model AuditLog {
   ipAddress String?
   userAgent String?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  user   User?  @relation(fields: [changedBy], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User?  @relation(fields: [changedBy], references: [id], onDelete: SetNull)
 
   @@index([tenantId, module, entity, entityId])
   @@index([tenantId, changedAt])
@@ -381,7 +381,7 @@ model Employee {
   updatedAt            DateTime       @updatedAt
   deletedAt            DateTime?
 
-  tenant                         Tenant                      @relation(fields: [tenantId], references: [id])
+  tenant                         Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user                           User?
   employments                    Employment[]
   documents                      EmployeeDocument[]
@@ -436,7 +436,7 @@ model Employee {
   // IDP
   individualDevelopmentPlans     IndividualDevelopmentPlan[]
   workLocationId                 String?
-  workLocation                   WorkLocation?               @relation(fields: [workLocationId], references: [id])
+  workLocation                   WorkLocation?               @relation(fields: [workLocationId], references: [id], onDelete: Restrict)
   isFieldWorker                  Boolean                     @default(false)
   locationPings                  LocationPing[]
   fieldTerritory                 FieldTerritory?
@@ -450,7 +450,7 @@ model Employee {
   ClearanceCertificate           ClearanceCertificate[]
   wfhRequests                    WfhRequest[]
   alumni                         Alumni[]
-  shiftGroup                     ShiftGroup?                 @relation(fields: [shiftGroupId], references: [id])
+  shiftGroup                     ShiftGroup?                 @relation(fields: [shiftGroupId], references: [id], onDelete: Restrict)
   shiftGroupId                   String?
 
   @@unique([tenantId, employeeId])
@@ -478,11 +478,11 @@ model Employment {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  employee   Employee    @relation(fields: [employeeId], references: [id])
-  position   Position    @relation(fields: [positionId], references: [id])
-  department Department  @relation(fields: [departmentId], references: [id])
-  grade      Grade?      @relation(fields: [gradeId], references: [id])
-  shiftGroup ShiftGroup? @relation(fields: [shiftGroupId], references: [id])
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  position   Position    @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  department Department  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  grade      Grade?      @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  shiftGroup ShiftGroup? @relation(fields: [shiftGroupId], references: [id], onDelete: Restrict)
 }
 
 model EmployeeDocument {
@@ -500,7 +500,7 @@ model EmployeeDocument {
   uploadedAt DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 }
 
 model EmployeeContact {
@@ -512,7 +512,7 @@ model EmployeeContact {
   emergencyContactPhone String?
   updatedAt             DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId])
 }
@@ -525,7 +525,7 @@ model EmployeeMedical {
   notes      String?
   updatedAt  DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId])
 }
@@ -545,7 +545,7 @@ model Organization {
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
-  parent                Organization?     @relation("OrgHierarchy", fields: [parentId], references: [id])
+  parent                Organization?     @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children              Organization[]    @relation("OrgHierarchy")
   departments           Department[]
   movementRequestsAsNew MovementRequest[] @relation("OrgMovementRequests")
@@ -571,9 +571,9 @@ model Department {
   cutOffTime         String? // HH:mm format, department-level clock-in cut-off
   cutOffGraceMinutes Int        @default(15) // grace minutes for late clock-in
 
-  organization            Organization             @relation(fields: [organizationId], references: [id])
-  entity                  TenantEntity?            @relation(fields: [entityId], references: [id])
-  parent                  Department?              @relation("DeptHierarchy", fields: [parentId], references: [id])
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entity                  TenantEntity?            @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  parent                  Department?              @relation("DeptHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children                Department[]             @relation("DeptHierarchy")
   positions               Position[]
   benefitEligibilityRules BenefitEligibilityRule[]
@@ -602,8 +602,8 @@ model Position {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  department                    Department        @relation(fields: [departmentId], references: [id])
-  grade                         Grade?            @relation(fields: [gradeId], references: [id])
+  department                    Department        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  grade                         Grade?            @relation(fields: [gradeId], references: [id], onDelete: Restrict)
   employments                   Employment[]
   movementRequestsAsNewPosition MovementRequest[]
   successionPlans               SuccessionPlan[]
@@ -659,7 +659,7 @@ model Shift {
   deletedAt                  DateTime?
 
   shiftGroupId  String?
-  shiftGroup    ShiftGroup?   @relation(fields: [shiftGroupId], references: [id])
+  shiftGroup    ShiftGroup?   @relation(fields: [shiftGroupId], references: [id], onDelete: Restrict)
   rosterEntries RosterEntry[]
 
   @@index([tenantId, shiftGroupId])
@@ -677,7 +677,7 @@ model ShiftGroup {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   shifts     Shift[]
   Employee   Employee[]
   Employment Employment[]
@@ -711,8 +711,8 @@ model RosterEntry {
   status     RosterEntryStatus @default(SCHEDULED)
 
   roster   Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id])
-  shift    Shift    @relation(fields: [shiftId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  shift    Shift    @relation(fields: [shiftId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, date])
 }
@@ -728,7 +728,7 @@ model HolidayCalendar {
   description String?
   createdAt   DateTime    @default(now())
 
-  entity TenantEntity? @relation(fields: [entityId], references: [id])
+  entity TenantEntity? @relation(fields: [entityId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, date, entityId])
 }
@@ -770,7 +770,7 @@ model AttendanceRecord {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  employee    Employee               @relation(fields: [employeeId], references: [id])
+  employee    Employee               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   corrections AttendanceCorrection[]
 
   @@unique([employeeId, date])
@@ -790,7 +790,7 @@ model BiometricCredential {
   enrolledAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, employeeId, type])
   @@index([tenantId, employeeId])
@@ -807,9 +807,9 @@ model AttendanceCorrection {
   approvedBy       String?
   createdAt        DateTime      @default(now())
 
-  attendance AttendanceRecord @relation(fields: [attendanceId], references: [id])
-  requester  Employee         @relation("correction_requester", fields: [requestedBy], references: [id])
-  approver   Employee?        @relation("correction_approver", fields: [approvedBy], references: [id])
+  attendance AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  requester  Employee         @relation("correction_requester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  approver   Employee?        @relation("correction_approver", fields: [approvedBy], references: [id], onDelete: Restrict)
 
   @@index([attendanceId])
 }
@@ -825,7 +825,7 @@ model WorkLocation {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   employees    Employee[]
-  tenant       TenantEntity @relation(fields: [tenantId], references: [id])
+  tenant       TenantEntity @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
 }
@@ -851,8 +851,8 @@ model WfhRequest {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -873,7 +873,7 @@ model WfhPolicy {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, isActive])
 }
@@ -895,7 +895,7 @@ model OvertimeRequest {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  employee Employee         @relation(fields: [employeeId], references: [id])
+  employee Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   records  OvertimeRecord[]
 
   @@index([tenantId])
@@ -917,8 +917,8 @@ model OvertimeRecord {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  employee        Employee         @relation(fields: [employeeId], references: [id])
-  overtimeRequest OvertimeRequest? @relation(fields: [overtimeRequestId], references: [id])
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  overtimeRequest OvertimeRequest? @relation(fields: [overtimeRequestId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
   @@index([employeeId])
@@ -963,8 +963,8 @@ model LeaveBalance {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  employee  Employee  @relation(fields: [employeeId], references: [id])
-  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, leaveTypeId, year])
 }
@@ -989,8 +989,8 @@ model LeaveRequest {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  employee  Employee  @relation(fields: [employeeId], references: [id])
-  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, status])
   @@index([employeeId, startDate])
@@ -1043,7 +1043,7 @@ model PayrollAdjustment {
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -1079,7 +1079,7 @@ model PayrollRun {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  period        PayrollPeriod       @relation(fields: [periodId], references: [id])
+  period        PayrollPeriod       @relation(fields: [periodId], references: [id], onDelete: Restrict)
   payslips      Payslip[]
   items         PayrollRunItem[]
   bankTransfers BankTransferBatch[]
@@ -1095,7 +1095,7 @@ model PayrollItem {
   createdAt        DateTime @default(now())
 
   payslip   Payslip          @relation(fields: [payslipId], references: [id], onDelete: Cascade)
-  component PayrollComponent @relation(fields: [componentId], references: [id])
+  component PayrollComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
 }
 
 model Payslip {
@@ -1113,8 +1113,8 @@ model Payslip {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  run      PayrollRun    @relation(fields: [runId], references: [id])
-  employee Employee      @relation(fields: [employeeId], references: [id])
+  run      PayrollRun    @relation(fields: [runId], references: [id], onDelete: Restrict)
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   items    PayrollItem[]
 
   @@index([tenantId, runId])
@@ -1129,7 +1129,7 @@ model SalaryComponent {
   endDate       DateTime?
   createdAt     DateTime  @default(now())
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
 }
@@ -1144,7 +1144,7 @@ model PayrollRunItem {
   createdAt    DateTime @default(now())
 
   run        PayrollRun                @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  employee   Employee                  @relation(fields: [employeeId], references: [id])
+  employee   Employee                  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   components PayrollRunItemComponent[]
 
   @@unique([payrollRunId, employeeId])
@@ -1221,8 +1221,8 @@ model BpjsClaim {
   updatedAt      DateTime        @updatedAt
   deletedAt      DateTime?
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -1254,8 +1254,8 @@ model BpjsKetenagakerjaanClaim {
   updatedAt      DateTime                       @updatedAt
   deletedAt      DateTime?
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -1334,7 +1334,7 @@ model AnnualTaxRecord {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, employeeId, year])
   @@index([tenantId, year])
@@ -1374,7 +1374,7 @@ model ThrRecord {
   createdAt    DateTime  @default(now())
 
   run      ThrRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([runId, employeeId])
   @@index([employeeId])
@@ -1414,7 +1414,7 @@ model SeveranceCase {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, status])
   @@index([employeeId])
@@ -1434,9 +1434,9 @@ model JobRequisition {
   manpowerPlanItemId String? // Link to approved manpower plan item (FR-04)
   createdAt          DateTime @default(now())
 
-  department       Department        @relation(fields: [departmentId], references: [id])
-  approver         Employee?         @relation("requisition_approver", fields: [approvedBy], references: [id])
-  manpowerPlanItem ManpowerPlanItem? @relation(fields: [manpowerPlanItemId], references: [id])
+  department       Department        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  approver         Employee?         @relation("requisition_approver", fields: [approvedBy], references: [id], onDelete: Restrict)
+  manpowerPlanItem ManpowerPlanItem? @relation(fields: [manpowerPlanItemId], references: [id], onDelete: Restrict)
   postings         JobPosting[]
 
   @@index([tenantId, status])
@@ -1464,7 +1464,7 @@ model JobPosting {
   updatedAt        DateTime      @updatedAt
 
   applications Application[]
-  requisition  JobRequisition? @relation(fields: [requisitionId], references: [id])
+  requisition  JobRequisition? @relation(fields: [requisitionId], references: [id], onDelete: Restrict)
 }
 
 model Candidate {
@@ -1503,9 +1503,9 @@ model Application {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  jobPosting          JobPosting           @relation(fields: [jobPostingId], references: [id])
-  candidate           Candidate            @relation(fields: [candidateId], references: [id])
-  employee            Employee?            @relation(fields: [employeeId], references: [id])
+  jobPosting          JobPosting           @relation(fields: [jobPostingId], references: [id], onDelete: Restrict)
+  candidate           Candidate            @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  employee            Employee?            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   interviews          Interview[]
   offers              Offer[]
   onboardingDocuments OnboardingDocument[]
@@ -1650,8 +1650,8 @@ model AssetAssignment {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  asset    Asset    @relation(fields: [assetId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 }
 
 // =======================================================================
@@ -1675,7 +1675,7 @@ model ExpenseClaim {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  employee Employee      @relation(fields: [employeeId], references: [id])
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   items    ExpenseItem[]
 }
 
@@ -1709,7 +1709,7 @@ model Loan {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  employee     Employee          @relation(fields: [employeeId], references: [id])
+  employee     Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   installments LoanInstallment[]
 }
 
@@ -1762,8 +1762,8 @@ model EmployeeBenefit {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  employee   Employee                   @relation(fields: [employeeId], references: [id])
-  benefit    Benefit                    @relation(fields: [benefitId], references: [id])
+  employee   Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  benefit    Benefit                    @relation(fields: [benefitId], references: [id], onDelete: Restrict)
   components EmployeeBenefitComponent[]
 }
 
@@ -1774,7 +1774,7 @@ model EmployeeBenefitComponent {
   amount             Decimal @db.Decimal(18, 2)
 
   employeeBenefit  EmployeeBenefit  @relation(fields: [employeeBenefitId], references: [id], onDelete: Cascade)
-  payrollComponent PayrollComponent @relation(fields: [payrollComponentId], references: [id])
+  payrollComponent PayrollComponent @relation(fields: [payrollComponentId], references: [id], onDelete: Restrict)
 }
 
 // =======================================================================
@@ -1815,8 +1815,8 @@ model PerformanceReview {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  cycle    ReviewCycle @relation(fields: [cycleId], references: [id])
-  employee Employee    @relation(fields: [employeeId], references: [id])
+  cycle    ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  employee Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   ratings  Rating[]
   goals    Goal[]
 }
@@ -1851,9 +1851,9 @@ model Goal {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  employee   Employee           @relation(fields: [employeeId], references: [id])
-  review     PerformanceReview? @relation(fields: [reviewId], references: [id])
-  approvedBy Employee?          @relation("goal_approver", fields: [approvedById], references: [id])
+  employee   Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  review     PerformanceReview? @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  approvedBy Employee?          @relation("goal_approver", fields: [approvedById], references: [id], onDelete: Restrict)
 }
 
 model CalibrationSession {
@@ -1865,8 +1865,8 @@ model CalibrationSession {
   createdAt     DateTime @default(now())
 
   cycle       ReviewCycle @relation(fields: [reviewCycleId], references: [id], onDelete: Cascade)
-  department  Department  @relation(fields: [departmentId], references: [id])
-  facilitator Employee    @relation("calibration_facilitator", fields: [facilitatorId], references: [id])
+  department  Department  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  facilitator Employee    @relation("calibration_facilitator", fields: [facilitatorId], references: [id], onDelete: Restrict)
 }
 
 model FinalScore {
@@ -1877,9 +1877,9 @@ model FinalScore {
   calibratedBy  String
   finalizedAt   DateTime @default(now())
 
-  employee         Employee          @relation(fields: [employeeId], references: [id])
+  employee         Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   cycle            ReviewCycle       @relation(fields: [reviewCycleId], references: [id], onDelete: Cascade)
-  calibrator       Employee          @relation("final_score_calibrator", fields: [calibratedBy], references: [id])
+  calibrator       Employee          @relation("final_score_calibrator", fields: [calibratedBy], references: [id], onDelete: Restrict)
   movementRequests MovementRequest[] @relation("movement_performance_ref")
 
   @@unique([employeeId, reviewCycleId])
@@ -1900,7 +1900,7 @@ model TalentPool {
   updatedAt   DateTime         @updatedAt
   deletedAt   DateTime?
 
-  tenant  Tenant             @relation(fields: [tenantId], references: [id])
+  tenant  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   members TalentPoolMember[]
 
   @@unique([tenantId, name])
@@ -1919,8 +1919,8 @@ model TalentPoolMember {
   addedAt         DateTime        @default(now())
 
   pool     TalentPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
-  employee Employee   @relation(fields: [employeeId], references: [id])
-  addedBy  User       @relation(fields: [addedById], references: [id])
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  addedBy  User       @relation(fields: [addedById], references: [id], onDelete: Restrict)
 
   @@unique([poolId, employeeId])
   @@index([poolId])
@@ -1941,11 +1941,11 @@ model SuccessionPlan {
   updatedAt         DateTime             @updatedAt
   deletedAt         DateTime?
 
-  tenant        Tenant                @relation(fields: [tenantId], references: [id])
-  position      Position              @relation(fields: [positionId], references: [id])
-  department    Department?           @relation(fields: [departmentId], references: [id])
-  currentHolder Employee?             @relation("succession_incumbent", fields: [currentEmployeeId], references: [id])
-  createdBy     User                  @relation("succession_creator", fields: [createdById], references: [id])
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  position      Position              @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  department    Department?           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  currentHolder Employee?             @relation("succession_incumbent", fields: [currentEmployeeId], references: [id], onDelete: Restrict)
+  createdBy     User                  @relation("succession_creator", fields: [createdById], references: [id], onDelete: Restrict)
   candidates    SuccessionCandidate[]
 
   @@unique([tenantId, positionId])
@@ -1965,8 +1965,8 @@ model SuccessionCandidate {
   updatedAt       DateTime        @updatedAt
 
   plan     SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  employee Employee       @relation(fields: [employeeId], references: [id])
-  addedBy  User           @relation("succession_candidate_adder", fields: [addedById], references: [id])
+  employee Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  addedBy  User           @relation("succession_candidate_adder", fields: [addedById], references: [id], onDelete: Restrict)
 
   @@unique([planId, employeeId])
   @@index([planId])
@@ -1991,15 +1991,15 @@ model Training {
   status      TrainingStatus @default(PLANNED)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
-  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   participants                   TrainingParticipant[]
-  recommendedViolationCategory   ViolationCategory?    @relation("recommended_k3_training", fields: [recommendedViolationCategoryId], references: [id])
+  recommendedViolationCategory   ViolationCategory?    @relation("recommended_k3_training", fields: [recommendedViolationCategoryId], references: [id], onDelete: Restrict)
   recommendedViolationCategoryId String?
 
   // LMS enhancements
   courseId String?
-  course   Course? @relation(fields: [courseId], references: [id])
+  course   Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 // LMS Course — structured learning path with modules and lessons
@@ -2014,7 +2014,7 @@ model Course {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   modules   CourseModule[]
   trainees  CourseTrainee[]
@@ -2092,8 +2092,8 @@ model QuizAttempt {
   submittedAt DateTime  @default(now())
   completedAt DateTime?
 
-  quiz    Quiz     @relation(fields: [quizId], references: [id])
-  trainee Employee @relation(fields: [traineeId], references: [id])
+  quiz    Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  trainee Employee @relation(fields: [traineeId], references: [id], onDelete: Restrict)
 
   @@unique([quizId, traineeId])
 }
@@ -2109,7 +2109,7 @@ model CourseTrainee {
   completedAt DateTime?
 
   course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([courseId, employeeId])
 }
@@ -2127,10 +2127,10 @@ model Feedback360 {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  cycle    ReviewCycle @relation(fields: [reviewCycleId], references: [id])
-  reviewee Employee    @relation("feedback_reviewee", fields: [revieweeId], references: [id])
-  reviewer Employee    @relation("feedback_reviewer", fields: [reviewerId], references: [id])
-  tenant   Tenant      @relation(fields: [tenantId], references: [id])
+  cycle    ReviewCycle @relation(fields: [reviewCycleId], references: [id], onDelete: Restrict)
+  reviewee Employee    @relation("feedback_reviewee", fields: [revieweeId], references: [id], onDelete: Restrict)
+  reviewer Employee    @relation("feedback_reviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   questions Feedback360Question[]
 
@@ -2166,9 +2166,9 @@ model IndividualDevelopmentPlan {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  employee Employee?    @relation(fields: [employeeId], references: [id])
-  cycle    ReviewCycle? @relation(fields: [reviewCycleId], references: [id])
-  tenant   Tenant       @relation(fields: [tenantId], references: [id])
+  employee Employee?    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  cycle    ReviewCycle? @relation(fields: [reviewCycleId], references: [id], onDelete: Restrict)
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   activities IDPActivity[]
 
@@ -2202,7 +2202,7 @@ model ProvincialMinimumWage {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, province, year])
   @@index([tenantId, province])
@@ -2219,7 +2219,7 @@ model TrainingParticipant {
   createdAt   DateTime          @default(now())
 
   training Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@unique([trainingId, employeeId])
 }
@@ -2236,7 +2236,7 @@ model Certification {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 }
 
 // =======================================================================
@@ -2258,7 +2258,7 @@ model ResignationRequest {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  employee             Employee              @relation(fields: [employeeId], references: [id])
+  employee             Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   exitInterview        ExitInterview?
   offboardingTasks     OffboardingTask[]
   finalSettlement      FinalSettlement?
@@ -2323,7 +2323,7 @@ model ClearanceCertificate {
   deletedAt     DateTime?
 
   resignation ResignationRequest @relation(fields: [resignationId], references: [id], onDelete: Cascade)
-  employee    Employee           @relation(fields: [employeeId], references: [id])
+  employee    Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -2352,7 +2352,7 @@ model Alumni {
   updatedAt            DateTime  @updatedAt
   deletedAt            DateTime?
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, employeeId])
@@ -2371,11 +2371,11 @@ model MovementRequest {
   performanceReviewRefId String? // FK to FinalScore
   createdAt              DateTime @default(now())
 
-  employee          Employee      @relation(fields: [employeeId], references: [id])
-  newPosition       Position?     @relation(fields: [newPositionId], references: [id])
-  newDepartment     Department?   @relation("DeptMovementRequests", fields: [newDepartmentId], references: [id])
-  newOrganization   Organization? @relation("OrgMovementRequests", fields: [newOrganizationId], references: [id])
-  performanceReview FinalScore?   @relation("movement_performance_ref", fields: [performanceReviewRefId], references: [id])
+  employee          Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  newPosition       Position?     @relation(fields: [newPositionId], references: [id], onDelete: Restrict)
+  newDepartment     Department?   @relation("DeptMovementRequests", fields: [newDepartmentId], references: [id], onDelete: Restrict)
+  newOrganization   Organization? @relation("OrgMovementRequests", fields: [newOrganizationId], references: [id], onDelete: Restrict)
+  performanceReview FinalScore?   @relation("movement_performance_ref", fields: [performanceReviewRefId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
 }
@@ -2388,8 +2388,8 @@ model BenefitEligibilityRule {
   createdAt    DateTime @default(now())
 
   benefit    Benefit     @relation(fields: [benefitId], references: [id], onDelete: Cascade)
-  grade      Grade?      @relation(fields: [gradeId], references: [id])
-  department Department? @relation(fields: [departmentId], references: [id])
+  grade      Grade?      @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
 }
 
 model EssNotification {
@@ -2401,7 +2401,7 @@ model EssNotification {
   archivedAt DateTime? // BR-05: archived after retention window, hidden from default list
   createdAt  DateTime  @default(now())
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([employeeId, readStatus])
 }
@@ -2412,7 +2412,7 @@ model EssOnboardingProgress {
   tourCompleted      Boolean   @default(false)
   profileConfirmedAt DateTime?
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 }
 
 model EssPreference {
@@ -2424,7 +2424,7 @@ model EssPreference {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 }
 
 // BR-02: sensitive profile changes (NPWP, BPJS) require HR Admin approval
@@ -2440,7 +2440,7 @@ model EssProfileChangeRequest {
   reviewedBy  String?
   reviewedAt  DateTime?
 
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, status])
 }
@@ -3081,7 +3081,7 @@ model ViolationCategory {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant               Tenant             @relation(fields: [tenantId], references: [id])
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   disciplinaryCases    DisciplinaryCase[]
   recommendedTrainings Training[]         @relation("recommended_k3_training")
 
@@ -3108,11 +3108,11 @@ model DisciplinaryCase {
   updatedAt           DateTime           @updatedAt
   deletedAt           DateTime?
 
-  tenant            Tenant            @relation(fields: [tenantId], references: [id])
-  employee          Employee          @relation(fields: [employeeId], references: [id])
-  violationCategory ViolationCategory @relation(fields: [violationCategoryId], references: [id])
-  approvedBy        User?             @relation("approved_disciplinary", fields: [approvedById], references: [id])
-  escalatedTo       User?             @relation("escalated_disciplinary", fields: [escalatedToId], references: [id])
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  violationCategory ViolationCategory @relation(fields: [violationCategoryId], references: [id], onDelete: Restrict)
+  approvedBy        User?             @relation("approved_disciplinary", fields: [approvedById], references: [id], onDelete: SetNull)
+  escalatedTo       User?             @relation("escalated_disciplinary", fields: [escalatedToId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -3137,9 +3137,9 @@ model IncidentReport {
   updatedAt               DateTime         @updatedAt
   deletedAt               DateTime?
 
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  reportedBy User?    @relation("reported_incidents", fields: [reportedById], references: [id])
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reportedBy User?    @relation("reported_incidents", fields: [reportedById], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@index([tenantId, severity])
@@ -3160,8 +3160,8 @@ model PpeAssignment {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([tenantId, status])
@@ -3189,8 +3189,8 @@ model GrievanceCase {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  reporter Employee @relation(fields: [reporterId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  reporter Employee @relation(fields: [reporterId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, status])
   @@index([reporterId])
@@ -3209,7 +3209,7 @@ model BipartiteSession {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, sessionDate])
 }
@@ -3227,7 +3227,7 @@ model TenantBranding {
   faviconUrl     String?
   updatedAt      DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }
 
 // =======================================================================
@@ -3247,7 +3247,7 @@ model DocumentCategory {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   documents Document[]
 
   @@unique([tenantId, name])
@@ -3274,10 +3274,10 @@ model Document {
   deletedAt    DateTime?
   publishedAt  DateTime?
 
-  tenant      Tenant               @relation(fields: [tenantId], references: [id])
-  category    DocumentCategory?    @relation(fields: [categoryId], references: [id])
-  department  Department?          @relation(fields: [departmentId], references: [id])
-  creator     User                 @relation(fields: [createdById], references: [id])
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  category    DocumentCategory?    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  department  Department?          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  creator     User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
   versions    DocumentVersion[]
   signatures  DocumentSignature[]
   permissions DocumentPermission[]
@@ -3301,7 +3301,7 @@ model DocumentVersion {
   createdAt   DateTime @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  creator  User     @relation(fields: [createdById], references: [id])
+  creator  User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   @@unique([documentId, version])
   @@index([documentId])
@@ -3317,7 +3317,7 @@ model DocumentPermission {
   createdById    String
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  creator  User     @relation(fields: [createdById], references: [id])
+  creator  User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   @@unique([documentId, permissionType, targetId])
   @@index([documentId])
@@ -3338,7 +3338,7 @@ model DocumentSignature {
   updatedAt       DateTime        @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([documentId, userId])
   @@index([documentId, status])
@@ -3355,7 +3355,7 @@ model DocumentActivity {
   createdAt  DateTime       @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([documentId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
@@ -3381,8 +3381,8 @@ model Announcement {
   updatedAt           DateTime             @updatedAt
   deletedAt           DateTime?
 
-  tenant  Tenant @relation(fields: [tenantId], references: [id])
-  creator User   @relation(fields: [createdById], references: [id])
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  creator User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([tenantId, status, publishAt(sort: Desc)])
   @@index([tenantId, type])
@@ -3480,7 +3480,7 @@ model SystemHealthSnapshot {
   errorRate     Float? // percentage
   snapshotAt    DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, snapshotAt(sort: Desc)])
 }
@@ -3497,7 +3497,7 @@ model BackupRecord {
   triggeredBy String? // userId or "SCHEDULED"
   createdAt   DateTime  @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, startedAt(sort: Desc)])
 }
@@ -3513,7 +3513,7 @@ model MaintenanceWindow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, startsAt, endsAt])
 }
@@ -3527,8 +3527,8 @@ model LocationPing {
   lng            Float
   accuracyMeters Float?
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId, recordedAt(sort: Desc)])
   @@index([tenantId, recordedAt(sort: Desc)])
@@ -3543,7 +3543,7 @@ model FieldTerritory {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   employee            Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   territoryViolations TerritoryViolation[]
 
@@ -3560,7 +3560,7 @@ model LiveTrackingSettings {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 }
 
 model TerritoryViolation {
@@ -3574,9 +3574,9 @@ model TerritoryViolation {
   recordedAt     DateTime @default(now())
   notified       Boolean  @default(false)
 
-  tenant    Tenant         @relation(fields: [tenantId], references: [id])
-  employee  Employee       @relation(fields: [employeeId], references: [id])
-  territory FieldTerritory @relation(fields: [territoryId], references: [id])
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee  Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  territory FieldTerritory @relation(fields: [territoryId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId, recordedAt(sort: Desc)])
 }
@@ -3600,7 +3600,7 @@ model EngagementSurvey {
   updatedAt   DateTime     @updatedAt
   deletedAt   DateTime?
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   questions   SurveyQuestion[]
   responses   SurveyResponse[]
   actionItems SurveyActionItem[]
@@ -3677,7 +3677,7 @@ model ManpowerPlan {
   updatedAt    DateTime           @updatedAt
   deletedAt    DateTime?
 
-  tenant Tenant             @relation(fields: [tenantId], references: [id])
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   items  ManpowerPlanItem[]
 
   @@index([tenantId, departmentId, period])
