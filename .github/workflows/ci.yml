@@ -255,3 +255,81 @@ jobs:
         run: k6 run k6-smoke.js
         env:
           K6_WEB_DASHBOARD: true
+
+  backup-restore:
+    name: Backup/Restore Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flexy_hrms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flexy_hrms?schema=public
+      JWT_SECRET: ci-jwt-secret-min-32-chars-long-0001
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
+      DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
+      ALLOW_PUBLIC_REGISTER: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --schema=packages/database/schema.prisma
+
+      - name: Seed database
+        run: npm run db:seed
+
+      - name: Build API
+        run: npm run build -w apps/api
+
+      - name: Run backup script
+        run: |
+          chmod +x scripts/backup.sh
+          ./scripts/backup.sh ./backups
+        env:
+          BACKUP_RETENTION_DAYS: 0
+
+      - name: Verify backup file exists
+        run: |
+          ls -la ./backups/
+          BACKUP_FILE=$(ls -t ./backups/flexy_hrms_*.dump | head -1)
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+
+      - name: Create fresh database for restore test
+        run: |
+          psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS flexy_hrms_restore;"
+          psql -h localhost -U postgres -c "CREATE DATABASE flexy_hrms_restore;"
+
+      - name: Restore to fresh database
+        run: |
+          chmod +x scripts/restore.sh
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/flexy_hrms_restore?schema=public" \
+          ./scripts/restore.sh --force "$BACKUP_FILE"
+
+      - name: Verify restored data integrity
+        run: |
+          psql -h localhost -U postgres -d flexy_hrms_restore -c "SELECT count(*) FROM \"User\";"
+          psql -h localhost -U postgres -d flexy_hrms_restore -c "SELECT count(*) FROM \"Employee\";"
+          psql -h localhost -U postgres -d flexy_hrms_restore -c "SELECT count(*) FROM \"Employment\";"
