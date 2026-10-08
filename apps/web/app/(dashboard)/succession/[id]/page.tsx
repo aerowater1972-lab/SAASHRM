@@ -151,7 +151,7 @@ export default function SuccessionPlanDetailPage({ params }: { params: { id: str
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="candNotes">Catatan Assessment</Label>
-                        <textarea id="candNotes" value={assessmentNotes} onChange={(e) => setAssessmentNotes(e.target.value)} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Hasil assessment..." />
+                        <textarea aria-label="Catatan Assessment" id="candNotes" value={assessmentNotes} onChange={(e) => setAssessmentNotes(e.target.value)} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Hasil assessment..." />
                       </div>
                       <div className="flex justify-end gap-2">
                         <DialogClose asChild>

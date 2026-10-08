@@ -193,6 +193,7 @@ export default function BiometricEnrollmentPage() {
         ) : (
           <div className="space-y-2">
             <textarea
+              aria-label="Template sidik jari"
               className="h-32 w-full rounded-md border border-input bg-background p-3 text-xs outline-none focus:ring-2 focus:ring-ring"
               placeholder="Tempel template sidik jari (format mesin absen) di sini, atau unggah file template."
               value={fingerprintTemplate}

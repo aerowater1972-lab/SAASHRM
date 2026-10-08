@@ -144,7 +144,7 @@ export default function SalaryComponentsPage() {
 
       <div className="flex items-center gap-3">
         <Select value={selectedEmp} onValueChange={(v) => setSelectedEmp(v)}>
-          <SelectTrigger className="max-w-xs"><SelectValue placeholder="Semua karyawan" /></SelectTrigger>
+          <SelectTrigger className="max-w-xs" aria-label="Filter karyawan"><SelectValue placeholder="Semua karyawan" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="">Semua karyawan</SelectItem>
             {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.fullName}</SelectItem>)}

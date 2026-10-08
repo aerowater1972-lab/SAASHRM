@@ -107,7 +107,7 @@ export default function OvertimePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ot-reason">Alasan</Label>
-                <textarea
+                <textarea aria-label="Alasan"
                   id="ot-reason"
                   {...form.register('reason')}
                   rows={3}

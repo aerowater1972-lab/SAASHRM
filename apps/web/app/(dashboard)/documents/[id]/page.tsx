@@ -127,7 +127,7 @@ export default function DocumentDetailPage() {
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label htmlFor="verContent">Konten baru (Markdown)</Label>
-                  <textarea
+                  <textarea aria-label="Konten baru (Markdown)"
                     id="verContent"
                     value={versionContent}
                     onChange={(e) => setVersionContent(e.target.value)}

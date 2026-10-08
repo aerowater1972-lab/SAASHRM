@@ -206,7 +206,7 @@ export default function NewEmployeePage() {
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="address">Alamat</Label>
-                <textarea
+                <textarea aria-label="Alamat"
                   id="address"
                   {...register('address')}
                   rows={2}
@@ -264,7 +264,7 @@ export default function NewEmployeePage() {
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="medicalNotes">Catatan Medis</Label>
-                <textarea
+                <textarea aria-label="Catatan Medis"
                   id="medicalNotes"
                   {...register('medicalNotes')}
                   rows={2}
@@ -287,7 +287,7 @@ export default function NewEmployeePage() {
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="notes">Catatan</Label>
-                <textarea
+                <textarea aria-label="Catatan"
                   id="notes"
                   {...register('notes')}
                   rows={3}

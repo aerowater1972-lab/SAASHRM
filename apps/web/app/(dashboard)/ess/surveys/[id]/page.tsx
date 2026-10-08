@@ -176,6 +176,7 @@ export default function SurveyFillPage() {
               )}
               {q.questionType === 'FREE_TEXT' && (
                 <textarea
+                  aria-label={`Jawaban: ${q.questionText}`}
                   value={answers[q.id] || ''}
                   onChange={e => setAnswer(q.id, e.target.value)}
                   rows={3}

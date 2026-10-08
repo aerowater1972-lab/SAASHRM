@@ -232,7 +232,7 @@ function ExpenseClaimForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="description">Deskripsi</Label>
-        <textarea
+        <textarea aria-label="Deskripsi"
           id="description"
           rows={3}
           placeholder="Keterangan klaim (opsional)"

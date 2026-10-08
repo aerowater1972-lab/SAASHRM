@@ -123,7 +123,7 @@ export default function AnnouncementsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="annContent">Isi Pengumuman</Label>
-                <textarea
+                <textarea aria-label="Isi Pengumuman"
                   id="annContent"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}

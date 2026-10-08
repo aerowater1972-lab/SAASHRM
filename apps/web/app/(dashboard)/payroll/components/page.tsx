@@ -143,7 +143,7 @@ export default function PayrollComponentsPage() {
               </label>
               <div className="space-y-2">
                 <Label htmlFor="pc-desc">Description</Label>
-                <textarea id="pc-desc" {...form.register('description')} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                <textarea aria-label="Description" id="pc-desc" {...form.register('description')} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
               </div>
               <Button type="submit" disabled={createMutate.isPending || updateMutate.isPending}>{editId ? 'Perbarui' : 'Simpan'}</Button>
             </form>

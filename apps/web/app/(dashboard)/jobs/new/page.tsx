@@ -66,7 +66,7 @@ export default function NewJobPage() {
 
             <div className="space-y-2">
               <Label>Deskripsi *</Label>
-              <textarea
+              <textarea aria-label="Deskripsi"
                 required rows={4}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 {...form.register('description')}
@@ -115,7 +115,7 @@ export default function NewJobPage() {
 
             <div className="space-y-2">
               <Label>Persyaratan</Label>
-              <textarea
+              <textarea aria-label="Persyaratan"
                 rows={4}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 {...form.register('requirements')}
@@ -124,7 +124,7 @@ export default function NewJobPage() {
 
             <div className="space-y-2">
               <Label>Tanggung Jawab</Label>
-              <textarea
+              <textarea aria-label="Tanggung Jawab"
                 rows={4}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 {...form.register('responsibilities')}

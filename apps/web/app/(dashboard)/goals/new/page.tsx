@@ -55,7 +55,7 @@ export default function NewGoalPage() {
 
             <div className="space-y-2">
               <Label htmlFor="description">Deskripsi</Label>
-              <textarea
+              <textarea aria-label="Deskripsi"
                 id="description"
                 rows={3}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

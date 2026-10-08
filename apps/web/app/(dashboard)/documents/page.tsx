@@ -152,7 +152,7 @@ export default function DocumentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="docContent">Konten (Markdown)</Label>
-                  <textarea
+                  <textarea aria-label="Konten (Markdown)"
                     id="docContent"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}

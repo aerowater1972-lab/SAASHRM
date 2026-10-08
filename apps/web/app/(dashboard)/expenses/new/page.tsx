@@ -93,7 +93,7 @@ export default function NewExpensePage() {
 
             <div className="space-y-2">
               <Label>Deskripsi</Label>
-              <textarea
+              <textarea aria-label="Deskripsi"
                 rows={2}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 {...form.register('description')}
@@ -114,7 +114,7 @@ export default function NewExpensePage() {
               <div key={i} className="flex gap-2 items-end flex-wrap">
                 <div className="w-[130px]">
                   <Select value={item.category} onValueChange={(v) => updateItem(i, 'category', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label={`Kategori item ${i + 1}`}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>

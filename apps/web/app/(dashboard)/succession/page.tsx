@@ -137,7 +137,7 @@ export default function SuccessionPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="planNotes">Catatan</Label>
-                <textarea id="planNotes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Catatan rencana suksesi..." />
+                <textarea aria-label="Catatan" id="planNotes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Catatan rencana suksesi..." />
               </div>
               <div className="flex justify-end gap-2">
                 <DialogClose asChild>

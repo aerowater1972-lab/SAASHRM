@@ -225,7 +225,7 @@ export default function IncidentReportsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Deskripsi</Label>
-                  <textarea
+                  <textarea aria-label="Deskripsi"
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     rows={3}

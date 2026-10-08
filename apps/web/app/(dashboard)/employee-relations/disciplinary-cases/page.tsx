@@ -116,7 +116,7 @@ export default function DisciplinaryCasesPage() {
               </div>
               <div className="space-y-2">
                 <Label>Deskripsi</Label>
-                <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3}
+                <textarea aria-label="Deskripsi" value={desc} onChange={e => setDesc(e.target.value)} rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
               </div>
               <Button onClick={handleCreate}>Ajukan SP</Button>

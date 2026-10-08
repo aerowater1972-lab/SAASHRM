@@ -144,7 +144,7 @@ export default function ExpenseDetailPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Catatan</Label>
-              <textarea
+              <textarea aria-label="Catatan"
                 rows={2} value={notes}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onChange={(e) => setNotes(e.target.value)} placeholder="Catatan untuk approve/reject"
