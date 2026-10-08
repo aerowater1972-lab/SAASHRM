@@ -21,11 +21,14 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
   // Model wajah (~7MB) diunduh lazy saat pertama kali — tampilkan status
   // agar tidak terlihat macet di koneksi seluler lambat.
   const [processing, setProcessing] = useState(false);
+  // Determinate download % while face models stream in (null = indeterminate).
+  const [progressPct, setProgressPct] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setCaptured(null);
     setError(null);
+    setProgressPct(null);
 
     let cancelled = false;
     navigator.mediaDevices
@@ -55,6 +58,7 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
     if (!video || processing) return;
 
     setProcessing(true);
+    setProgressPct(null);
     setError(null);
     try {
       const canvas = document.createElement('canvas');
@@ -65,7 +69,9 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const photo = canvas.toDataURL('image/jpeg', 0.7);
-      const result = await extractFaceEmbedding(canvas);
+      const result = await extractFaceEmbedding(canvas, (p) => {
+        setProgressPct(p.percent);
+      });
       if (!result.ok) {
         const msg =
           result.reason === 'no-face'
@@ -111,9 +117,33 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
         </div>
 
         {!captured ? (
-          <Button onClick={handleCapture} disabled={!!error || processing} className="w-full" aria-live="polite">
-            <Camera className="mr-2 h-4 w-4" /> {processing ? 'Memproses…' : 'Ambil Foto'}
-          </Button>
+          <div className="space-y-2">
+            <Button onClick={handleCapture} disabled={!!error || processing} className="w-full" aria-live="polite">
+              <Camera className="mr-2 h-4 w-4" /> {processing ? 'Memproses…' : 'Ambil Foto'}
+            </Button>
+            {processing && (
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPct !== null && progressPct >= 0 ? progressPct : undefined}
+                aria-label="Mengunduh model wajah"
+                className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className={`h-full rounded-full bg-primary transition-[width] ${progressPct === null || progressPct < 0 ? 'w-1/3 animate-pulse' : ''}`}
+                  style={progressPct !== null && progressPct >= 0 ? { width: `${progressPct}%` } : undefined}
+                />
+              </div>
+            )}
+            {processing && (
+              <p className="text-center text-xs text-muted-foreground" aria-live="polite">
+                {progressPct !== null && progressPct >= 0
+                  ? `Mengunduh model wajah… ${progressPct}%`
+                  : 'Menyiapkan model wajah…'}
+              </p>
+            )}
+          </div>
         ) : (
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleRetake} className="flex-1">

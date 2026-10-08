@@ -98,4 +98,13 @@ describe('prefetchFaceModels', () => {
   it('resolves true with mocked models', async () => {
     await expect(prefetchFaceModels()).resolves.toBe(true);
   });
+
+  it('reports final 100% progress', async () => {
+    const seen: number[] = [];
+    await prefetchFaceModels((p) => {
+      seen.push(p.percent);
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen[seen.length - 1]).toBe(100);
+  });
 });
