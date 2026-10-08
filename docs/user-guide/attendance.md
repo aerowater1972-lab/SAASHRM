@@ -58,11 +58,10 @@
 
 - **Installable (PWA)**: Add to Home Screen for fullscreen experience
 - **Auto Clock In**: Geofence trigger (opt-in)
+- **Offline Clock Queue**: clock in/out tanpa internet tersimpan di perangkat
+  dan terkirim otomatis saat online (maksimal 24 jam / 10x percobaan)
 - **Face ID/Touch ID**: Device biometrics for quick unlock
 - **Battery Saver**: GPS only sampled on clock action
-
-> **Catatan**: presensi membutuhkan koneksi internet saat clock in/out
-> (antrean offline belum tersedia — lihat roadmap).
 
 ---
 

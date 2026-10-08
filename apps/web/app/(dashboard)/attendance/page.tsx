@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useTodayStatus, useAttendanceRecords, useClockIn, useClockOut } from '@/lib/hooks/attendance';
+import { useTodayStatus, useAttendanceRecords, useClockIn, useClockOut, flushPendingClocks, getPendingClockCount } from '@/lib/hooks/attendance';
+import { OfflineQueuedError } from '@/lib/utils/clock-outbox';
+import { clockIn as postClockIn, clockOut as postClockOut } from '@/lib/api/attendance';
+import { useToast } from '@/lib/toast';
 import { fetchMyPpeCompliance } from '@/lib/api/employee-relations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +43,49 @@ export default function AttendancePage() {
 
   const clockInMutation = useClockIn();
   const clockOutMutation = useClockOut();
+  const { toast } = useToast();
+  const [pendingOffline, setPendingOffline] = useState(0);
+
+  async function flushQueue(manual = false) {
+    try {
+      const res = await flushPendingClocks((kind, payload) =>
+        kind === 'clock-in' ? postClockIn(payload as never) : postClockOut(payload as never),
+      );
+      if (res.sent > 0) {
+        toast(`${res.sent} presensi offline terkirim.`, 'success');
+        refetchToday();
+        refetch();
+      }
+      if (manual && res.sent === 0 && res.remaining === 0) {
+        toast('Tidak ada antrean offline.', 'info');
+      }
+    } catch {
+      /* stay queued — will retry on next online event */
+    } finally {
+      setPendingOffline(await getPendingClockCount().catch(() => 0));
+    }
+  }
+
+  useEffect(() => {
+    void flushQueue();
+    getPendingClockCount()
+      .then(setPendingOffline)
+      .catch(() => undefined);
+    const onOnline = () => {
+      toast('Kembali online — mengirim antrean presensi…', 'info');
+      void flushQueue();
+    };
+    const onSwFlush = () => {
+      void flushQueue();
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('flexy:flush-clock', onSwFlush);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('flexy:flush-clock', onSwFlush);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: ppeCheck } = useQuery({
     queryKey: ['ppe-compliance', 'me'],
@@ -64,10 +110,26 @@ export default function AttendancePage() {
 
     const data = { method: (latitude ? 'GPS' : 'MANUAL') as 'GPS' | 'MANUAL', latitude, longitude, notes: notes || undefined };
 
+    const onQueued = () => {
+      toast('Tersimpan offline — otomatis dikirim saat online.', 'info');
+      getPendingClockCount()
+        .then(setPendingOffline)
+        .catch(() => undefined);
+    };
+    const onClockError = (e: unknown) => {
+      if (e instanceof OfflineQueuedError) onQueued();
+    };
+
     if (today?.isClockedIn) {
-      clockOutMutation.mutate(data, { onSuccess: () => { setNotes(''); refetchToday(); refetch(); } });
+      clockOutMutation.mutate(data, {
+        onSuccess: () => { setNotes(''); refetchToday(); refetch(); },
+        onError: onClockError,
+      });
     } else {
-      clockInMutation.mutate(data, { onSuccess: () => { setNotes(''); refetchToday(); refetch(); } });
+      clockInMutation.mutate(data, {
+        onSuccess: () => { setNotes(''); refetchToday(); refetch(); },
+        onError: onClockError,
+      });
     }
   }
 
@@ -132,6 +194,7 @@ export default function AttendancePage() {
             </div>
           )}
           <Input
+            aria-label="Catatan presensi"
             placeholder="Catatan (opsional)"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -152,12 +215,24 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
+      {pendingOffline > 0 && (
+        <div className="rounded-md border border-dashed p-3 text-sm flex items-center justify-between gap-2" role="status">
+          <span className="text-muted-foreground">
+            {pendingOffline} presensi menunggu dikirim (offline).
+          </span>
+          <Button variant="outline" size="sm" onClick={() => flushQueue(true)}>
+            Kirim sekarang
+          </Button>
+        </div>
+      )}
+
       {/* Records */}
       <div className="space-y-3">
         <h3 className="text-lg font-semibold">Riwayat Absensi</h3>
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label="Cari riwayat absensi"
             placeholder="Cari status…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}

@@ -56,11 +56,20 @@ vi.mock('sonner', () => ({
   Toaster: () => null,
 }))
 
-// Mock face-api.js
+// Mock face-api.js (nets used by lib/utils/face-embedding.ts)
 vi.mock('face-api.js', () => ({
   nets: {
     loadFromUri: vi.fn().mockResolvedValue(undefined),
+    tinyFaceDetector: { loadFromUri: vi.fn().mockResolvedValue(undefined) },
+    faceLandmark68Net: { loadFromUri: vi.fn().mockResolvedValue(undefined) },
+    faceRecognitionNet: { loadFromUri: vi.fn().mockResolvedValue(undefined) },
   },
+  TinyFaceDetectorOptions: vi.fn(),
+  detectSingleFace: vi.fn().mockReturnValue({
+    withFaceLandmarks: vi.fn().mockReturnValue({
+      withFaceDescriptor: vi.fn().mockResolvedValue({ descriptor: new Float32Array(128).fill(0.1) }),
+    }),
+  }),
   detectAllFaces: vi.fn().mockReturnValue({
     withFaceLandmarks: vi.fn().mockReturnValue({
       withFaceDescriptors: vi.fn().mockResolvedValue([]),

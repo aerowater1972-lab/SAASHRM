@@ -26,6 +26,21 @@ export type ExtractResult =
   | { ok: false; reason: 'ssr' | 'no-face' | 'model-error' };
 
 /**
+ * Best-effort background prefetch of the face models (~7MB).
+ * Safe to call repeatedly; the load promise is shared and cached.
+ * Callers should gate on idle + unmetered connection themselves.
+ */
+export async function prefetchFaceModels(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    await loadModels();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Extract a 128-d face embedding from a canvas (or video/canvas element).
  * Returns a discriminated result so callers can surface a clear message
  * when no face is detected.

@@ -23,6 +23,63 @@ import {
   type AttendanceListParams,
 } from '@/lib/api/attendance';
 import type { ClockInInput, ClockOutInput } from '@/lib/schemas/attendance';
+import { getTenantId } from '@/lib/api';
+import {
+  IndexedDbClockStore,
+  OfflineQueuedError,
+  enqueueClock,
+  flushOutbox,
+  isNetworkError,
+  pendingCount,
+  type ClockKind,
+} from '@/lib/utils/clock-outbox';
+
+const clockStore = new IndexedDbClockStore();
+
+/** POST clock, or persist to the offline outbox when the network is down. */
+async function clockWithOfflineFallback<T>(
+  kind: ClockKind,
+  data: Record<string, unknown>,
+  post: (d: any) => Promise<T>,
+): Promise<T> {
+  try {
+    return await post(data);
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    let tenant = 'default';
+    try {
+      tenant = getTenantId();
+    } catch {
+      /* SSR-safe fallback */
+    }
+    const entry = await enqueueClock(clockStore, kind, data, tenant);
+    void registerClockSync();
+    throw new OfflineQueuedError(entry.id);
+  }
+}
+
+/** Flush queued clocks (online event, app boot, SW sync message). */
+export async function flushPendingClocks(
+  post: (kind: ClockKind, payload: Record<string, unknown>) => Promise<unknown>,
+): Promise<{ sent: number; dropped: number; remaining: number }> {
+  return flushOutbox(clockStore, post);
+}
+
+export async function getPendingClockCount(): Promise<number> {
+  return pendingCount(clockStore);
+}
+
+async function registerClockSync(): Promise<void> {
+  try {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      const sync = (reg as unknown as { sync?: { register: (t: string) => Promise<void> } }).sync;
+      if (sync) await sync.register('clock-outbox');
+    }
+  } catch {
+    /* Background Sync unsupported — online-event flush covers it */
+  }
+}
 
 export function useTodayStatus() {
   return useQuery({
@@ -57,7 +114,7 @@ export function useReviewSpoof() {
 export function useClockIn() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: ClockInInput) => clockIn(data),
+    mutationFn: (data: ClockInInput) => clockWithOfflineFallback('clock-in', data as Record<string, unknown>, clockIn),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance'] });
     },
@@ -67,7 +124,7 @@ export function useClockIn() {
 export function useClockOut() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: ClockOutInput) => clockOut(data),
+    mutationFn: (data: ClockOutInput) => clockWithOfflineFallback('clock-out', data as Record<string, unknown>, clockOut),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance'] });
     },

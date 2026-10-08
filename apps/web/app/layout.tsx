@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/lib/theme';
 import { ToastProvider } from '@/lib/toast';
 import QueryProvider from '@/lib/query-provider';
 import { BrandingInjector } from '@/lib/branding';
+import { PwaRegister } from '@/components/pwa-register';
 
 export const metadata = {
   title: 'Flexy HRMS',
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <PwaRegister />
         <ThemeProvider>
           <AuthProvider>
             <QueryProvider>
