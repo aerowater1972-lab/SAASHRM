@@ -1,14 +1,26 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useK3Dashboard, useK3TrainingCompliance, useViolationCategories, useDisciplinaryCases, useIncidentReports, usePpeAssignments } from '@/lib/hooks/employee-relations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TableSkeleton, ErrorState } from '@/components/ui/data-states';
 import { AlertTriangle, FileText, Shield, Users, TrendingUp, Clock, Activity, GraduationCap, Download } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { exportCsv } from '@/lib/utils/export-csv';
+
+// Recharts is heavy (~450KB raw) — load charts on demand so the
+// dashboard first-load stays within budget.
+const ErCharts = dynamic(() => import('./charts'), {
+  ssr: false,
+  loading: () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <Card><CardContent className="h-64"><div className="h-full w-full bg-muted animate-pulse rounded" /></CardContent></Card>
+      <Card><CardContent className="h-64"><div className="h-full w-full bg-muted animate-pulse rounded" /></CardContent></Card>
+    </div>
+  ),
+});
 
 const tabs = [
   { href: '/employee-relations', label: 'Dashboard', icon: Activity },
@@ -139,39 +151,11 @@ export default function EmployeeRelationsPage() {
 
           {/* Charts row */}
           {dash && trainingCompliance && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium">Kepatuhan Pelatihan per Departemen</CardTitle></CardHeader>
-                <CardContent className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={trainingCompliance.byDepartment} margin={{ top: 5, right: 5, left: -15, bottom: 5 }}>
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" height={50} />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                      <Tooltip formatter={(v: any) => `${v}%`} />
-                      <Bar dataKey="rate" fill="var(--brand-primary, #2563EB)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium">Distribusi Insiden</CardTitle></CardHeader>
-                <CardContent className="h-64 flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={[
-                        { name: 'Kecelakaan', value: dash.accidents, color: '#ef4444' },
-                        { name: 'Near-Miss', value: dash.nearMisses, color: '#f59e0b' },
-                      ]} cx="50%" cy="50%" outerRadius={70} label={({ name, value }: any) => `${name}: ${value}`}>
-                        {[0, 1].map((i) => (
-                          <Cell key={i} fill={i === 0 ? '#ef4444' : '#f59e0b'} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+            <ErCharts
+              byDepartment={trainingCompliance.byDepartment}
+              accidents={dash.accidents}
+              nearMisses={dash.nearMisses}
+            />
           )}
 
           {/* K3 Training Compliance — FR-11 */}

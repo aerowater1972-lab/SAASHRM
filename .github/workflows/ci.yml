@@ -62,6 +62,10 @@ jobs:
       - name: Build frontend
         run: npm run build -w apps/web
 
+      - name: Bundle budget check (first-load JS)
+        run: node scripts/bundle-budget.js
+        working-directory: apps/web
+
   contract:
     name: Frontend-Backend API contract
     runs-on: ubuntu-latest
