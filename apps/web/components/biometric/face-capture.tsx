@@ -18,6 +18,9 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [captured, setCaptured] = useState<{ photo: string; embedding: number[] } | null>(null);
+  // Model wajah (~7MB) diunduh lazy saat pertama kali — tampilkan status
+  // agar tidak terlihat macet di koneksi seluler lambat.
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -49,26 +52,32 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
 
   const handleCapture = async () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || processing) return;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 480;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setProcessing(true);
+    setError(null);
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 480;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const photo = canvas.toDataURL('image/jpeg', 0.7);
-    const result = await extractFaceEmbedding(canvas);
-    if (!result.ok) {
-      const msg =
-        result.reason === 'no-face'
-          ? 'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas di kamera.'
-          : 'Gagal memuat model wajah. Coba muat ulang halaman.';
-      setError(msg);
-      return;
+      const photo = canvas.toDataURL('image/jpeg', 0.7);
+      const result = await extractFaceEmbedding(canvas);
+      if (!result.ok) {
+        const msg =
+          result.reason === 'no-face'
+            ? 'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas di kamera.'
+            : 'Gagal memuat model wajah. Coba muat ulang halaman.';
+        setError(msg);
+        return;
+      }
+      setCaptured({ photo, embedding: result.embedding });
+    } finally {
+      setProcessing(false);
     }
-    setCaptured({ photo, embedding: result.embedding });
   };
 
   const handleRetake = () => {
@@ -102,8 +111,8 @@ export function FaceCapture({ open, onOpenChange, onCapture, title = 'Ambil Waja
         </div>
 
         {!captured ? (
-          <Button onClick={handleCapture} disabled={!!error} className="w-full">
-            <Camera className="mr-2 h-4 w-4" /> Ambil Foto
+          <Button onClick={handleCapture} disabled={!!error || processing} className="w-full" aria-live="polite">
+            <Camera className="mr-2 h-4 w-4" /> {processing ? 'Memproses…' : 'Ambil Foto'}
           </Button>
         ) : (
           <div className="flex gap-2">
