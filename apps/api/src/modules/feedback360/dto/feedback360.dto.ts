@@ -12,10 +12,10 @@ export class CreateFeedback360Dto {
   @IsNotEmpty()
   reviewCycleId!: string;
 
-  @ApiPropertyOptional({ description: 'Feedback type' })
+  @ApiPropertyOptional({ description: 'Feedback type', enum: FeedbackReviewerType })
   @IsOptional()
   @IsEnum(FeedbackReviewerType)
-  reviewerType?: string;
+  reviewerType?: FeedbackReviewerType;
 
   @ApiPropertyOptional({ description: 'Custom reviewer ID' })
   @IsOptional()
@@ -38,7 +38,7 @@ export class FeedbackSettingsDto {
   @ApiPropertyOptional({ description: '360-degree feedback type' })
   @IsOptional()
   @IsEnum(FeedbackReviewerType)
-  reviewerType?: string;
+  reviewerType?: FeedbackReviewerType;
 }
 
 export class FeedbackReviewDto {

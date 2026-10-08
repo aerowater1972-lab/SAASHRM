@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { FeedbackReviewerType, FeedbackStatus, Feedback360Question } from '@prisma/client';
+import { CreateFeedback360Dto, SubmitFeedbackDto, FeedbackSettingsDto, FeedbackReviewDto } from '../dto/feedback360.dto';
 
 @Injectable()
 export class Feedback360Service {
@@ -41,17 +42,19 @@ export class Feedback360Service {
     return feedback;
   }
 
-  async create(tenantId: string, userId: string, dto: any) {
+  async create(tenantId: string, userId: string, dto: CreateFeedback360Dto) {
     const questions = dto.questions ?? [];
-    if (!dto.reviewerId && dto.reviewerType !== FeedbackReviewerType.SELF) {
-      dto.reviewerId = userId;
+    let reviewerId = dto.reviewerId;
+    if (!reviewerId && dto.reviewerType !== FeedbackReviewerType.SELF) {
+      reviewerId = userId;
     }
+    const finalReviewerId = reviewerId ?? userId;
     return this.prisma.feedback360.create({
       data: {
         tenantId,
         reviewCycleId: dto.reviewCycleId,
         revieweeId: dto.revieweeId,
-        reviewerId: dto.reviewerId,
+        reviewerId: finalReviewerId,
         reviewerType: dto.reviewerType ?? FeedbackReviewerType.SELF,
         status: FeedbackStatus.PENDING,
         questions: {
@@ -62,7 +65,7 @@ export class Feedback360Service {
     });
   }
 
-  async updateSettings(tenantId: string, id: string, dto: any) {
+  async updateSettings(tenantId: string, id: string, dto: FeedbackSettingsDto) {
     const existing = await this.prisma.feedback360.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('Feedback session not found');
     return this.prisma.feedback360.update({
@@ -71,7 +74,7 @@ export class Feedback360Service {
     });
   }
 
-  async submitReview(tenantId: string, id: string, dto: any) {
+  async submitReview(tenantId: string, id: string, dto: SubmitFeedbackDto) {
     const feedback = await this.prisma.feedback360.findFirst({
       where: { id, tenantId },
       include: { questions: true },
@@ -81,8 +84,15 @@ export class Feedback360Service {
       throw new NotFoundException('Feedback session is not active');
     }
 
+    interface ResponseItem {
+      questionText: string;
+      questionType?: string;
+      rating?: number;
+      comment?: string;
+    }
+
     await this.prisma.feedback360Question.createMany({
-      data: dto.responses.map((r: any) => ({
+      data: dto.responses.map((r: ResponseItem) => ({
         feedback360Id: id,
         questionText: r.questionText,
         questionType: r.questionType,
@@ -99,7 +109,7 @@ export class Feedback360Service {
     return { submitted: true, status: newStatus };
   }
 
-  async finalizeReview(tenantId: string, id: string, dto: any) {
+  async finalizeReview(tenantId: string, id: string, dto: FeedbackReviewDto) {
     const feedback = await this.prisma.feedback360.findFirst({ where: { id, tenantId } });
     if (!feedback) throw new NotFoundException('Feedback session not found');
     return this.prisma.feedback360.update({
