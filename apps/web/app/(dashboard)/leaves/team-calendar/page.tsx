@@ -64,15 +64,15 @@ export default function TeamCalendarPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Link href="/leaves"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link>
+        <Link href="/leaves"><Button variant="ghost" size="icon" aria-label="Kembali"><ArrowLeft className="h-5 w-5" /></Button></Link>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Kalender Tim</h1>
           <p className="text-sm text-muted-foreground">Cuti disetujui se-tim berdampingan dengan hari libur</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => shiftMonth(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Bulan sebelumnya" onClick={() => shiftMonth(-1)}><ChevronLeft className="h-4 w-4" /></Button>
           <span className="text-sm font-medium capitalize w-36 text-center">{monthLabel}</span>
-          <Button variant="outline" size="icon" onClick={() => shiftMonth(1)}><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Bulan berikutnya" onClick={() => shiftMonth(1)}><ChevronRight className="h-4 w-4" /></Button>
         </div>
       </div>
 

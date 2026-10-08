@@ -153,7 +153,7 @@ export default function ViolationCategoriesPage() {
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-sm font-medium flex items-center gap-2"><GraduationCap className="h-4 w-4" />Rekomendasi Pelatihan K3</h4>
-            <Button variant="ghost" size="icon" onClick={() => setSelectedCat(null)}><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" aria-label="Tutup" onClick={() => setSelectedCat(null)}><X className="h-4 w-4" /></Button>
           </div>
           {!recommendations ? (
             <div className="h-8 w-full bg-muted animate-pulse rounded" />

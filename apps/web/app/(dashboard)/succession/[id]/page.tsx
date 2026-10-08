@@ -71,7 +71,7 @@ export default function SuccessionPlanDetailPage({ params }: { params: { id: str
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button size="icon" variant="ghost" onClick={() => router.push('/succession')}>
+        <Button size="icon" aria-label="Kembali" variant="ghost" onClick={() => router.push('/succession')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -189,7 +189,7 @@ export default function SuccessionPlanDetailPage({ params }: { params: { id: str
                         <Button size="icon" variant="ghost" title="Naikkan peringkat" onClick={() => rankCandidate(c.id, c.rank - 1)}>↑</Button>
                       )}
                       <Button size="icon" variant="ghost" title="Turunkan" onClick={() => rankCandidate(c.id, c.rank + 1)}>↓</Button>
-                      <Button size="icon" variant="ghost" title="Hapus" onClick={() => removeCandidate.mutateAsync({ planId: id, candidateId: c.id }).then(() => toast('Kandidat dihapus', 'success'))}>
+                      <Button size="icon" aria-label="Hapus" variant="ghost" title="Hapus" onClick={() => removeCandidate.mutateAsync({ planId: id, candidateId: c.id }).then(() => toast('Kandidat dihapus', 'success'))}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

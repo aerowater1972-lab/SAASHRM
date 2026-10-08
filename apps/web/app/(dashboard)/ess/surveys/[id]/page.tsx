@@ -87,7 +87,7 @@ export default function SurveyFillPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft className="h-5 w-5" /></Button>
+        <Button variant="ghost" size="icon" aria-label="Kembali" onClick={() => router.back()}><ArrowLeft className="h-5 w-5" /></Button>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{s.title}</h1>
           {s.isAnonymous && <Badge variant="outline" className="text-[10px]">Anonim</Badge>}

@@ -82,14 +82,14 @@ export default function ManpowerPlanningListPage() {
                       <TableCell className="text-right">{p._count?.items ?? 0}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => router.push(`/manpower-planning/${p.id}`)} title="Detail"><Eye className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Detail" onClick={() => router.push(`/manpower-planning/${p.id}`)} title="Detail"><Eye className="h-4 w-4" /></Button>
                           {p.status === 'DRAFT' && (
-                            <Button variant="ghost" size="icon" onClick={() => router.push(`/manpower-planning/${p.id}/submit`)} title="Submit"><Send className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" aria-label="Submit" onClick={() => router.push(`/manpower-planning/${p.id}/submit`)} title="Submit"><Send className="h-4 w-4" /></Button>
                           )}
                           {(p.status === 'HR_REVIEW' || p.status === 'FINANCE_REVIEW') && (
-                            <Button variant="ghost" size="icon" onClick={() => router.push(`/manpower-planning/${p.id}/approve`)} title="Approve"><CheckCircle className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" aria-label="Approve" onClick={() => router.push(`/manpower-planning/${p.id}/approve`)} title="Approve"><CheckCircle className="h-4 w-4" /></Button>
                           )}
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id)} title="Hapus"><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Hapus" onClick={() => handleDelete(p.id)} title="Hapus"><Trash2 className="h-4 w-4 text-destructive" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>

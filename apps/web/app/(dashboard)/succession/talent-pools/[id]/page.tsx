@@ -58,7 +58,7 @@ export default function TalentPoolDetailPage({ params }: { params: { id: string 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button size="icon" variant="ghost" onClick={() => router.push('/succession/talent-pools')}>
+        <Button size="icon" aria-label="Kembali" variant="ghost" onClick={() => router.push('/succession/talent-pools')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -160,7 +160,7 @@ export default function TalentPoolDetailPage({ params }: { params: { id: string 
                       </div>
                       {m.notes && <p className="mt-1 text-xs text-muted-foreground">{m.notes}</p>}
                     </div>
-                    <Button size="icon" variant="ghost" title="Hapus" onClick={() => removeMember.mutateAsync({ poolId: id, employeeId: m.employeeId }).then(() => toast('Anggota dihapus', 'success'))}>
+                    <Button size="icon" aria-label="Hapus" variant="ghost" title="Hapus" onClick={() => removeMember.mutateAsync({ poolId: id, employeeId: m.employeeId }).then(() => toast('Anggota dihapus', 'success'))}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

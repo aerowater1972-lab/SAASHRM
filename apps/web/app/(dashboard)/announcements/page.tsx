@@ -253,7 +253,7 @@ export default function AnnouncementsPage() {
                 <div className="flex items-center gap-1 shrink-0">
                   {ann.status !== 'PUBLISHED' && (
                     <Button
-                      size="icon"
+                      size="icon" aria-label="Terbitkan sekarang"
                       variant="ghost"
                       title="Terbitkan sekarang"
                       onClick={() => publishAnnouncement.mutateAsync(ann.id).then(() => toast('Diterbitkan', 'success'))}
@@ -262,7 +262,7 @@ export default function AnnouncementsPage() {
                     </Button>
                   )}
                   <Button
-                    size="icon"
+                    size="icon" aria-label="Hapus"
                     variant="ghost"
                     title="Hapus"
                     onClick={() => deleteAnnouncement.mutateAsync(ann.id).then(() => toast('Dihapus', 'success'))}

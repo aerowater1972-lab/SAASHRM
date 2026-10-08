@@ -130,7 +130,7 @@ export default function RolesPage() {
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="icon" aria-label="Hapus"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => {
                           if (confirm('Hapus role ini?')) deleteMutation.mutate(role.id, { onSuccess: () => refetch() });

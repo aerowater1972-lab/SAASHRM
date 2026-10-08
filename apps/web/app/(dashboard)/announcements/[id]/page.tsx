@@ -41,7 +41,7 @@ export default function AnnouncementDetailPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.push('/announcements')}>
+          <Button variant="ghost" size="icon" aria-label="Kembali" onClick={() => router.push('/announcements')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

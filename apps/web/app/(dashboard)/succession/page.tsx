@@ -198,11 +198,11 @@ export default function SuccessionPage() {
                 </button>
                 <div className="flex items-center gap-1 shrink-0">
                   {plan.status === 'DRAFT' && (
-                    <Button size="icon" variant="ghost" title="Aktifkan" onClick={() => activate(plan.id)}>
+                    <Button size="icon" aria-label="Aktifkan" variant="ghost" title="Aktifkan" onClick={() => activate(plan.id)}>
                       <ArrowUpDown className="h-4 w-4" />
                     </Button>
                   )}
-                  <Button size="icon" variant="ghost" title="Hapus" onClick={() => deletePlan.mutateAsync(plan.id).then(() => toast('Dihapus', 'success'))}>
+                  <Button size="icon" aria-label="Hapus" variant="ghost" title="Hapus" onClick={() => deletePlan.mutateAsync(plan.id).then(() => toast('Dihapus', 'success'))}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

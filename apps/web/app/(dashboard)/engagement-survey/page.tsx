@@ -82,10 +82,10 @@ export default function EngagementSurveyListPage() {
                       <TableCell className="text-right">{s._count?.responses ?? 0}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => router.push(`/engagement-survey/${s.id}/results`)} title="Hasil"><BarChart3 className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => router.push(`/engagement-survey/${s.id}/action-items`)} title="Action Items"><ClipboardList className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => router.push(`/engagement-survey/new?id=${s.id}`)} title="Edit"><Eye className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)} title="Hapus"><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Hasil" onClick={() => router.push(`/engagement-survey/${s.id}/results`)} title="Hasil"><BarChart3 className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Action Items" onClick={() => router.push(`/engagement-survey/${s.id}/action-items`)} title="Action Items"><ClipboardList className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => router.push(`/engagement-survey/new?id=${s.id}`)} title="Edit"><Eye className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Hapus" onClick={() => handleDelete(s.id)} title="Hapus"><Trash2 className="h-4 w-4 text-destructive" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>

@@ -129,7 +129,7 @@ export default function EngagementSurveyResultsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft className="h-5 w-5" /></Button>
+        <Button variant="ghost" size="icon" aria-label="Kembali" onClick={() => router.back()}><ArrowLeft className="h-5 w-5" /></Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Hasil Survey</h1>
           <p className="text-sm text-muted-foreground">{survey?.title || '—'}</p>

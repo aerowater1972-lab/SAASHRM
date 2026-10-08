@@ -118,7 +118,7 @@ export default function TalentPoolsPage() {
                   <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{pool.description ?? 'Tidak ada deskripsi'}</p>
                   <div className="mt-1 text-xs text-muted-foreground">{pool._count?.members ?? 0} anggota</div>
                 </button>
-                <Button size="icon" variant="ghost" title="Hapus" onClick={() => deletePool.mutateAsync(pool.id).then(() => toast('Pool dihapus', 'success'))}>
+                <Button size="icon" aria-label="Hapus" variant="ghost" title="Hapus" onClick={() => deletePool.mutateAsync(pool.id).then(() => toast('Pool dihapus', 'success'))}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>

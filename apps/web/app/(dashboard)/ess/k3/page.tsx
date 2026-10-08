@@ -44,7 +44,7 @@ export default function EssK3Page() {
   return (
     <div className="mx-auto max-w-md pb-20">
       <div className="flex items-center gap-2 p-4 border-b">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft className="h-5 w-5" /></Button>
+        <Button variant="ghost" size="icon" aria-label="Kembali" onClick={() => router.back()}><ChevronLeft className="h-5 w-5" /></Button>
         <h1 className="text-lg font-bold">K3 & Disiplin</h1>
       </div>
 
