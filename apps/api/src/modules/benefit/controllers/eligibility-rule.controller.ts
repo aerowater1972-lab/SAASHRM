@@ -5,6 +5,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { CreateEligibilityRuleDto } from '../dto/eligibility-rule.dto';
 
 @ApiTags('Benefits - Eligibility Rules')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -15,14 +16,15 @@ export class EligibilityRuleController {
   @Post()
   @Permissions('benefits:update')
   @ApiOperation({ summary: 'Create eligibility rule' })
-  async create(@TenantId() tenantId: string, @Body() dto: any) {
+  async create(@TenantId() tenantId: string, @Body() dto: CreateEligibilityRuleDto) {
     const benefit = await this.prisma.benefit.findFirst({
       where: { id: dto.benefitId, tenantId, deletedAt: null },
     });
     if (!benefit) {
       throw new NotFoundException('Benefit not found');
     }
-    return this.prisma.benefitEligibilityRule.create({ data: dto });
+    const { benefitId, ...data } = dto;
+    return this.prisma.benefitEligibilityRule.create({ data: { ...data, benefitId } });
   }
 
   @Get()

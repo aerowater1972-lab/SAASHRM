@@ -17,6 +17,7 @@ import { ResignationService } from '../services/resignation.service';
 import { CreateResignationDto, ResignationFilterDto } from '../dto/create-resignation.dto';
 import { CreateExitInterviewDto } from '../dto/create-exit-interview.dto';
 import { CreateOffboardingTaskDto } from '../dto/create-offboarding-task.dto';
+import { UpsertFinalSettlementDto } from '../dto/final-settlement.dto';
 
 @ApiTags('Resignation & Offboarding')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -145,7 +146,7 @@ export class ResignationController {
   upsertFinalSettlement(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: any,
+    @Body() dto: UpsertFinalSettlementDto,
   ) {
     return this.resignationService.upsertFinalSettlement(tenantId, id, dto);
   }

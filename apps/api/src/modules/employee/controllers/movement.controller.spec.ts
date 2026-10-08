@@ -34,7 +34,7 @@ describe('MovementController', () => {
   });
 
   it('create delegates to service with tenantId and dto', async () => {
-    const dto = { employeeId: 'emp-1', type: 'PROMOTION' };
+    const dto = { employeeId: 'emp-1', type: 'PROMOTION', effectiveDate: '2026-01-01' };
     mockService.create.mockResolvedValue('created');
     const result = await controller.create('default', dto);
     expect(mockService.create).toHaveBeenCalledWith('default', dto);

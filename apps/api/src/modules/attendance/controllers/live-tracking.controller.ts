@@ -18,7 +18,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { LiveTrackingService } from '../services/live-tracking.service';
-import { LocationPingDto, CreateFieldTerritoryDto, UpdateFieldTerritoryDto } from '../dto/live-tracking.dto';
+import { LocationPingDto, CreateFieldTerritoryDto, UpdateFieldTerritoryDto, UpdateLiveTrackingSettingsDto } from '../dto/live-tracking.dto';
 
 @ApiTags('Live Tracking')
 @ApiBearerAuth()
@@ -132,7 +132,7 @@ export class LiveTrackingController {
   @ApiOperation({ summary: 'Update live tracking settings' })
   updateSettings(
     @TenantId() tenantId: string,
-    @Body() dto: any,
+    @Body() dto: UpdateLiveTrackingSettingsDto,
     @CurrentUser('sub') actorId: string,
   ) {
     return this.service.updateLiveTrackingSettings(tenantId, dto, actorId);

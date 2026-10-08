@@ -81,7 +81,7 @@ export class EngagementSurveyController {
   update(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: any,
+    @Body() dto: UpdateEngagementSurveyDto,
     @CurrentUser('sub') actorId: string,
   ) {
     return this.service.update(tenantId, id, dto, actorId);

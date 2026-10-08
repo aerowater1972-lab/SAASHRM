@@ -5,6 +5,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { MovementService } from '../services/movement.service';
+import { CreateMovementRequestDto } from '../dto/movement.dto';
 
 @ApiTags('Employee Movement')
 @ApiBearerAuth()
@@ -16,7 +17,7 @@ export class MovementController {
   @Post()
   @Permissions('employee:movement:create')
   @ApiOperation({ summary: 'Create movement request (promotion/transfer/mutation)' })
-  create(@TenantId() tenantId: string, @Body() dto: any) {
+  create(@TenantId() tenantId: string, @Body() dto: CreateMovementRequestDto) {
     return this.movementService.create(tenantId, dto);
   }
 
