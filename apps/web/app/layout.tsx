@@ -8,6 +8,13 @@ import { BrandingInjector } from '@/lib/branding';
 export const metadata = {
   title: 'Flexy HRMS',
   description: 'Enterprise Human Resource Management SaaS',
+  manifest: '/manifest.webmanifest',
+  themeColor: '#2563EB',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Flexy HRMS',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

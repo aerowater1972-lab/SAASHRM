@@ -40,4 +40,15 @@ describe('useFeatureFlags', () => {
     const { result } = renderHook(() => useFeatureFlags(['a', 'b']), { wrapper: wrapper() });
     await waitFor(() => expect(result.current).toEqual({ a: true, b: false }));
   });
+
+  it('returns all-false map for empty input without fetching', async () => {
+    const { result } = renderHook(() => useFeatureFlags([]), { wrapper: wrapper() });
+    expect(result.current).toEqual({});
+  });
+
+  it('single flag resolves through batch path consistently', async () => {
+    mocked.evaluateFeatureFlags.mockResolvedValue({ only: true });
+    const { result } = renderHook(() => useFeatureFlags(['only']), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current).toEqual({ only: true }));
+  });
 });

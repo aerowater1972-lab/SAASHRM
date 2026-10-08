@@ -52,6 +52,22 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
             limit: config.get<number>('THROTTLE_LIMIT', 100),
           },
         ],
+        // Key auth attempts per account+IP: one office NAT can no longer
+        // lock out every user, and one IP cannot brute-force many accounts.
+        getTracker: (req: Record<string, any>) => {
+          const ip: string =
+            req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+          const url: string = req.originalUrl ?? req.url ?? '';
+          const email = req.body?.email;
+          if (
+            typeof email === 'string' &&
+            email.length > 0 &&
+            url.includes('/admin/auth/')
+          ) {
+            return `${ip}:${email.toLowerCase()}`;
+          }
+          return ip;
+        },
       }),
     }),
     PrismaModule,

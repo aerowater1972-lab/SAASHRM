@@ -16,6 +16,10 @@ import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { SkipCsrf } from '@common/decorators/skip-csrf.decorator';
 
+// Auth brute-force budget: env-overridable so CI/e2e can run realistic
+// login volumes (AUTH_LOGIN_LIMIT) while production keeps the strict 10/min.
+const AUTH_LOGIN_LIMIT = Number(process.env.AUTH_LOGIN_LIMIT ?? 10);
+
 @ApiTags('Admin - Authentication')
 @Controller('admin/auth')
 export class AuthController {
@@ -86,7 +90,7 @@ export class AuthController {
   @Post('register')
   @Public()
   @SkipCsrf()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_LOGIN_LIMIT, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new admin user (tenant-aware via x-tenant-id)' })
   async register(
@@ -105,7 +109,7 @@ export class AuthController {
   @Post('login')
   @Public()
   @SkipCsrf()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_LOGIN_LIMIT, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   async login(
@@ -124,7 +128,7 @@ export class AuthController {
   @Post('refresh')
   @Public()
   @SkipCsrf()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_LOGIN_LIMIT, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
   async refresh(
@@ -188,7 +192,7 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(AuthGuard, PermissionGuard)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_LOGIN_LIMIT, ttl: 60000 } })
   @ApiBearerAuth()
   @Permissions('admin:auth:change-password')
   @HttpCode(HttpStatus.OK)

@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { TableSkeleton, EmptyState, ErrorState } from '@/components/ui/data-states';
+import { TableSkeleton, ErrorState } from '@/components/ui/data-states';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Plus } from 'lucide-react';
@@ -63,7 +63,9 @@ export default function SalaryComponentsPage() {
 
   if (isLoading) return <TableSkeleton rows={5} columns={5} />;
   if (queryError) return <ErrorState message={(queryError as any)?.message || 'Gagal memuat data'} onRetry={() => refetch()} />;
-  if (data.length === 0) return <EmptyState title="Belum ada komponen gaji" description="Belum ada data komponen gaji karyawan." />;
+  // NOTE: no early return on empty data — header tabs, filter and the
+  // "Tambah Component" dialog must stay reachable so users can add the
+  // first record (the table shows its own empty message).
 
   return (
     <div className="space-y-4">
@@ -97,7 +99,7 @@ export default function SalaryComponentsPage() {
                   name="employeeId"
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger><SelectValue placeholder="Pilih karyawan" /></SelectTrigger>
+                      <SelectTrigger aria-label="Employee"><SelectValue placeholder="Pilih karyawan" /></SelectTrigger>
                       <SelectContent>
                         {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.fullName}</SelectItem>)}
                       </SelectContent>
@@ -113,7 +115,7 @@ export default function SalaryComponentsPage() {
                   name="componentType"
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger aria-label="Type"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="basic_salary">Basic Salary</SelectItem>
                         <SelectItem value="allowance">Allowance</SelectItem>

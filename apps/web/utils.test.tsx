@@ -57,6 +57,19 @@ describe('Utility Functions', () => {
     
     expect(formatDate('2026-01-15')).toBe('15 Januari 2026')
   })
+
+  it('handles zero and negative currency amounts', () => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+      }).format(amount)
+    }
+    const nbsp = ' '
+    expect(formatCurrency(0)).toBe(`Rp${nbsp}0`)
+    expect(formatCurrency(-500000)).toContain('500.000')
+  })
 })
 
 describe('Date Utilities', () => {
@@ -77,5 +90,19 @@ describe('Date Utilities', () => {
     
     // Including weekend = still 5 working days
     expect(getWorkingDays(new Date('2026-01-10'), new Date('2026-01-16'))).toBe(5)
+  })
+
+  it('returns 0 for inverted date ranges', () => {
+    const getWorkingDays = (start: Date, end: Date): number => {
+      let count = 0
+      const current = new Date(start)
+      while (current <= end) {
+        const day = current.getDay()
+        if (day !== 0 && day !== 6) count++
+        current.setDate(current.getDate() + 1)
+      }
+      return count
+    }
+    expect(getWorkingDays(new Date('2026-01-09'), new Date('2026-01-05'))).toBe(0)
   })
 })
