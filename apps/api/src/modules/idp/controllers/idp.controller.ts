@@ -18,7 +18,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { IDPService } from '../services/idp.service';
-import { CreateIDPDto, AddIDPActivityDto, UpdateIDPStatusDto, UpdateActivityStatusDto } from '../dto/idp.dto';
+import { CreateIDPDto, AddIDPActivityDto, UpdateIDPStatusDto, UpdateActivityStatusDto, UpdateIDPDto } from '../dto/idp.dto';
 
 @ApiTags('Individual Development Plan')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -50,7 +50,7 @@ export class IDPController {
   @Put(':id')
   @ApiOperation({ summary: 'Update an IDP' })
   @Permissions('idp:manage')
-  update(@TenantId() tenantId: string, @Param('id') id: string, @Body() dto: any) {
+  update(@TenantId() tenantId: string, @Param('id') id: string, @Body() dto: UpdateIDPDto) {
     return this.idpService.update(tenantId, id, dto);
   }
 

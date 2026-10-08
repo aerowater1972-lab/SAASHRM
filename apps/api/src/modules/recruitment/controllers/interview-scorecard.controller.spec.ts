@@ -34,7 +34,7 @@ describe('InterviewScorecardController', () => {
   });
 
   it('create persists a scorecard', async () => {
-    const dto = { interviewId: 'i1', score: 8 };
+    const dto = { interviewId: 'i1', competency: 'Technical', score: 4 };
     mockPrisma.interviewScorecard.create.mockResolvedValue('created');
     const result = await controller.create(dto);
     expect(mockPrisma.interviewScorecard.create).toHaveBeenCalledWith({ data: dto });

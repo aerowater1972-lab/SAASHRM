@@ -8,6 +8,7 @@ import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtUser } from '@common/decorators/current-user.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { CreateJobRequisitionDto } from '../dto/job-requisition.dto';
 
 @ApiTags('Recruitment - Requisitions')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -18,7 +19,7 @@ export class RequisitionController {
   @Post()
   @Permissions('recruitment:requisition:create')
   @ApiOperation({ summary: 'Create job requisition (status defaults to pending_approval)' })
-  async create(@TenantId() tenantId: string, @Body() dto: any) {
+  async create(@TenantId() tenantId: string, @Body() dto: CreateJobRequisitionDto) {
     return this.prisma.jobRequisition.create({ data: { ...dto, tenantId } });
   }
 

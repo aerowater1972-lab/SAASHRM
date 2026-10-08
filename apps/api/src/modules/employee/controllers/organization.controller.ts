@@ -16,6 +16,7 @@ import { OrganizationService } from '../services/organization.service';
 import { CreateDepartmentDto } from '../dto/create-department.dto';
 import { CreatePositionDto } from '../dto/create-position.dto';
 import { CreateGradeDto } from '../dto/create-grade.dto';
+import { CreateOrganizationDto, UpdateOrganizationDto } from '../dto/organization.dto';
 
 @ApiTags('Organization')
 @ApiBearerAuth()
@@ -27,7 +28,7 @@ export class OrganizationController {
   @Post('organizations')
   @Permissions('employee:organization:create')
   @ApiOperation({ summary: 'Create an organization entity' })
-  createOrganization(@TenantId() tenantId: string, @Body() dto: any) {
+  createOrganization(@TenantId() tenantId: string, @Body() dto: CreateOrganizationDto) {
     return this.organizationService.createOrganization(tenantId, dto);
   }
 
@@ -51,7 +52,7 @@ export class OrganizationController {
   updateOrganization(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: any,
+    @Body() dto: UpdateOrganizationDto,
   ) {
     return this.organizationService.updateOrganization(tenantId, id, dto);
   }

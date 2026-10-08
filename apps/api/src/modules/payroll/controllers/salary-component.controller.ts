@@ -5,6 +5,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { CreateSalaryComponentDto } from '../dto/salary-component.dto';
 
 @ApiTags('Payroll - Employee Salary Components')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -15,7 +16,7 @@ export class SalaryComponentController {
   @Post()
   @Permissions('payroll:salary-component:create')
   @ApiOperation({ summary: 'Create salary component for employee' })
-  async create(@Body() dto: any) {
+  async create(@Body() dto: CreateSalaryComponentDto) {
     return this.prisma.salaryComponent.create({ data: dto });
   }
 

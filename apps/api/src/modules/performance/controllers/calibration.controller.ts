@@ -16,6 +16,7 @@ import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { CalibrationService } from '../services/calibration.service';
 import { FinalizeCalibrationDto } from '../dto/finalize-calibration.dto';
+import { CreateCalibrationSessionDto } from '../dto/calibration-session.dto';
 
 @ApiTags('Performance - Calibration')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -26,7 +27,7 @@ export class CalibrationController {
   @Post()
   @Permissions('performance:calibration:create')
   @ApiOperation({ summary: 'Create a calibration session (HRBP)' })
-  async create(@TenantId() tenantId: string, @CurrentUser('sub') createdBy: string, @Body() dto: any) {
+  async create(@TenantId() tenantId: string, @CurrentUser('sub') createdBy: string, @Body() dto: CreateCalibrationSessionDto) {
     return this.calibration.create(tenantId, createdBy, dto);
   }
 

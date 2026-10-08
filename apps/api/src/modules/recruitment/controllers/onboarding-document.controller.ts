@@ -7,6 +7,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { DomainEventType } from '@modules/shared/events/event-registry';
+import { CreateOnboardingDocumentDto } from '../dto/onboarding-document.dto';
 
 @ApiTags('Recruitment - Onboarding Documents')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -20,9 +21,9 @@ export class OnboardingDocumentController {
   @Post()
   @Permissions('recruitment:onboarding:create')
   @ApiOperation({ summary: 'Create onboarding document' })
-  async create(@TenantId() tenantId: string, @Body() dto: any) {
+  async create(@TenantId() tenantId: string, @Body() dto: CreateOnboardingDocumentDto) {
     const doc = await this.prisma.onboardingDocument.create({
-      data: { ...dto, applicationId: dto.applicationId } as any,
+      data: dto,
     });
     await this.eventBus.publishTyped(DomainEventType.ONBOARDING_DOCUMENT_UPLOADED, {
       applicationId: dto.applicationId,

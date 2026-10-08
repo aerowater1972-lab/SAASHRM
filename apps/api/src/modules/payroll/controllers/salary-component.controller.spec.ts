@@ -34,7 +34,7 @@ describe('SalaryComponentController', () => {
   });
 
   it('create persists a salary component', async () => {
-    const dto = { employeeId: 'e1', amount: 100 };
+    const dto = { employeeId: 'e1', componentType: 'basic_salary' as const, amount: '100', effectiveDate: '2026-01-01' };
     mockPrisma.salaryComponent.create.mockResolvedValue('created');
     const result = await controller.create(dto);
     expect(mockPrisma.salaryComponent.create).toHaveBeenCalledWith({ data: dto });

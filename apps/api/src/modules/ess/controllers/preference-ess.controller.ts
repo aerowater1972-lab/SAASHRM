@@ -5,6 +5,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { UpsertPreferenceDto } from '../dto/preference-ess.dto';
 
 @ApiTags('ESS - Preferences')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -23,7 +24,7 @@ export class PreferenceEssController {
   @Put()
   @Permissions('ess:profile:update')
   @ApiOperation({ summary: 'Upsert my preferences' })
-  async upsert(@CurrentUser('employeeId') employeeId: string, @Body() dto: any) {
+  async upsert(@CurrentUser('employeeId') employeeId: string, @Body() dto: UpsertPreferenceDto) {
     return this.prisma.essPreference.upsert({
       where: { employeeId },
       create: { employeeId, ...dto },

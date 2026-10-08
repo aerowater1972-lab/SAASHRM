@@ -5,6 +5,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Permissions } from '@common/decorators/permissions.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { CreateInterviewScorecardDto } from '../dto/interview-scorecard.dto';
 
 @ApiTags('Recruitment - Interview Scorecards')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -15,7 +16,7 @@ export class InterviewScorecardController {
   @Post()
   @Permissions('recruitment:interview:create')
   @ApiOperation({ summary: 'Create interview scorecard' })
-  async create(@Body() dto: any) {
+  async create(@Body() dto: CreateInterviewScorecardDto) {
     return this.prisma.interviewScorecard.create({ data: dto });
   }
 

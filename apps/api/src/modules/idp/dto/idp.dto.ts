@@ -68,3 +68,20 @@ export class UpdateActivityStatusDto {
   @IsString()
   completionNotes?: string;
 }
+
+export class UpdateIDPDto {
+  @ApiPropertyOptional({ description: 'Plan title' })
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional({ description: 'Plan description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Target completion date' })
+  @IsOptional()
+  @IsString()
+  targetDate?: string;
+}
