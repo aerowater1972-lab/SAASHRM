@@ -5,6 +5,8 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    - cron: '0 3 * * *'  # Daily 03:00 UTC
 
 jobs:
   backend:
@@ -183,3 +185,73 @@ jobs:
 
       - name: Run Playwright tests
         run: npm run test:e2e -w apps/web
+
+  k6-nightly:
+    name: Load Test (k6 nightly)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flexy_hrms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flexy_hrms?schema=public
+      JWT_SECRET: ci-jwt-secret-min-32-chars-long-0001
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-min-32-chars-1
+      DATA_ENCRYPTION_KEY: ci-encryption-key-min-32-chars-long-1
+      ALLOW_PUBLIC_REGISTER: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --schema=packages/database/schema.prisma
+
+      - name: Seed database
+        run: npm run db:seed
+
+      - name: Build API
+        run: npm run build -w apps/api
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Start API
+        run: |
+          node apps/api/dist/main > /tmp/api.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/v1/health && break
+            sleep 2
+          done
+
+      - name: Run k6 smoke test
+        run: k6 run k6-smoke.js
+        env:
+          K6_WEB_DASHBOARD: true
