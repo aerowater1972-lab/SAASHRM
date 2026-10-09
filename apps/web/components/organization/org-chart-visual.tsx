@@ -257,6 +257,7 @@ export default function OrgChartVisual({ root, onSelect }: Props) {
             {edges.map((e, i) => (
               <path
                 key={i}
+                data-edge="true"
                 d={`M ${e.x1} ${e.y1} V ${e.midY} H ${e.x2} V ${e.y2}`}
                 fill="none"
                 stroke="currentColor"
