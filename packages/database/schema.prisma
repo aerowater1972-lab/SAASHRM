@@ -1852,6 +1852,72 @@ model ExpenseItem {
   claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
 }
 
+// =======================================================================
+// VENDOR PPh 23/26 WITHHOLDING (PMK-141/2015, UU PPh 36/2008)
+// =======================================================================
+
+enum VendorTaxType {
+  NONE
+  PPH23_JASA // 2% jasa (PMK-141)
+  PPH23_SEWA // 2% sewa selain tanah/bangunan
+  PPH23_DIVIDEN // 15% (non-final, WP badan DN)
+  PPH23_BUNGA_ROYALTI // 15%
+  PPH23_HADIAH // 15%
+  PPH26 // 20% atau tarif P3B/treaty
+}
+
+enum VendorInvoiceStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+model Vendor {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  npwp         String?
+  address      String?
+  country      String   @default("ID")
+  isForeign    Boolean  @default(false)
+  treatyRate   Decimal? @db.Decimal(5, 2) // tarif P3B untuk PPh 26, cth 10.00
+  bankName     String?
+  bankAccount  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  invoices VendorInvoice[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model VendorInvoice {
+  id          String              @id @default(uuid())
+  tenantId    String
+  vendorId    String
+  vendor      Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  invoiceNo   String
+  invoiceDate DateTime
+  dueDate     DateTime?
+  description String?
+  grossAmount Decimal             @db.Decimal(18, 2)
+  taxType     VendorTaxType       @default(NONE)
+  taxRate     Decimal             @default(0) @db.Decimal(5, 2)
+  taxAmount   Decimal             @default(0) @db.Decimal(18, 2)
+  netAmount   Decimal             @default(0) @db.Decimal(18, 2)
+  grossUp     Boolean             @default(false) // true: PPh ditanggung perusahaan (gross-up)
+  status      VendorInvoiceStatus @default(DRAFT)
+  paidAt      DateTime?
+  ebupotRef   String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([tenantId, invoiceNo])
+  @@index([tenantId, status])
+}
+
 model Loan {
   id                 String        @id @default(uuid())
   tenantId           String
