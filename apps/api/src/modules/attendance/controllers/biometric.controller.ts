@@ -62,6 +62,15 @@ export class BiometricController {
     return this.biometricService.enroll(tenantId, dto.employeeId, dto.type, dto.reference, dto.deviceId);
   }
 
+  @Get('admin/devices')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('attendance:biometric:read')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin: list registered machines (no secrets)' })
+  listDevices(@TenantId() tenantId: string) {
+    return this.biometricService.listDevices(tenantId);
+  }
+
   @Get('admin/:employeeId')
   @UseGuards(AuthGuard, PermissionGuard)
   @Permissions('attendance:biometric:read')
@@ -117,5 +126,57 @@ export class BiometricController {
       throw new UnauthorizedException('Missing device signature');
     }
     return this.biometricService.deviceClockIn(tenantId, deviceId, dto, signature);
+  }
+
+  // Batch log ingestion (ADMS-style push, in/out, PIN→employee mapping).
+  @Post('device/logs')
+  @ApiHeader({ name: 'x-device-signature', required: true, description: 'HMAC-SHA256 of `${deviceId}|${canonicalJson}`' })
+  @ApiHeader({ name: 'x-device-key', required: false, description: 'Per-device API key from registration' })
+  @ApiOperation({ summary: 'Ingest batch attendance logs from a registered machine' })
+  ingestDeviceLogs(
+    @TenantId() tenantId: string,
+    @Headers('x-device-id') deviceId: string,
+    @Headers('x-device-key') apiKey: string | undefined,
+    @Headers('x-device-signature') signature: string,
+    @Body() body: { logs: Array<{ deviceId?: string; employeeId?: string; devicePin?: string; ts: number; direction: 'in' | 'out'; photo?: string }> },
+  ) {
+    if (!signature) {
+      throw new UnauthorizedException('Missing device signature');
+    }
+    return this.biometricService.ingestDeviceLogs(tenantId, deviceId, apiKey, body?.logs ?? [], signature);
+  }
+
+  @Post('admin/devices')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('attendance:biometric:enroll')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin: register a fingerprint machine (apiKey returned once)' })
+  registerDevice(
+    @TenantId() tenantId: string,
+    @Body() dto: { deviceId: string; name: string; location?: string },
+  ) {
+    return this.biometricService.registerDevice(tenantId, dto);
+  }
+
+  @Post('admin/devices/:id/key/rotate')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('attendance:biometric:enroll')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin: rotate machine API key (raw key returned once)' })
+  rotateDeviceKey(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.biometricService.rotateDeviceKey(tenantId, id);
+  }
+
+  @Patch('admin/devices/:id')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('attendance:biometric:enroll')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin: activate/deactivate a machine' })
+  setDeviceActive(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() body: { isActive: boolean },
+  ) {
+    return this.biometricService.setDeviceActive(tenantId, id, body.isActive);
   }
 }

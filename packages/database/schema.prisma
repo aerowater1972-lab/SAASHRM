@@ -1817,6 +1817,59 @@ model Asset {
   @@index([qrToken])
 }
 
+// =======================================================================
+// BIOMETRIC DEVICES (mesin fingerprint: registry + PIN mapping)
+// =======================================================================
+
+model BiometricDevice {
+  id          String    @id @default(uuid())
+  tenantId    String
+  deviceId    String // ID unik mesin (SN / device code)
+  name        String
+  location    String?
+  apiKeyHash  String // sha256(device api key); raw key hanya terlihat saat registrasi
+  isActive    Boolean   @default(true)
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([tenantId, deviceId])
+  @@index([tenantId])
+}
+
+// =======================================================================
+// FLIP DISBURSEMENT (transfer gaji via Flip API; DRY_RUN bila tanpa kredensial)
+// =======================================================================
+
+enum FlipDisbursementStatus {
+  DRAFT // payload siap, belum dikirim (dry-run)
+  PENDING // terkirim, menunggu status final
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model FlipDisbursement {
+  id             String                 @id @default(uuid())
+  tenantId       String
+  payrollRunId   String?
+  flipId         String? // id dari Flip (bila LIVE)
+  idempotencyKey String                 @unique
+  bankCode       String // kode bank Flip (lowercase, mis. bca)
+  accountNumber  String
+  accountName    String
+  amount         Decimal                @db.Decimal(18, 2)
+  remark         String?
+  status         FlipDisbursementStatus @default(DRAFT)
+  dryRun         Boolean                @default(true)
+  rawResponse    Json?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([tenantId, payrollRunId])
+  @@index([status])
+}
+
 model AssetDepreciation {
   id             String   @id @default(uuid())
   assetId        String

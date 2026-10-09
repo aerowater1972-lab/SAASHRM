@@ -11,6 +11,7 @@ import { BankTransferController } from './controllers/bank-transfer.controller';
 import { PayrollAdjustmentController } from './controllers/payroll-adjustment.controller';
 import { ThrController } from './controllers/thr.controller';
 import { SeveranceController } from './controllers/severance.controller';
+import { FlipController } from './controllers/flip.controller';
 import { ComponentService } from './services/component.service';
 import { PeriodService } from './services/period.service';
 import { RunService } from './services/run.service';
@@ -23,6 +24,7 @@ import { SeveranceService } from './services/severance.service';
 import { BankTransferFormatterService } from './services/bank-transfer-formatter.service';
 import { PayrollEventConsumer } from './services/payroll-event.consumer';
 import { RegulatorySyncService } from './services/regulatory-sync.service';
+import { FlipService } from './services/flip.service';
 import { IntegrationsModule } from '@modules/integrations/integrations.module';
 
 @Module({
@@ -39,6 +41,7 @@ import { IntegrationsModule } from '@modules/integrations/integrations.module';
     PayrollAdjustmentController,
     ThrController,
     SeveranceController,
+    FlipController,
   ],
   providers: [
     ComponentService,
@@ -53,6 +56,7 @@ import { IntegrationsModule } from '@modules/integrations/integrations.module';
     RegulatorySyncService,
     PayrollEventConsumer,
     BankTransferFormatterService,
+    FlipService,
   ],
   exports: [
     ComponentService,
