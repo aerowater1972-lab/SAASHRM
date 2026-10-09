@@ -1100,6 +1100,7 @@ model LeaveType {
   description          String?
   isPaid               Boolean  @default(true)
   allowNegativeBalance Boolean  @default(false)
+  maxNegativeDays      Decimal? @db.Decimal(5, 2) // hutang cuti: cap saldo negatif (null = tanpa batas)
   maxConsecutiveDays   Int?
   requiresDocument     Boolean  @default(false)
   carryForwardLimit    Int?     @default(0)
@@ -1127,6 +1128,7 @@ model LeaveBalance {
   totalUsed     Decimal  @default(0) @db.Decimal(5, 2)
   totalPending  Decimal  @default(0) @db.Decimal(5, 2)
   carryForward  Decimal  @default(0) @db.Decimal(5, 2)
+  debtCarry     Decimal  @default(0) @db.Decimal(5, 2) // hutang cuti dilunasi dari tahun lalu
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

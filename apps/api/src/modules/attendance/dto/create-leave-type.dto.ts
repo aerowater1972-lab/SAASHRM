@@ -20,6 +20,11 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsBoolean()
   allowNegativeBalance?: boolean;
+  @ApiPropertyOptional({ description: 'Hutang cuti: batas maksimum saldo negatif (hari). Null = tanpa batas bila allowNegativeBalance true.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxNegativeDays?: number;
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

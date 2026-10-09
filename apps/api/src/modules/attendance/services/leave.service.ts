@@ -90,17 +90,38 @@ export class LeaveService {
 
     const result = leaveTypes.map((lt) => {
       const balance = balances.find((b) => b.leaveTypeId === lt.id);
+      const base = Number(balance?.totalEntitled ?? 0) + Number(balance?.carryForward ?? 0) - Number(balance?.totalUsed ?? 0) - Number(balance?.totalPending ?? 0);
+      const debtCarry = Number((balance as any)?.debtCarry ?? 0);
       return {
         leaveType: lt,
         totalEntitled: balance?.totalEntitled ?? 0,
         totalUsed: balance?.totalUsed ?? 0,
         totalPending: balance?.totalPending ?? 0,
         carryForward: balance?.carryForward ?? 0,
-        available: Number(balance?.totalEntitled ?? 0) + Number(balance?.carryForward ?? 0) - Number(balance?.totalUsed ?? 0) - Number(balance?.totalPending ?? 0),
+        debtCarry: (balance as any)?.debtCarry ?? 0,
+        // Hutang tahun berjalan (negativitas live) + hutang dilunasi dari tahun lalu
+        debt: Math.max(0, -base) + debtCarry,
+        allowNegativeBalance: (lt as any).allowNegativeBalance ?? false,
+        maxNegativeDays: (lt as any).maxNegativeDays ?? null,
+        available: base - debtCarry,
       };
     });
 
     return result;
+  }
+
+  /**
+   * Saldo tersedia seragam: jatah + carry - pakai - pending - hutang tahun lalu.
+   * Semua perhitungan saldo WAJIB lewat helper ini agar hutang cuti konsisten.
+   */
+  private availableOf(balance: { totalEntitled: any; carryForward: any; totalUsed: any; totalPending: any; debtCarry?: any }): number {
+    return (
+      Number(balance.totalEntitled ?? 0) +
+      Number(balance.carryForward ?? 0) -
+      Number(balance.totalUsed ?? 0) -
+      Number(balance.totalPending ?? 0) -
+      Number((balance as any).debtCarry ?? 0)
+    );
   }
 
   /**
@@ -239,7 +260,7 @@ export class LeaveService {
       include: { leaveType: true },
     });
 
-    const results: Array<{ employeeId: string; leaveTypeId: string; year: number; carryForward: number }> = [];
+    const results: Array<{ employeeId: string; leaveTypeId: string; year: number; carryForward: number; debtCarry: number }> = [];
 
     for (const balance of balances) {
       const remaining =
@@ -250,6 +271,8 @@ export class LeaveService {
 
       const limit = balance.leaveType?.carryForwardLimit ?? 0;
       const carried = Math.max(0, Math.min(remaining, limit));
+      // Hutang cuti: sisa negatif dilunasi dari jatah tahun berikut (dicatat di debtCarry).
+      const debt = Math.max(0, -remaining);
 
       const existing = await this.prisma.leaveBalance.findUnique({
         where: {
@@ -264,13 +287,14 @@ export class LeaveService {
       if (existing) {
         const updated = await this.prisma.leaveBalance.update({
           where: { id: existing.id },
-          data: { carryForward: carried },
+          data: { carryForward: carried, debtCarry: debt } as any,
         });
         results.push({
           employeeId: updated.employeeId,
           leaveTypeId: updated.leaveTypeId,
           year: updated.year,
           carryForward: Number(updated.carryForward),
+          debtCarry: Number((updated as any).debtCarry ?? 0),
         });
       } else {
         const created = await this.prisma.leaveBalance.create({
@@ -283,13 +307,15 @@ export class LeaveService {
             carryForward: carried,
             totalUsed: 0,
             totalPending: 0,
-          },
+            debtCarry: debt,
+          } as any,
         });
         results.push({
           employeeId: created.employeeId,
           leaveTypeId: created.leaveTypeId,
           year: created.year,
           carryForward: Number(created.carryForward),
+          debtCarry: Number((created as any).debtCarry ?? 0),
         });
       }
     }
@@ -381,7 +407,7 @@ export class LeaveService {
     const deductsBalance = leaveType.isBalanceDeducting !== false;
 
     if (deductsBalance) {
-      await this.validateBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, leaveType.allowNegativeBalance);
+      await this.validateBalance(tenantId, employeeId, dto.leaveTypeId, totalDays, leaveType as any);
     }
 
     const overlapping = await this.prisma.leaveRequest.findFirst({
@@ -808,7 +834,9 @@ export class LeaveService {
     }
   }
 
-  private async validateBalance(tenantId: string, employeeId: string, leaveTypeId: string, totalDays: number, allowNegative: boolean) {
+  private async validateBalance(tenantId: string, employeeId: string, leaveTypeId: string, totalDays: number, leaveType: { allowNegativeBalance?: boolean | null; maxNegativeDays?: any } | boolean) {
+    const allowNegative = typeof leaveType === 'boolean' ? leaveType : leaveType.allowNegativeBalance === true;
+    const maxNegative = typeof leaveType === 'boolean' ? null : leaveType.maxNegativeDays;
     const year = new Date().getFullYear();
     const balance = await this.prisma.leaveBalance.findUnique({
       where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year } },
@@ -819,9 +847,21 @@ export class LeaveService {
     }
 
     if (balance && !allowNegative) {
-      const available = Number(balance.totalEntitled) + Number(balance.carryForward) - Number(balance.totalUsed) - Number(balance.totalPending);
+      const available = this.availableOf(balance);
       if (totalDays > available) {
         throw new BadRequestException(`Insufficient leave balance. Available: ${available}, Requested: ${totalDays}`);
+      }
+    }
+
+    // Hutang cuti: saldo boleh negatif sebatas cap maxNegativeDays (null = tanpa batas).
+    if (balance && allowNegative) {
+      const available = this.availableOf(balance);
+      const after = available - totalDays;
+      const cap = maxNegative == null ? null : Number(maxNegative);
+      if (cap != null && after < -cap) {
+        throw new BadRequestException(
+          `Melebihi batas hutang cuti. Maksimal hutang ${cap} hari, sisa tersedia ${available}, diminta ${totalDays}.`,
+        );
       }
     }
   }
