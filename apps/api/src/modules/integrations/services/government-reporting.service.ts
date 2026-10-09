@@ -92,6 +92,137 @@ export class GovernmentReportingService {
     });
   }
 
+  async markAccepted(reportId: string) {
+    const report: any = await (this.prisma as any).governmentReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Report not found');
+    if (report.status !== 'SUBMITTED') throw new BadRequestException('Hanya laporan SUBMITTED yang bisa diterima');
+    return (this.prisma as any).governmentReport.update({
+      where: { id: reportId },
+      data: { status: 'ACCEPTED' as any, acceptedAt: new Date() },
+    });
+  }
+
+  async markRejected(reportId: string, reason: string) {
+    const report: any = await (this.prisma as any).governmentReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Report not found');
+    if (report.status !== 'SUBMITTED') throw new BadRequestException('Hanya laporan SUBMITTED yang bisa ditolak');
+    if (!reason?.trim()) throw new BadRequestException('Alasan penolakan wajib diisi');
+    return (this.prisma as any).governmentReport.update({
+      where: { id: reportId },
+      data: { status: 'REJECTED' as any, rejectedAt: new Date(), errorMessage: reason.slice(0, 1000) },
+    });
+  }
+
+  /** Portal + langkah submit manual per jenis laporan (tak ada API publik). */
+  getSubmissionGuide(reportType: GovReportType) {
+    const guides: Record<GovReportType, { portal: string; url: string; steps: string[]; deadline: string }> = {
+      DJP_SPT_1721_A1: {
+        portal: 'DJP Online (e-Filing)',
+        url: 'https://djponline.pajak.go.id',
+        steps: [
+          'Unduh CSV 1721-A1 dari Flexy HRMS',
+          'Impor ke aplikasi e-SPT / eBupot 1721 di DJP Online',
+          'Buat bukti potong per karyawan dan kirim SPT Masa Desember',
+          'Serahkan bukti potong ke karyawan paling lambat akhir Januari',
+        ],
+        deadline: 'SPT Masa Desember: 20 Januari; bukti potong ke karyawan: 31 Januari',
+      },
+      DJP_SPT_MASA_PPH21: {
+        portal: 'DJP Online (eBupot 21)',
+        url: 'https://djponline.pajak.go.id',
+        steps: [
+          'Unduh CSV SPT Masa dari Flexy HRMS',
+          'Setor PPh 21 via e-Billing (kode 411121-100) paling lambat tanggal 10',
+          'Impor CSV ke eBupot 21 dan lapor SPT Masa paling lambat tanggal 20',
+        ],
+        deadline: 'Setor: tanggal 10; Lapor: tanggal 20 bulan berikut',
+      },
+      DJP_EBUPOT_UNIFIKASI: {
+        portal: 'DJP Online (eBupot Unifikasi)',
+        url: 'https://djponline.pajak.go.id',
+        steps: [
+          'Unduh CSV eBupot dari Flexy HRMS (Vendor PPh 23/26 atau payroll)',
+          'Impor ke eBupot Unifikasi, lengkapi kode objek pajak per baris',
+          'Setor (tgl 10) lalu lapor (tgl 20), simpan BPE sebagai submissionRef',
+        ],
+        deadline: 'Setor: tanggal 10; Lapor: tanggal 20 bulan berikut',
+      },
+      BPJS_KESEHATAN_IURAN: {
+        portal: 'e-Dabu (Badan Usaha)',
+        url: 'https://edabu.bpjs-kesehatan.go.id',
+        steps: [
+          'Unduh CSV iuran dari Flexy HRMS',
+          'Mutakhirkan data upah peserta di e-Dabu (mutasi/gaji)',
+          'Bayar iuran via VA perusahaan paling lambat tanggal 10',
+        ],
+        deadline: 'Bayar: tanggal 10 setiap bulan',
+      },
+      BPJS_KETENAGAKERJAAN_IURAN: {
+        portal: 'SIPP Online / JMO',
+        url: 'https://sipp.bpjsketenagakerjaan.go.id',
+        steps: [
+          'Unduh CSV iuran dari Flexy HRMS',
+          'Unggah data upah ke SIPP Online dan verifikasi tagihan',
+          'Bayar iuran paling lambat tanggal 15',
+        ],
+        deadline: 'Bayar: tanggal 15 setiap bulan',
+      },
+      SIPP_LAPORAN_TENAGA_KERJA: {
+        portal: 'SIPP Online (WLKP)',
+        url: 'https://sipp.bpjsketenagakerjaan.go.id',
+        steps: [
+          'Unduh CSV snapshot tenaga kerja dari Flexy HRMS',
+          'Laporkan mutasi (masuk/keluar) di WLKP SIPP Online',
+          'Wajib lapor tahunan + setiap ada perubahan data perusahaan',
+        ],
+        deadline: 'Tahunan dan setiap mutasi',
+      },
+    };
+    const guide = guides[reportType];
+    if (!guide) throw new BadRequestException(`No guide for: ${reportType}`);
+    return { reportType, ...guide };
+  }
+
+  /**
+   * Kalender kepatuhan: kewajiban statis per bulan + THR dinamis (H-7).
+   * Aturan: PPh 21 setor tgl 10/lapor tgl 20; PPh 23/26 sama; BPJS Kes tgl 10;
+   * BPJS TK tgl 15; THR H-7 hari raya; 1721-A1 Januari.
+   */
+  async getComplianceCalendar(tenantId: string, year: number, month: number) {
+    if (month < 1 || month > 12) throw new BadRequestException('Bulan harus 1–12');
+    const pad = (d: number) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const items: { obligation: string; kind: 'SETOR' | 'LAPOR' | 'BAYAR' | 'SERAHKAN'; dueDate: string; ref?: string }[] = [
+      { obligation: 'PPh 21 Masa', kind: 'SETOR', dueDate: pad(10) },
+      { obligation: 'PPh 21 Masa', kind: 'LAPOR', dueDate: pad(20) },
+      { obligation: 'PPh 23/26', kind: 'SETOR', dueDate: pad(10) },
+      { obligation: 'PPh 23/26', kind: 'LAPOR', dueDate: pad(20) },
+      { obligation: 'BPJS Kesehatan', kind: 'BAYAR', dueDate: pad(10) },
+      { obligation: 'BPJS Ketenagakerjaan', kind: 'BAYAR', dueDate: pad(15) },
+    ];
+    if (month === 1) {
+      items.push({ obligation: 'Bukti potong 1721-A1 ke karyawan', kind: 'SERAHKAN', dueDate: `${year}-01-31` });
+    }
+    // THR dinamis: jatuh tempo H-7 bila hari raya di bulan ini.
+    try {
+      const thrRuns = await (this.prisma as any).thrRun.findMany({
+        where: { tenantId, holidayDate: { gte: new Date(year, month - 1, 1), lt: new Date(year, month, 1) } },
+        select: { id: true, name: true, holidayDate: true, dueDate: true },
+      });
+      for (const t of thrRuns) {
+        items.push({
+          obligation: `THR: ${t.name}`,
+          kind: 'BAYAR',
+          dueDate: new Date(t.dueDate).toISOString().slice(0, 10),
+          ref: t.id,
+        });
+      }
+    } catch {
+      // ThrRun may be unavailable; static calendar still stands.
+    }
+    items.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    return { year, month, items };
+  }
+
   async validateReport(reportId: string) {
     const report: any = await (this.prisma as any).governmentReport.findUnique({ where: { id: reportId } });
     if (!report) throw new NotFoundException('Report not found');

@@ -63,4 +63,32 @@ export class GovernmentReportingController {
   submit(@Param('id') id: string, @Body() data: { submissionRef?: string }) {
     return this.reports.markSubmitted(id, data?.submissionRef);
   }
+
+  @Post('reports/:id/accept')
+  @ApiOperation({ summary: 'Mark submitted report accepted by regulator' })
+  accept(@Param('id') id: string) {
+    return this.reports.markAccepted(id);
+  }
+
+  @Post('reports/:id/reject')
+  @ApiOperation({ summary: 'Mark submitted report rejected with reason' })
+  reject(@Param('id') id: string, @Body() data: { reason: string }) {
+    return this.reports.markRejected(id, data?.reason);
+  }
+
+  @Get('guides/:type')
+  @ApiOperation({ summary: 'Manual submission guide (portal + steps + deadline)' })
+  guide(@Param('type') type: string) {
+    return this.reports.getSubmissionGuide(type as any);
+  }
+
+  @Get('calendar')
+  @ApiOperation({ summary: 'Monthly compliance calendar (statutory dues + THR H-7)' })
+  calendar(
+    @Query('tenantId') tenantId: string,
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ) {
+    return this.reports.getComplianceCalendar(tenantId, Number(year), Number(month));
+  }
 }
