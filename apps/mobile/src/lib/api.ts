@@ -266,16 +266,31 @@ export const attendanceApi = {
   cancelLeaveRequest: (id: string) =>
     api.post(`/attendance/leave-requests/${id}/cancel`),
 
-  // Overtime
+  approveLeaveRequest: (id: string, notes?: string) =>
+    api.put(`/attendance/leave-requests/${id}/approve${notes ? `?notes=${encodeURIComponent(notes)}` : ''}`, {}),
+
+  rejectLeaveRequest: (id: string, reason: string) =>
+    api.put(`/attendance/leave-requests/${id}/reject?reason=${encodeURIComponent(reason)}`, {}),
+
+  getPendingLeaveApprovals: () =>
+    api.get<any[]>('/attendance/leave-requests/pending-approval'),
+
+  // Overtime (backend: /attendance/overtime/requests)
   getOvertimeRequests: (params?: { status?: string; page?: number; limit?: number }) =>
-    api.get<{ data: any[]; meta: any }>('/attendance/overtime-requests', params),
+    api.get<{ data: any[]; meta: any }>('/attendance/overtime/requests', params),
 
   createOvertimeRequest: (data: {
     date: string;
     startTime: string;
     endTime: string;
     reason: string;
-  }) => api.post('/attendance/overtime-requests', data),
+  }) => api.post('/attendance/overtime/requests', data),
+
+  approveOvertimeRequest: (id: string, notes?: string) =>
+    api.post(`/attendance/overtime/requests/${id}/approve`, { notes }),
+
+  rejectOvertimeRequest: (id: string, reason: string) =>
+    api.post(`/attendance/overtime/requests/${id}/reject`, { reason }),
 
   // Biometric
   enrollFace: (data: { embedding: number[]; quality: number }) =>

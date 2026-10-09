@@ -51,7 +51,13 @@
     "maestro:login": "maestro test maestro/login.yaml",
     "maestro:attendance": "maestro test maestro/attendance.yaml",
     "maestro:leave": "maestro test maestro/leave-overtime.yaml",
-    "maestro:profile": "maestro test maestro/profile.yaml"
+    "maestro:profile": "maestro test maestro/profile.yaml",
+    "maestro:admin": "maestro test maestro/admin.yaml",
+    "build:dev": "eas build --profile development --platform android",
+    "build:preview": "eas build --profile preview --platform all",
+    "build:prod": "eas build --profile production --platform all",
+    "submit:prod": "eas submit --profile production --platform all",
+    "update:preview": "eas update --branch preview"
   },
   "private": true
 }

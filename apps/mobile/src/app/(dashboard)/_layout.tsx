@@ -42,6 +42,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const canAccessPayroll = permissions.includes('payroll:run:read') || permissions.includes('payroll:payslip:read');
   const canAccessAdmin = permissions.includes('admin:user:read') || permissions.includes('admin:tenant:read');
+  const canApprove = permissions.includes('leave-requests:approve') || permissions.includes('overtime:approve');
 
   return (
     <Tabs
@@ -103,6 +104,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             title: 'Payroll',
             tabBarIcon: ({ focused, color }) => (
               <Ionicons name={focused ? 'cash-outline' : 'cash'} size={24} color={color} />
+            ),
+          }}
+        />
+      )}
+      {(canApprove || canAccessAdmin) && (
+        <Tabs.Screen
+          name="admin"
+          options={{
+            title: 'Admin',
+            tabBarIcon: ({ focused, color }) => (
+              <Ionicons name={focused ? 'shield-checkmark-outline' : 'shield-checkmark'} size={24} color={color} />
             ),
           }}
         />

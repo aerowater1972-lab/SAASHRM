@@ -1,0 +1,19 @@
+appId: com.flexyhrms.mobile
+---
+- runFlow: login.yaml
+# --- Admin tab hanya tampil untuk approver/admin; lewati bila tak ada ---
+- tapOn:
+    text: "Admin"
+  when:
+    visible:
+      text: "Admin"
+- assertVisible:
+    id: "admin-inbox"
+  when:
+    visible:
+      text: "Admin"
+- assertVisible:
+    text: "Kotak Persetujuan"
+  when:
+    visible:
+      text: "Admin"
