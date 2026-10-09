@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDepartments, usePositions, useGrades, useCreateDepartment, useCreatePosition, useCreateGrade, useOrgChart } from '@/lib/hooks/organization';
 import { Button } from '@/components/ui/button';
@@ -20,8 +20,9 @@ import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createDepartmentSchema, createPositionSchema, createGradeSchema, type CreateDepartmentInput, type CreatePositionInput, type CreateGradeInput } from '@/lib/schemas/organization';
-import { Building2, Users, Layers, Plus, GitBranch, ChevronRight, ChevronDown, ListTree, Network } from 'lucide-react';
+import { Building2, Users, Layers, Plus, GitBranch, ChevronRight, ChevronDown, ListTree, Network, GripVertical } from 'lucide-react';
 import OrgChartVisual from '@/components/organization/org-chart-visual';
+import DragDropOrgChart from '@/components/organization/org-chart-drag-drop';
 
 function DepartmentForm({ onSuccess }: { onSuccess: () => void }) {
   const createDept = useCreateDepartment();
@@ -96,12 +97,47 @@ export default function OrganizationPage() {
 
   const [asOfDate, setAsOfDate] = useState('');
   const [selected, setSelected] = useState<{ node: any; level: number } | null>(null);
-  const [chartView, setChartView] = useState<'list' | 'visual'>('visual');
+  const [chartView, setChartView] = useState<'list' | 'visual' | 'dragdrop'>('visual');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [dragDropSearch, setDragDropSearch] = useState('');
 
   const { data: departments, isLoading: deptLoading, error: deptError, refetch: deptRefetch } = useDepartments();
   const { data: positions, isLoading: posLoading, error: posError, refetch: posRefetch } = usePositions();
   const { data: grades, isLoading: gradeLoading, error: gradeError, refetch: gradeRefetch } = useGrades();
   const { data: orgChart, isLoading: chartLoading } = useOrgChart(asOfDate || undefined);
+
+  const dragDropData = useMemo(() => {
+    if (!orgChart) return null;
+    return convertOrgChartForDragDrop(orgChart);
+  }, [orgChart]);
+
+  function convertOrgChartForDragDrop(node: any): any {
+    return {
+      id: node.id,
+      label: node.label,
+      type: node.type,
+      headName: node.headName,
+      vacant: node.vacant,
+      positionTitle: node.positionTitle,
+      expanded: true,
+      depth: 0,
+      children: node.children?.map((c: any) => convertOrgChartForDragDrop(c)) || [],
+    };
+  }
+
+  const handleDragMove = async (draggedId: string, targetId: string, position: 'before' | 'after' | 'inside') => {
+    // TODO: Call API to update org structure
+    console.log('Move:', draggedId, targetId, position);
+  };
+
+  const handleToggleExpand = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -161,6 +197,10 @@ export default function OrganizationPage() {
           <TabsTrigger value="orgchart">
             <GitBranch className="mr-2 h-4 w-4" />
             Struktur Organisasi
+          </TabsTrigger>
+          <TabsTrigger value="dragdrop">
+            <GripVertical className="mr-2 h-4 w-4" />
+            Drag-Drop
           </TabsTrigger>
         </TabsList>
 
@@ -369,6 +409,38 @@ export default function OrganizationPage() {
               </Card>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="dragdrop" className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <Label htmlFor="dragdrop-search">Cari unit</Label>
+            <Input
+              id="dragdrop-search"
+              type="text"
+              placeholder="Cari nama unit / pimpinan…"
+              className="w-64"
+              value={dragDropSearch}
+              onChange={(e) => setDragDropSearch(e.target.value)}
+            />
+          </div>
+          {!chartLoading && dragDropData && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Struktur Organisasi (Drag-Drop)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DragDropOrgChart
+                  root={dragDropData}
+                  onMove={handleDragMove}
+                  onToggleExpand={handleToggleExpand}
+                  expandedIds={expandedIds}
+                  searchQuery={dragDropSearch}
+                />
+              </CardContent>
+            </Card>
+          )}
+          {chartLoading && <TableSkeleton rows={8} columns={1} />}
+          {!chartLoading && !dragDropData && <EmptyState title="Struktur tidak tersedia" description="Belum ada data struktur organisasi." />}
         </TabsContent>
       </Tabs>
     </div>
