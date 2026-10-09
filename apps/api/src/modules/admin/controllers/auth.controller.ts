@@ -223,6 +223,24 @@ export class AuthController {
     return { ...result, csrfToken };
   }
 
+  @Get('sso/:tenantId/oidc/callback')
+  @Public()
+  @SkipCsrf()
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'OIDC callback endpoint (receives authorization code from IdP)' })
+  async ssoOidcCallback(
+    @Param('tenantId') tenantId: string,
+    @Req() req: Request & { query: Record<string, string> },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.ssoService.handleAcs(tenantId, {}, req.query as Record<string, string>);
+    this.setAccessCookie(res, result.accessToken);
+    this.setRefreshCookie(res, result.refreshToken);
+    const csrfToken = this.generateCsrfToken();
+    this.setCsrfCookie(res, csrfToken);
+    return res.redirect(this.configService.get<string>('APP_FRONTEND_URL') || 'http://localhost:3001');
+  }
+
   @Get('sso/:tenantId/metadata')
   @Public()
   @SkipCsrf()

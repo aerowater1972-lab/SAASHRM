@@ -153,16 +153,22 @@ model RefreshTokenBlacklist {
 // Enterprise SSO (SAML 2.0) connection per tenant. One IdP per tenant.
 // The IdP x509 cert is stored as provided by the customer's IdP metadata.
 model SsoConnection {
-  id           String   @id @default(uuid())
-  tenantId     String   @unique
-  provider     String   @default("SAML")
-  entryPoint   String // IdP SSO URL (redirect target)
-  issuer       String // SP entity ID issued for this tenant
-  cert         String   @db.Text // IdP signing certificate (PEM)
-  nameIdFormat String   @default("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress")
-  enabled      Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  provider        String   @default("SAML") // SAML | OIDC
+  entryPoint      String?  // SAML: IdP SSO URL; OIDC: authorization endpoint
+  issuer          String?  // SAML: SP entity ID; OIDC: client ID
+  cert            String?  @db.Text // SAML: IdP signing cert; OIDC: unused
+  nameIdFormat    String?  @default("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress")
+  clientSecret    String?  // OIDC: client secret (encrypted at rest)
+  tokenEndpoint   String?  // OIDC: token endpoint
+  userInfoEndpoint String? // OIDC: userinfo endpoint
+  jwksUri         String?  // OIDC: JWKS URI for token validation
+  discoveryUrl    String?  // OIDC: discovery endpoint
+  scopes          String[] @default(["openid", "email", "profile"]) // OIDC scopes
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
