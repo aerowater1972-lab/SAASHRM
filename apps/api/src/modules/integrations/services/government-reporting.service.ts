@@ -57,12 +57,21 @@ export class GovernmentReportingService {
     return (this.prisma as any).governmentReportConfig.delete({ where: { id } });
   }
 
-  async generateReport(tenantId: string, configId: string, periodStart: Date, periodEnd: Date) {
+  async generateReport(tenantId: string, configId: string, periodStart: Date, periodEnd: Date, entityId?: string) {
     const cfg = await this.getConfig(tenantId, configId);
     if (periodEnd < periodStart) throw new BadRequestException('periodEnd must be >= periodStart');
     const built = await this.buildReportContent(
       tenantId, cfg.reportType as unknown as GovReportType, periodStart, periodEnd,
     );
+    // Multi-NPWP: lampirkan identitas NPWP entitas bila dipilih.
+    let entity: any = null;
+    if (entityId) {
+      entity = await (this.prisma as any).tenantEntity.findFirst({
+        where: { id: entityId, tenantId },
+        select: { id: true, name: true, code: true, npwp: true, npwpName: true, kppCode: true },
+      });
+      if (!entity) throw new NotFoundException('Entitas tidak ditemukan');
+    }
     const content = this.rowsToCsv(built.rows);
     const hash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
     return (this.prisma as any).governmentReport.create({
@@ -74,7 +83,7 @@ export class GovernmentReportingService {
         fileName: built.fileName,
         fileSize: Buffer.byteLength(content, 'utf8'),
         fileHash: hash,
-        payload: built.payload,
+        payload: { ...built.payload, entity },
       },
     });
   }
@@ -83,6 +92,74 @@ export class GovernmentReportingService {
     const report: any = await (this.prisma as any).governmentReport.findUnique({ where: { id: reportId } });
     if (!report) throw new NotFoundException('Report not found');
     return { fileName: report.fileName ?? 'report.csv', content: this.rowsToCsv(report.payload?.rows ?? []) };
+  }
+
+  /**
+   * Pembetulan SPT: regenerasi dari data terkini untuk periode & config yang
+   * sama, dirantai ke laporan asli via revisionOfId dengan revisionNo
+   * menaik (0 = normal, 1..n = pembetulan ke-n). Hanya dari laporan yang
+   * sudah SUBMITTED/ACCEPTED.
+   */
+  async createCorrection(reportId: string) {
+    const original: any = await (this.prisma as any).governmentReport.findUnique({
+      where: { id: reportId },
+      include: { revisions: { select: { revisionNo: true } }, config: true },
+    });
+    if (!original) throw new NotFoundException('Report not found');
+    if (!['SUBMITTED', 'ACCEPTED'].includes(original.status)) {
+      throw new BadRequestException('Pembetulan hanya dari laporan yang sudah dilapor (SUBMITTED/ACCEPTED)');
+    }
+    if (original.revisionOfId) {
+      throw new BadRequestException('Buat pembetulan dari laporan normal, bukan dari pembetulan lain');
+    }
+    const nextNo = Math.max(0, ...original.revisions.map((r: any) => r.revisionNo)) + 1;
+    const tenantId = original.config.tenantId;
+    const built = await this.buildReportContent(
+      tenantId,
+      original.config.reportType as unknown as GovReportType,
+      new Date(original.periodStart),
+      new Date(original.periodEnd),
+    );
+    const content = this.rowsToCsv(built.rows);
+    const hash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+    const fileName = built.fileName.replace(/\.csv$/i, `-P${nextNo}.csv`);
+    return (this.prisma as any).governmentReport.create({
+      data: {
+        configId: original.configId,
+        periodStart: new Date(original.periodStart),
+        periodEnd: new Date(original.periodEnd),
+        status: 'GENERATED' as any,
+        fileName,
+        fileSize: Buffer.byteLength(content, 'utf8'),
+        fileHash: hash,
+        payload: {
+          ...built.payload,
+          isCorrection: true,
+          revisionNo: nextNo,
+          originalReportId: original.id,
+          originalSubmissionRef: original.submissionRef ?? null,
+          originalFileHash: original.fileHash ?? null,
+        },
+        revisionOfId: original.id,
+        revisionNo: nextNo,
+      },
+    });
+  }
+
+  async listRevisions(reportId: string) {
+    const original: any = await (this.prisma as any).governmentReport.findUnique({
+      where: { id: reportId },
+      include: { revisions: { orderBy: { revisionNo: 'asc' } }, revisionOf: true },
+    });
+    if (!original) throw new NotFoundException('Report not found');
+    const root = original.revisionOf ?? original;
+    const revisions = original.revisionOf
+      ? await (this.prisma as any).governmentReport.findMany({
+          where: { revisionOfId: original.revisionOf.id },
+          orderBy: { revisionNo: 'asc' },
+        })
+      : original.revisions;
+    return { original: root, revisions };
   }
 
   async markSubmitted(reportId: string, submissionRef?: string) {

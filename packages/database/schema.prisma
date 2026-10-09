@@ -79,7 +79,10 @@ model TenantEntity {
   province   String?
   postalCode String?
   timezone   String    @default("Asia/Jakarta")
-  createdAt  DateTime  @default(now())
+  npwp       String? // NPWP badan per entitas (multi-NPWP: tiap PT/Cabang punya NPWP sendiri)
+  npwpName   String? // Nama wajib pajak sesuai NPWP
+  kppCode    String? // Kode KPP terdaftar
+  createdAt  DateTime @default(now())
   updatedAt  DateTime  @updatedAt
   deletedAt  DateTime?
 
@@ -375,6 +378,10 @@ model GovernmentReport {
   errorMessage    String?
   payload         Json?
   response        Json?
+  revisionOfId    String? // pembetulan atas laporan ini (null = SPT normal/ke-0)
+  revisionOf      GovernmentReport?  @relation("ReportRevision", fields: [revisionOfId], references: [id], onDelete: SetNull)
+  revisions       GovernmentReport[] @relation("ReportRevision")
+  revisionNo      Int                @default(0) // 0 = normal, 1..n = pembetulan ke-n
   createdAt       DateTime                    @default(now())
   updatedAt       DateTime                    @updatedAt
 

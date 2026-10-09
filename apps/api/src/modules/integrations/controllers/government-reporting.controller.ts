@@ -34,13 +34,25 @@ export class GovernmentReportingController {
   }
 
   @Post('configs/:id/generate')
-  @ApiOperation({ summary: 'Generate report for period' })
+  @ApiOperation({ summary: 'Generate report for period (optional entityId for multi-NPWP)' })
   generate(
     @Param('id') id: string,
     @Query('tenantId') tenantId: string,
-    @Body() data: { periodStart: string; periodEnd: string },
+    @Body() data: { periodStart: string; periodEnd: string; entityId?: string },
   ) {
-    return this.reports.generateReport(tenantId, id, new Date(data.periodStart), new Date(data.periodEnd));
+    return this.reports.generateReport(tenantId, id, new Date(data.periodStart), new Date(data.periodEnd), data?.entityId);
+  }
+
+  @Post('reports/:id/correct')
+  @ApiOperation({ summary: 'Create pembetulan (correction) chained to a submitted report' })
+  correct(@Param('id') id: string) {
+    return this.reports.createCorrection(id);
+  }
+
+  @Get('reports/:id/revisions')
+  @ApiOperation({ summary: 'Original report + its pembetulan chain' })
+  revisions(@Param('id') id: string) {
+    return this.reports.listRevisions(id);
   }
 
   @Get('reports/:id/download')
