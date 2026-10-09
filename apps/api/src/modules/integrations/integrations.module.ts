@@ -7,11 +7,13 @@ import { GovernmentReportingController } from './controllers/government-reportin
 import { WhatsappService } from './services/whatsapp.service';
 import { WhatsappController } from './controllers/whatsapp.controller';
 import { MailService } from './services/mail.service';
+import { HadirrService } from './services/hadirr.service';
+import { HadirrController } from './controllers/hadirr.controller';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [AccountingConnectorController, GovernmentReportingController, WhatsappController],
-  providers: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService],
-  exports: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService],
+  controllers: [AccountingConnectorController, GovernmentReportingController, WhatsappController, HadirrController],
+  providers: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService, HadirrService],
+  exports: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService, HadirrService],
 })
 export class IntegrationsModule {}
