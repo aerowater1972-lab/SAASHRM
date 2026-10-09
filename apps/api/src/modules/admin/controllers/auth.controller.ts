@@ -1,13 +1,15 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Res, Get, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Res, Get, Req, UnauthorizedException, Param, Delete, Patch } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthService } from '../services/auth.service';
+import { SsoService } from '../services/sso.service';
 import { PermissionsResolver } from '@common/auth/permissions.resolver';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ChangePasswordDto } from '../dto/create-user.dto';
+import { CreateSsoConnectionDto, UpdateSsoConnectionDto } from '../dto/sso.dto';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { Permissions } from '@common/decorators/permissions.decorator';
@@ -25,6 +27,7 @@ const AUTH_LOGIN_LIMIT = Number(process.env.AUTH_LOGIN_LIMIT ?? 10);
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly ssoService: SsoService,
     private readonly configService: ConfigService,
     private readonly permissions: PermissionsResolver,
   ) {}
@@ -188,6 +191,104 @@ export class AuthController {
       user: { id: sub, email, tenantId, employeeId: employeeId ?? null },
       permissions: await this.permissions.resolve(String(sub)),
     };
+  }
+
+  // ---------- SSO (SAML 2.0) ----------
+
+  @Get('sso/:tenantId/login')
+  @Public()
+  @SkipCsrf()
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Initiate SP-initiated SAML login (redirects to IdP)' })
+  async ssoLogin(@Param('tenantId') tenantId: string, @Res() res: Response) {
+    const { url } = await this.ssoService.getLoginUrl(tenantId);
+    return res.redirect(url);
+  }
+
+  @Post('sso/:tenantId/acs')
+  @Public()
+  @SkipCsrf()
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Assertion Consumer Service (IdP posts SAMLResponse here)' })
+  async ssoAcs(
+    @Param('tenantId') tenantId: string,
+    @Body() body: Record<string, string>,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.ssoService.handleAcs(tenantId, body);
+    this.setAccessCookie(res, result.accessToken);
+    this.setRefreshCookie(res, result.refreshToken);
+    const csrfToken = this.generateCsrfToken();
+    this.setCsrfCookie(res, csrfToken);
+    return { ...result, csrfToken };
+  }
+
+  @Get('sso/:tenantId/metadata')
+  @Public()
+  @SkipCsrf()
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'SP metadata XML for IdP configuration' })
+  async ssoMetadata(@Param('tenantId') tenantId: string, @Res() res: Response) {
+    const xml = await this.ssoService.getMetadata(tenantId);
+    res.set('Content-Type', 'application/xml');
+    return res.send(xml);
+  }
+
+  @Get('sso/:tenantId/status')
+  @Public()
+  @SkipCsrf()
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Check if SSO is enabled for tenant' })
+  async ssoStatus(@Param('tenantId') tenantId: string) {
+    return { enabled: await this.ssoService.isEnabled(tenantId) };
+  }
+
+  // Admin CRUD for SSO connection (requires admin:sso:* permissions)
+
+  @Get('admin/sso/:tenantId')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @ApiBearerAuth()
+  @Permissions('admin:sso:read')
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Get SSO connection details (cert masked)' })
+  async getSsoConnection(@Param('tenantId') tenantId: string) {
+    return this.ssoService.findConnection(tenantId);
+  }
+
+  @Post('admin/sso/:tenantId')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @ApiBearerAuth()
+  @Permissions('admin:sso:create')
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Create SSO connection' })
+  async createSsoConnection(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: CreateSsoConnectionDto,
+  ) {
+    return this.ssoService.createConnection(tenantId, dto);
+  }
+
+  @Patch('admin/sso/:tenantId')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @ApiBearerAuth()
+  @Permissions('admin:sso:update')
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Update SSO connection' })
+  async updateSsoConnection(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: UpdateSsoConnectionDto,
+  ) {
+    return this.ssoService.updateConnection(tenantId, dto);
+  }
+
+  @Delete('admin/sso/:tenantId')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @ApiBearerAuth()
+  @Permissions('admin:sso:delete')
+  @ApiParam({ name: 'tenantId', description: 'Tenant identifier' })
+  @ApiOperation({ summary: 'Delete SSO connection' })
+  async deleteSsoConnection(@Param('tenantId') tenantId: string) {
+    return this.ssoService.removeConnection(tenantId);
   }
 
   @Post('change-password')

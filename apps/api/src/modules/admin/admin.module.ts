@@ -25,6 +25,7 @@ import { FeatureFlagService } from './services/feature-flag.service';
 import { IntegrationService } from './services/integration.service';
 import { UserManagementService } from './services/user-management.service';
 import { BulkImportService } from './services/bulk-import.service';
+import { SsoService } from './services/sso.service';
 
 @Global()
 @Module({
@@ -56,6 +57,7 @@ import { BulkImportService } from './services/bulk-import.service';
     IntegrationService,
     UserManagementService,
     BulkImportService,
+    SsoService,
     CsrfGuard,
   ],
   exports: [
@@ -67,6 +69,7 @@ import { BulkImportService } from './services/bulk-import.service';
     AuthService,
     FeatureFlagService,
     IntegrationService,
+    SsoService,
   ],
 })
 export class AdminModule {}
