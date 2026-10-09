@@ -217,3 +217,58 @@ export async function fetchMonthlyIuran(params: {
     params: params as Record<string, unknown>,
   });
 }
+
+export type BpjsClaimType = 'RAWAT_INAP' | 'RAWAT_JALAN' | 'KUNING' | 'MERAH' | 'KELAHIRAN' | 'LAINNYA';
+export type BpjsClaimStatus = 'SUBMITTED' | 'PROCESSING' | 'APPROVED' | 'REJECTED' | 'PAID';
+
+export interface BpjsClaim {
+  id: string;
+  claimType: BpjsClaimType;
+  employeeId: string;
+  claimNumber: string;
+  diagnosisCode: string;
+  diagnosisName?: string;
+  admissionDate: string;
+  dischargeDate?: string;
+  daysOfCare?: number;
+  hospitalCode?: string;
+  hospitalName?: string;
+  claimAmount: number;
+  approvedAmount?: number;
+  patientShare?: number;
+  status: BpjsClaimStatus;
+  notes?: string;
+  employee?: { id: string; fullName?: string; email?: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BpjsClaimListParams {
+  employeeId?: string;
+  status?: BpjsClaimStatus;
+  claimType?: BpjsClaimType;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export async function fetchBpjsClaims(params?: BpjsClaimListParams): Promise<PaginatedResponse<BpjsClaim>> {
+  return api.get<PaginatedResponse<BpjsClaim>>('/payroll/bpjs/claims', { params: params as Record<string, unknown> });
+}
+
+export async function fetchBpjsClaim(id: string): Promise<BpjsClaim> {
+  return api.get<BpjsClaim>(`/payroll/bpjs/claims/${id}`);
+}
+
+export async function createBpjsClaim(data: Record<string, unknown>): Promise<BpjsClaim> {
+  return api.post<BpjsClaim>('/payroll/bpjs/claims', data);
+}
+
+export async function updateBpjsClaim(id: string, data: Record<string, unknown>): Promise<BpjsClaim> {
+  return api.put<BpjsClaim>(`/payroll/bpjs/claims/${id}`, data);
+}
+
+export async function fetchBpjsClaimStats(params?: { startDate?: string; endDate?: string }): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/payroll/bpjs/claims/stats/summary', { params: params as Record<string, unknown> });
+}

@@ -24,7 +24,8 @@ interface BpjsConfig { id: string; name: string; type: string; employeeRate: num
 const subPages = [
   { href: '/payroll', label: 'Payroll Periods', exact: true },
   { href: '/payroll/tax', label: 'Tax Config' },
-  { href: '/payroll/bpjs', label: 'BPJS Config' },
+  { href: '/payroll/bpjs', label: 'BPJS Config', exact: true },
+  { href: '/payroll/bpjs/claims', label: 'Klaim BPJS' },
   { href: '/payroll/salary-components', label: 'Salary Components' },
   { href: '/payroll/bank-transfers', label: 'Bank Transfers' },
 ];

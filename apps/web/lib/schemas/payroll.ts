@@ -36,3 +36,19 @@ export const bpjsSchema = z.object({
   isActive: z.boolean(),
 });
 export type BpjsInput = z.infer<typeof bpjsSchema>;
+
+export const bpjsClaimSchema = z.object({
+  employeeId: z.string().min(1, 'Karyawan wajib dipilih'),
+  claimType: z.enum(['RAWAT_INAP', 'RAWAT_JALAN', 'KUNING', 'MERAH', 'KELAHIRAN', 'LAINNYA'], { error: 'Jenis klaim wajib dipilih' }),
+  claimNumber: z.string().min(1, 'Nomor klaim wajib diisi'),
+  diagnosisCode: z.string().min(1, 'Kode diagnosa wajib diisi'),
+  diagnosisName: z.string().optional(),
+  admissionDate: z.string().min(1, 'Tanggal masuk wajib diisi'),
+  dischargeDate: z.string().optional(),
+  daysOfCare: z.number().min(0).optional(),
+  hospitalCode: z.string().optional(),
+  hospitalName: z.string().optional(),
+  claimAmount: z.number().min(1, 'Nominal klaim wajib diisi'),
+  notes: z.string().optional(),
+});
+export type BpjsClaimInput = z.infer<typeof bpjsClaimSchema>;

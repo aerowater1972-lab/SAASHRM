@@ -39,6 +39,11 @@ import {
   calculateBpjs,
   generateBpjsReport,
   fetchMonthlyIuran,
+  fetchBpjsClaims,
+  fetchBpjsClaim,
+  createBpjsClaim,
+  updateBpjsClaim,
+  fetchBpjsClaimStats,
   type PeriodListParams,
   type RunListParams,
   type PayslipListParams,
@@ -292,4 +297,32 @@ export function useGenerateBpjsReport() {
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => generateBpjsReport(data),
   });
+}
+
+export function useBpjsClaims(params?: import('@/lib/api/payroll').BpjsClaimListParams) {
+  return useQuery({ queryKey: ['payroll', 'bpjs-claims', params], queryFn: () => fetchBpjsClaims(params) });
+}
+
+export function useBpjsClaim(id: string) {
+  return useQuery({ queryKey: ['payroll', 'bpjs-claims', id], queryFn: () => fetchBpjsClaim(id), enabled: !!id });
+}
+
+export function useCreateBpjsClaim() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => createBpjsClaim(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'bpjs-claims'] }),
+  });
+}
+
+export function useUpdateBpjsClaim() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateBpjsClaim(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'bpjs-claims'] }),
+  });
+}
+
+export function useBpjsClaimStats(params?: { startDate?: string; endDate?: string }) {
+  return useQuery({ queryKey: ['payroll', 'bpjs-claims-stats', params], queryFn: () => fetchBpjsClaimStats(params) });
 }
