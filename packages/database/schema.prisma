@@ -68,12 +68,16 @@ model Tenant {
   wfhRequests              WfhRequest[]
   wfhPolicies              WfhPolicy[]
   Alumni                   Alumni[]
-  outsourcingVendors       OutsourcingVendor[]
-  outsourcingContracts     OutsourcingContract[]
-  outsourcedWorkers        OutsourcedWorker[]
-  outsourcedAttendances    OutsourcedAttendance[]
-  outsourcedCostLogs       OutsourcedCostLog[]
-  ShiftGroup               ShiftGroup[]
+  outsourcingVendors         OutsourcingVendor[]
+  outsourcingContracts       OutsourcingContract[]
+  outsourcedWorkers          OutsourcedWorker[]
+  outsourcedAttendances      OutsourcedAttendance[]
+  outsourcedCostLogs         OutsourcedCostLog[]
+  consentRecords             ConsentRecord[]
+  dataSubjectRequests        DataSubjectRequest[]
+  dataRetentionPolicies      DataRetentionPolicy[]
+  dataProcessingLogs         DataProcessingLog[]
+  ShiftGroup                 ShiftGroup[]
 }
 
 model TenantEntity {
@@ -4182,4 +4186,191 @@ enum CostLogStatus {
   APPROVED
   PAID
   REJECTED
+}
+
+// =======================================================================
+// UU PDP (UU 27/2022) - Perlindungan Data Pribadi
+// =======================================================================
+
+enum ConsentPurpose {
+  EMPLOYMENT_CONTRACT
+  PAYROLL_PROCESSING
+  TAX_REPORTING
+  BPJS_REGISTRATION
+  HEALTH_INSURANCE
+  ATTENDANCE_TRACKING
+  PERFORMANCE_EVALUATION
+  TRAINING_DEVELOPMENT
+  BENEFITS_ADMINISTRATION
+  COMMUNICATION_MARKETING
+  THIRD_PARTY_SHARING
+  BIOMETRIC_PROCESSING
+  LOCATION_TRACKING
+  BACKGROUND_CHECK
+  OTHER
+}
+
+enum ConsentStatus {
+  GIVEN
+  WITHDRAWN
+  EXPIRED
+  REVOKED_BY_ADMIN
+}
+
+enum DataSubjectRequestType {
+  ACCESS
+  RECTIFICATION
+  ERASURE
+  RESTRICTION
+  PORTABILITY
+  OBJECTION
+  WITHDRAW_CONSENT
+}
+
+enum DataSubjectRequestStatus {
+  PENDING
+  UNDER_VERIFICATION
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  EXPIRED
+}
+
+enum DataSubjectType {
+  EMPLOYEE
+  CANDIDATE
+  FORMER_EMPLOYEE
+  CONTRACTOR
+  VENDOR_CONTACT
+  OTHER
+}
+
+model ConsentRecord {
+  id              String         @id @default(uuid())
+  tenantId        String
+  dataSubjectId   String         // Employee/Candidate/Other ID
+  dataSubjectType DataSubjectType
+  purpose         ConsentPurpose
+  purposeDetail   String?        // Additional context
+  status          ConsentStatus  @default(GIVEN)
+  givenAt         DateTime       @default(now())
+  givenBy         String?        // Who gave consent (self/guardian/admin)
+  givenMethod     String?        // digital/paper/verbal
+  version         String         @default("1.0") // Consent form version
+  expiresAt       DateTime?
+  withdrawnAt     DateTime?
+  withdrawnBy     String?
+  withdrawalReason String?
+  revokedAt       DateTime?
+  revokedBy       String?
+  revocationReason String?
+  metadata        Json?          // Additional context (IP, user agent, etc.)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, dataSubjectId, purpose])
+  @@index([tenantId, status])
+  @@index([tenantId, expiresAt])
+}
+
+model DataSubjectRequest {
+  id                  String                 @id @default(uuid())
+  tenantId            String
+  requestType         DataSubjectRequestType
+  status              DataSubjectRequestStatus @default(PENDING)
+  dataSubjectId       String                 // Employee/Candidate/Other ID
+  dataSubjectType     DataSubjectType
+  dataSubjectEmail    String
+  dataSubjectName     String
+  requestDetails      String                 // What data / what action
+  legalBasis          String?                // GDPR Art. 17 / UU PDP Pasal 15, etc.
+  submittedAt         DateTime               @default(now())
+  submittedBy         String?                // self/legal_representative/admin
+  verificationToken   String?                // For email verification
+  verifiedAt          DateTime?
+  verifiedBy          String?
+  assignedTo          String?                // DPO / HR / Legal
+  dueDate             DateTime               // 30 days per UU PDP
+  completedAt         DateTime?
+  completedBy         String?
+  rejectionReason     String?
+  responseSummary     String?                // What was done
+  attachments         Json?                  // Supporting documents
+  metadata            Json?                  // IP, user agent, etc.
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  deletedAt           DateTime?
+
+  tenant              Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  activities          DataSubjectRequestActivity[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, dataSubjectId])
+  @@index([tenantId, dueDate])
+}
+
+model DataSubjectRequestActivity {
+  id              String   @id @default(uuid())
+  requestId       String
+  actorId         String   // User/System who performed action
+  actorType       String   // USER/SYSTEM/DPO/LEGAL
+  action          String   // CREATED/VERIFIED/APPROVED/STARTED/COMPLETED/REJECTED/NOTE_ADDED
+  description     String
+  metadata        Json?    // Additional context
+  createdAt       DateTime @default(now())
+
+  request         DataSubjectRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+}
+
+model DataRetentionPolicy {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  dataCategory        String   // EMPLOYEE_DATA/PAYROLL/TAX/ATTENDANCE/MEDICAL/BIOMETRIC/etc.
+  description         String
+  retentionPeriodDays Int      // Days to retain after purpose ends
+  legalBasis          String   // UU/Peraturan yang mengatur
+  autoDelete          Boolean  @default(false) // Whether to auto-anonymize
+  notifyBeforeDays    Int      @default(30)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
+
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, dataCategory])
+  @@index([tenantId, isActive])
+}
+
+model DataProcessingLog {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  dataSubjectId       String
+  dataSubjectType     DataSubjectType
+  processingPurpose   ConsentPurpose
+  dataCategories      String[] // What categories of data processed
+  lawfulBasis         String   // Consent/Contract/Legal_Obligation/Vital_Interest/Public_Task/Legitimate_Interest
+  processorName       String?  // Third party processor if any
+  processorLocation   String?  // Country/region
+  startedAt           DateTime
+  endedAt             DateTime?
+  status              String   @default("ACTIVE") // ACTIVE/ENDED/SUSPENDED
+  riskLevel           String   @default("LOW") // LOW/MEDIUM/HIGH
+  dpiaRequired        Boolean  @default(false)
+  dpiaReference       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
+
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, dataSubjectId])
+  @@index([tenantId, processingPurpose])
+  @@index([tenantId, status])
 }

@@ -35,6 +35,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
 import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
 import { OutsourcingModule } from './modules/outsourcing/outsourcing.module';
+import { PdpaModule } from './modules/pdpa/pdpa.module';
 import { DeprecationInterceptor } from './common/interceptors/deprecation.interceptor';
 
 @Module({
@@ -101,6 +102,7 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     CommunicationsModule,
     SuccessionPlanningModule,
     OutsourcingModule,
+    PdpaModule,
   ],
   providers: [
     {
