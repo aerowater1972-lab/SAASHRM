@@ -9,7 +9,7 @@ import { Job } from './job-handler.interface';
 export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobWorkerService.name);
   private polling = false;
-  private timer: NodeJS.Timeout | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly intervalMs: number;
   private readonly queues: string[];
 

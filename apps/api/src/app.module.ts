@@ -31,6 +31,7 @@ import { IDPModule } from './modules/idp/idp.module';
 import { LmsModule } from './modules/lms/lms.module';
 import { ProvincialWageModule } from './modules/provincial-wage/provincial-wage.module';
 import { DocumentManagementModule } from './modules/document-management/document-management.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
 import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
 import { DeprecationInterceptor } from './common/interceptors/deprecation.interceptor';
@@ -95,6 +96,7 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     ManpowerPlanningModule,
     ProvincialWageModule,
     DocumentManagementModule,
+    IntegrationsModule,
     CommunicationsModule,
     SuccessionPlanningModule,
   ],

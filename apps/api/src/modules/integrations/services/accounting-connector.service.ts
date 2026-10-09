@@ -63,6 +63,24 @@ export interface AccountingConnectorConfig {
   defaultCostCenter?: string;
   currency?: string;
   dateFormat?: string;
+  // Optional per-account overrides used by the journal builders.
+  salaryExpense?: string;
+  cashBank?: string;
+  bpjsKesehatanPayable?: string;
+  bpjsKetenagakerjaanPayable?: string;
+  taxPayable?: string;
+  thrPayable?: string;
+  loanReceivable?: string;
+  otherDeductions?: string;
+  transportExpense?: string;
+  mealExpense?: string;
+  accommodationExpense?: string;
+  officeSupplyExpense?: string;
+  communicationExpense?: string;
+  trainingExpense?: string;
+  entertainmentExpense?: string;
+  medicalExpense?: string;
+  otherExpense?: string;
 }
 
 export interface SyncResult {
@@ -112,7 +130,7 @@ export class AccountingConnectorService {
         name: data.name,
         type: data.type,
         credentials: encryptedCreds,
-        config: data.config || {},
+        config: (data.config ?? {}) as any,
         syncPayroll: data.syncPayroll ?? true,
         syncExpense: data.syncExpense ?? false,
         syncAsset: data.syncAsset ?? false,
@@ -205,7 +223,7 @@ export class AccountingConnectorService {
 
   private getConnectorInstance(connector: any): AccountingConnectorBase {
     const credentials = this.decryptCredentials(connector.credentials);
-    const config = connector.config as AccountingConnectorConfig;
+    const config = connector.config as unknown as AccountingConnectorConfig;
 
     switch (connector.type) {
       case 'JURNAL':
@@ -238,12 +256,11 @@ export class AccountingConnectorService {
     });
 
     try {
-      // Get payroll data
+      // PayrollRun -> items (per employee) -> components (per salary component).
       const payrollRun = await this.prisma.payrollRun.findFirst({
         where: { id: payrollRunId, tenantId },
         include: {
-          employee: true,
-          items: { include: { component: true } },
+          items: { include: { employee: true, components: true } },
           period: true,
         },
       });
@@ -253,7 +270,7 @@ export class AccountingConnectorService {
       }
 
       // Build journal entries
-      const entries = this.buildPayrollJournalEntries(payrollRun, connector.config as AccountingConnectorConfig);
+      const entries = this.buildPayrollJournalEntries(payrollRun, connector.config as unknown as AccountingConnectorConfig);
 
       // Sync to accounting system
       const result = await connectorInstance.createJournalEntries(entries);
@@ -264,10 +281,10 @@ export class AccountingConnectorService {
         data: {
           status: result.success ? 'SUCCESS' : 'FAILED',
           recordsTotal: entries.length,
-          recordsSucceeded: result.recordsSucceeded,
+          recordsSuccess: result.recordsSucceeded,
           recordsFailed: result.recordsFailed,
-          errors: result.errors.length > 0 ? result.errors : undefined,
-          response: result.externalIds,
+          errorDetails: result.errors.length > 0 ? { errors: result.errors } : undefined,
+          response: result.externalIds as any,
           completedAt: new Date(),
         },
       });
@@ -284,11 +301,12 @@ export class AccountingConnectorService {
 
       return result;
     } catch (error) {
+      const err = error as Error;
       await this.prisma.accountingSyncLog.update({
         where: { id: syncLog.id },
         data: {
           status: 'FAILED',
-          errorDetails: { message: error.message, stack: error.stack },
+          errorDetails: { message: err.message, stack: err.stack },
           completedAt: new Date(),
         },
       });
@@ -315,7 +333,7 @@ export class AccountingConnectorService {
         include: { items: true, employee: true },
       });
 
-      const entries = this.buildExpenseJournalEntries(claims, connector.config as AccountingConnectorConfig);
+      const entries = this.buildExpenseJournalEntries(claims, connector.config as unknown as AccountingConnectorConfig);
       const result = await connectorInstance.createJournalEntries(entries);
 
       await this.prisma.accountingSyncLog.update({
@@ -323,19 +341,20 @@ export class AccountingConnectorService {
         data: {
           status: result.success ? 'SUCCESS' : 'FAILED',
           recordsTotal: entries.length,
-          recordsSucceeded: result.recordsSucceeded,
+          recordsSuccess: result.recordsSucceeded,
           recordsFailed: result.recordsFailed,
-          errors: result.errors.length > 0 ? result.errors : undefined,
-          response: result.externalIds,
+          errorDetails: result.errors.length > 0 ? { errors: result.errors } : undefined,
+          response: result.externalIds as any,
           completedAt: new Date(),
         },
       });
 
       return result;
     } catch (error) {
+      const err = error as Error;
       await this.prisma.accountingSyncLog.update({
         where: { id: syncLog.id },
-        data: { status: 'FAILED', errorDetails: { message: error.message }, completedAt: new Date() },
+        data: { status: 'FAILED', errorDetails: { message: err.message }, completedAt: new Date() },
       });
       throw error;
     }
@@ -345,25 +364,33 @@ export class AccountingConnectorService {
 
   private buildPayrollJournalEntries(payrollRun: any, config: AccountingConnectorConfig): JournalEntry[] {
     const coa = config.chartOfAccounts || {};
-    const entries: JournalEntry[] = [];
+    const items: any[] = payrollRun.items ?? [];
+    const num = (v: any) => Number(v ?? 0);
+    const totalGross = items.reduce((s: number, i: any) => s + num(i.grossSalary), 0);
+    const totalNet = items.reduce((s: number, i: any) => s + num(i.netSalary), 0);
+    const byType = new Map<string, number>();
+    for (const item of items) {
+      for (const c of item.components ?? []) {
+        byType.set(c.componentType, (byType.get(c.componentType) ?? 0) + num(c.amount));
+      }
+    }
+    const bpjsKes = byType.get('bpjs_kesehatan') ?? 0;
+    const bpjsTk = byType.get('bpjs_tk') ?? 0;
+    const pph21 = byType.get('pph21') ?? 0;
+    const loanDeduction = byType.get('loan_deduction') ?? 0;
+    const otherKnown = bpjsKes + bpjsTk + pph21 + loanDeduction;
+    const otherDeductions = Math.max(0, totalGross - totalNet - otherKnown);
 
-    // Group by employee for one entry per employee (or one consolidated entry)
-    // Here we create one consolidated entry for the entire payroll run
     const lines: JournalLine[] = [];
-    const totalNetSalary = payrollRun.items
-      .filter((i: any) => i.component.type === 'EARNING')
-      .reduce((sum: number, i: any) => sum + i.amount, 0);
-    const totalDeductions = payrollRun.items
-      .filter((i: any) => i.component.type === 'DEDUCTION')
-      .reduce((sum: number, i: any) => sum + i.amount, 0);
+    const periodName = payrollRun.period?.name ?? payrollRun.periodId;
 
     // Salary Expense (Debit)
     lines.push({
       accountCode: coa.salaryExpense || '6-1000',
       accountName: 'Beban Gaji dan Upah',
-      debit: totalNetSalary + totalDeductions,
+      debit: totalGross,
       credit: 0,
-      description: `Gaji periode ${payrollRun.period?.name || payrollRun.periodId}`,
+      description: `Gaji periode ${periodName}`,
     });
 
     // Cash/Bank Credit (Net Salary)
@@ -371,61 +398,49 @@ export class AccountingConnectorService {
       accountCode: coa.cashBank || '1-1000',
       accountName: 'Kas/Bank',
       debit: 0,
-      credit: payrollRun.netSalary,
+      credit: totalNet,
       description: 'Pembayaran gaji bersih karyawan',
     });
 
-    // BPJS Kesehatan Payable
-    if (payrollRun.bpjsKesehatanEmployee > 0 || payrollRun.bpjsKesehatanEmployer > 0) {
+    if (bpjsKes > 0) {
       lines.push({
         accountCode: coa.bpjsKesehatanPayable || '2-2100',
         accountName: 'Hutang BPJS Kesehatan',
         debit: 0,
-        credit: payrollRun.bpjsKesehatanEmployee + payrollRun.bpjsKesehatanEmployer,
+        credit: bpjsKes,
         description: 'Iuran BPJS Kesehatan',
       });
     }
 
-    // BPJS Ketenagakerjaan Payable
-    if (payrollRun.bpjsKetenagakerjaanEmployee > 0 || payrollRun.bpjsKetenagakerjaanEmployer > 0) {
+    if (bpjsTk > 0) {
       lines.push({
         accountCode: coa.bpjsKetenagakerjaanPayable || '2-2200',
         accountName: 'Hutang BPJS Ketenagakerjaan',
         debit: 0,
-        credit: payrollRun.bpjsKetenagakerjaanEmployee + payrollRun.bpjsKetenagakerjaanEmployer,
+        credit: bpjsTk,
         description: 'Iuran BPJS Ketenagakerjaan (JKK, JKM, JHT, JP, KP)',
       });
     }
 
-    // Tax Payable (PPh 21)
-    if (payrollRun.taxAmount > 0) {
+    if (pph21 > 0) {
       lines.push({
         accountCode: coa.taxPayable || '2-2300',
         accountName: 'Hutang PPh 21',
         debit: 0,
-        credit: payrollRun.taxAmount,
+        credit: pph21,
         description: 'PPh 21 karyawan',
       });
     }
 
-    // THR Payable
-    if (payrollRun.thrAmount > 0) {
+    if (loanDeduction > 0) {
       lines.push({
-        accountCode: coa.thrPayable || '2-2400',
-        accountName: 'Hutang THR',
+        accountCode: coa.loanReceivable || '1-2100',
+        accountName: 'Piutang Karyawan',
         debit: 0,
-        credit: payrollRun.thrAmount,
-        description: 'THR (Tunjangan Hari Raya)',
+        credit: loanDeduction,
+        description: 'Angsuran pinjaman karyawan',
       });
     }
-
-    // Other deductions (loans, etc.)
-    const otherDeductions = payrollRun.items
-      .filter((i: any) => i.component.type === 'DEDUCTION' && 
-        !['BPJS_KESEHATAN_EMPLOYEE', 'BPJS_KESEHATAN_EMPLOYER', 
-          'BPJS_KETENAGAKERJAAN_EMPLOYEE', 'BPJS_KETENAGAKERJAAN_EMPLOYER', 
-          'TAX', 'THR'].includes(i.component.code))
-      .reduce((sum: number, i: any) => sum + i.amount, 0);
 
     if (otherDeductions > 0) {
       lines.push({
@@ -433,25 +448,23 @@ export class AccountingConnectorService {
         accountName: 'Hutang Lain-lain',
         debit: 0,
         credit: otherDeductions,
-        description: 'Potongan lain (pinjaman, dll)',
+        description: 'Potongan lain',
       });
     }
 
-    entries.push({
+    return [{
       date: new Date(),
-      reference: `PR-${payrollRun.id.slice(0, 8)}`,
-      description: `Jurnal Gaji ${payrollRun.period?.name || 'Payroll Run'}`,
+      reference: `PR-${String(payrollRun.id).slice(0, 8)}`,
+      description: `Jurnal Gaji ${periodName}`,
       lines,
       sourceType: 'PAYROLL',
       sourceId: payrollRun.id,
       metadata: {
         payrollRunId: payrollRun.id,
         periodId: payrollRun.periodId,
-        employeeCount: 1, // consolidated
+        employeeCount: items.length,
       },
-    });
-
-    return entries;
+    }];
   }
 
   private buildExpenseJournalEntries(claims: any[], config: AccountingConnectorConfig): JournalEntry[] {
@@ -462,15 +475,15 @@ export class AccountingConnectorService {
       const lines: JournalLine[] = [];
 
       // Expense by category
-      for (const item of claim.items) {
-        const accountCode = this.getExpenseAccountCode(item.category, coa);
+      for (const item of claim.items ?? []) {
+        const accountCode = this.getExpenseAccountCode(String(item.category), config);
         lines.push({
           accountCode,
-          accountName: item.category,
-          debit: item.amount,
+          accountName: String(item.category),
+          debit: Number(item.amount ?? 0),
           credit: 0,
           description: item.description || claim.description,
-          costCenter: claim.employee?.departmentId,
+          costCenter: (claim.employee as any)?.departmentId ?? undefined,
         });
       }
 
@@ -479,14 +492,14 @@ export class AccountingConnectorService {
         accountCode: coa.cashBank || '1-1000',
         accountName: 'Kas/Bank',
         debit: 0,
-        credit: claim.totalAmount,
-        description: `Reimbursement klaim ${claim.id.slice(0, 8)}`,
+        credit: Number(claim.totalAmount ?? 0),
+        description: `Reimbursement klaim ${String(claim.id).slice(0, 8)}`,
       });
 
       entries.push({
-        date: new Date(claim.claimDate || claim.createdAt),
-        reference: `EXP-${claim.id.slice(0, 8)}`,
-        description: `Klaim Biaya: ${claim.description}`,
+        date: new Date(claim.createdAt),
+        reference: `EXP-${String(claim.id).slice(0, 8)}`,
+        description: `Klaim Biaya: ${claim.title ?? claim.description ?? claim.id}`,
         lines,
         sourceType: 'EXPENSE',
         sourceId: claim.id,
@@ -499,9 +512,11 @@ export class AccountingConnectorService {
 
   private getExpenseAccountCode(category: string, coa: AccountingConnectorConfig): string {
     const categoryMap: Record<string, string> = {
+      'TRAVEL': coa.transportExpense || '6-2100',
       'TRANSPORT': coa.transportExpense || '6-2100',
       'MEAL': coa.mealExpense || '6-2200',
       'ACCOMMODATION': coa.accommodationExpense || '6-2300',
+      'OFFICE': coa.officeSupplyExpense || '6-2400',
       'OFFICE_SUPPLIES': coa.officeSupplyExpense || '6-2400',
       'COMMUNICATION': coa.communicationExpense || '6-2500',
       'TRAINING': coa.trainingExpense || '6-2600',
@@ -531,7 +546,7 @@ export class AccountingConnectorService {
         connected: false,
         lastChecked: new Date(),
         latencyMs: Date.now() - start,
-        error: error.message,
+        error: (error as Error).message,
       };
     }
   }
@@ -615,7 +630,7 @@ class JurnalConnector extends AccountingConnectorBase {
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
-        result.errors.push(`${entry.sourceId}: ${error.message}`);
+        result.errors.push(`${entry.sourceId}: ${(error as Error).message}`);
       }
     }
 
@@ -676,7 +691,7 @@ class XeroConnector extends AccountingConnectorBase {
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
-        result.errors.push(`${entry.sourceId}: ${error.message}`);
+        result.errors.push(`${entry.sourceId}: ${(error as Error).message}`);
       }
     }
 
@@ -732,7 +747,7 @@ class AccurateConnector extends AccountingConnectorBase {
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
-        result.errors.push(`${entry.sourceId}: ${error.message}`);
+        result.errors.push(`${entry.sourceId}: ${(error as Error).message}`);
       }
     }
 
@@ -794,7 +809,7 @@ class QuickBooksConnector extends AccountingConnectorBase {
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
-        result.errors.push(`${entry.sourceId}: ${error.message}`);
+        result.errors.push(`${entry.sourceId}: ${(error as Error).message}`);
       }
     }
 

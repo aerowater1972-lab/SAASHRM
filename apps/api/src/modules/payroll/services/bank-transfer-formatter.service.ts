@@ -414,7 +414,7 @@ export class BankTransferFormatterService {
       lines.push(
         `${bankCode},${record.bankAccountNumber},${record.bankAccountName},${record.amount},${record.reference},${record.description || 'Gaji'}`
       );
-    }
+    });
 
     return {
       content: lines.join('\r\n'),

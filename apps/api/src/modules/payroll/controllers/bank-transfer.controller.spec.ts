@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BankTransferController } from './bank-transfer.controller';
 import { BankTransferFormatterService } from '../services/bank-transfer-formatter.service';
+import type { BankCode } from '../services/bank-transfer-formatter.service';
 import { RunService } from '../services/run.service';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
@@ -46,7 +47,7 @@ describe('BankTransferController', () => {
 
   it('validateRecords returns validation results', async () => {
     const records = [
-      { employeeName: 'Test', bankCode: 'BCA', bankAccountNumber: '123', bankAccountName: 'Test', amount: 1000, reference: 'REF1', description: 'Test' },
+      { employeeName: 'Test', bankCode: 'BCA' as BankCode, bankAccountNumber: '123', bankAccountName: 'Test', amount: 1000, reference: 'REF1', description: 'Test' },
     ];
     const result = await controller.validateRecords(records);
     expect(result).toHaveProperty('total');

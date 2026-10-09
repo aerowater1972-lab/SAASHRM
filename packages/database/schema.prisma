@@ -45,7 +45,8 @@ model Tenant {
   ppeAssignments           PpeAssignment[]
   tenantBranding           TenantBranding?
   ssoConnection            SsoConnection?
-  accountingConnectors     AccountingConnector[]
+  accountingConnectors       AccountingConnector[]
+  governmentReportConfigs  GovernmentReportConfig[]
   locationPings            LocationPing[]
   fieldTerritories         FieldTerritory[]
   liveTrackingSettings     LiveTrackingSettings?
@@ -301,6 +302,84 @@ enum SyncStatus {
   SUCCESS
   PARTIAL
   FAILED
+}
+
+// =======================================================================
+// GOVERNMENT REPORTING (DJP Online, BPJS, SIPP)
+// =======================================================================
+
+enum GovernmentReportType {
+  DJP_SPT_1721_A1    // Annual tax return for employees
+  DJP_SPT_1721_A2    // Annual tax return for non-employees
+  DJP_EBUPOT_UNIFIKASI // eBupot Unifikasi (PPh 23/26)
+  DJP_SPT_MASA_PPH21 // Monthly PPh 21
+  DJP_SPT_MASA_PPH23 // Monthly PPh 23
+  DJP_SPT_MASA_PPH26 // Monthly PPh 26
+  BPJS_KESEHATAN_IURAN // BPJS Kesehatan iuran report
+  BPJS_KETENAGAKERJAAN_IURAN // BPJS Ketenagakerjaan iuran report
+  BPJS_KETENAGAKERJAAN_JHT // JHT claim report
+  BPJS_KETENAGAKERJAAN_JP  // JP report
+  BPJS_KETENAGAKERJAAN_KP  // KP report
+  SIPP_LAPORAN_TENAGA_KERJA // SIPP manpower report
+  SIPP_LAPORAN_UPAH       // SIPP wage report
+  CUSTOM
+}
+
+enum GovernmentReportStatus {
+  DRAFT
+  GENERATED
+  VALIDATED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  ERROR
+}
+
+model GovernmentReportConfig {
+  id              String                   @id @default(uuid())
+  tenantId        String
+  reportType      GovernmentReportType
+  name            String
+  status          IntegrationStatus        @default(ACTIVE)
+  credentials     String                   // encrypted JSON
+  config          Json                     @default("{}")
+  schedule        Json?                    // cron expression, timezone
+  lastGeneratedAt DateTime?
+  lastSubmittedAt DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  reports     GovernmentReport[]
+
+  @@unique([tenantId, reportType, name])
+}
+
+model GovernmentReport {
+  id              String                      @id @default(uuid())
+  configId        String
+  config          GovernmentReportConfig      @relation(fields: [configId], references: [id], onDelete: Cascade)
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          GovernmentReportStatus      @default(DRAFT)
+  filePath        String?
+  fileName        String?
+  fileSize        Int?
+  fileHash        String?
+  validationErrors Json?
+  submissionToken String?
+  submissionRef   String?
+  submittedAt     DateTime?
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  errorMessage    String?
+  payload         Json?
+  response        Json?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  @@index([configId, periodStart, periodEnd])
+  @@index([status, createdAt])
 }
 
 // =======================================================================
