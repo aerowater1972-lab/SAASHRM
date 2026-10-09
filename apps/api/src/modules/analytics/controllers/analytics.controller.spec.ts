@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from '../services/analytics.service';
+import { WorkforceInsightsService } from '../services/workforce-insights.service';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 
@@ -12,11 +13,17 @@ describe('AnalyticsController', () => {
     getWorkforceCost: jest.fn(),
     exportReport: jest.fn(),
   };
+  const mockInsightsService = {
+    getInsights: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AnalyticsController],
-      providers: [{ provide: AnalyticsService, useValue: mockService }],
+      providers: [
+        { provide: AnalyticsService, useValue: mockService },
+        { provide: WorkforceInsightsService, useValue: mockInsightsService },
+      ],
     })
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -46,5 +53,12 @@ describe('AnalyticsController', () => {
     const result = await controller.exportReport('tenant-x', 'emp-1', dto as any);
     expect(mockService.exportReport).toHaveBeenCalledWith('tenant-x', 'emp-1', dto);
     expect(result).toEqual({ filename: 'x.csv' });
+  });
+
+  it('getInsights delegates to workforce insights service', async () => {
+    mockInsightsService.getInsights.mockResolvedValue({ generatedAt: 'now', signals: [] });
+    const result = await controller.getInsights('tenant-x');
+    expect(mockInsightsService.getInsights).toHaveBeenCalledWith('tenant-x');
+    expect(result).toEqual({ generatedAt: 'now', signals: [] });
   });
 });
