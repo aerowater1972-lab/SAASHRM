@@ -46,7 +46,12 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "doctor": "expo-doctor"
+    "doctor": "expo-doctor",
+    "maestro": "maestro test maestro",
+    "maestro:login": "maestro test maestro/login.yaml",
+    "maestro:attendance": "maestro test maestro/attendance.yaml",
+    "maestro:leave": "maestro test maestro/leave-overtime.yaml",
+    "maestro:profile": "maestro test maestro/profile.yaml"
   },
   "private": true
 }

@@ -1,0 +1,21 @@
+appId: com.flexyhrms.mobile
+---
+- runFlow: login.yaml
+# --- Cuti tab ---
+- tapOn:
+    text: "Cuti"
+- assertVisible:
+    text: "Saldo Cuti"
+- tapOn:
+    id: "leave-create-button"
+- extendedWaitUntil:
+    visible:
+      text: "Ajukan Cuti"
+    timeout: 10000
+- back
+# --- Lembur tab ---
+- tapOn:
+    text: "Lembur"
+- assertVisible:
+    text: "Ajukan Lembur"
+- back

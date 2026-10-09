@@ -73,6 +73,8 @@ export default function LoginScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
+              testID="login-email"
+              accessibilityLabel="Email"
               style={styles.input}
               placeholder="nama@perusahaan.com"
               keyboardType="email-address"
@@ -94,6 +96,8 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
             <TextInput
+              testID="login-password"
+              accessibilityLabel="Password"
               style={styles.input}
               placeholder="••••••••"
               secureTextEntry={!showPassword}
@@ -115,6 +119,8 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
+            testID="login-submit"
+            accessibilityLabel="Masuk"
             style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
             onPress={handleSubmit(onSubmit)}
             disabled={isLoading}

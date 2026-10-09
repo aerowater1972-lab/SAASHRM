@@ -1,0 +1,23 @@
+appId: com.flexyhrms.mobile
+---
+- launchApp:
+    clearState: true
+# --- Login screen ---
+- assertVisible:
+    id: "login-email"
+- tapOn:
+    id: "login-email"
+# Test user must exist (seed): override by editing these two lines for other envs
+- inputText: "tester@flexy.id"
+- tapOn:
+    id: "login-password"
+- inputText: "password123"
+- tapOn:
+    id: "login-submit"
+# --- Dashboard lands on Absensi tab ---
+- extendedWaitUntil:
+    visible:
+      id: "checkin-button"
+    timeout: 20000
+- assertVisible:
+    text: "Status Hari Ini"

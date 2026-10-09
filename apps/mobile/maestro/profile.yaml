@@ -1,0 +1,13 @@
+appId: com.flexyhrms.mobile
+---
+- runFlow: login.yaml
+# --- Profil tab: header, personal info, documents, actions ---
+- tapOn:
+    text: "Profil"
+- assertVisible:
+    text: "Informasi Pribadi"
+- assertVisible:
+    text: "Dokumen Saya"
+- assertVisible:
+    text: "Keluar"
+# NOTE: logout is asserted but not tapped so later flows keep their session.

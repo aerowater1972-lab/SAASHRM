@@ -266,6 +266,8 @@ export default function AttendanceScreen() {
       {/* Action Buttons */}
       <View style={styles.actionsSection}>
         <TouchableOpacity
+          testID="checkin-button"
+          accessibilityLabel="Check In"
           style={[
             styles.actionButton,
             styles.checkInButton,
@@ -287,6 +289,8 @@ export default function AttendanceScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="checkout-button"
+          accessibilityLabel="Check Out"
           style={[
             styles.actionButton,
             styles.checkOutButton,

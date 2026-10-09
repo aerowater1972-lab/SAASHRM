@@ -152,6 +152,8 @@ export default function LeaveScreen() {
       {/* Quick Actions */}
       <View style={styles.actionsSection}>
         <TouchableOpacity
+          testID="leave-create-button"
+          accessibilityLabel="Ajukan Cuti"
           style={styles.actionCard}
           onPress={() => setShowCreateModal(true)}
           activeOpacity={0.8}

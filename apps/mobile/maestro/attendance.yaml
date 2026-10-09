@@ -1,0 +1,16 @@
+appId: com.flexyhrms.mobile
+---
+- runFlow: login.yaml
+# --- Attendance tab is default; verify status + actions render ---
+- assertVisible:
+    id: "checkin-button"
+- assertVisible:
+    id: "checkout-button"
+- assertVisible:
+    text: "Status Hari Ini"
+- assertVisible:
+    text: "Lokasi GPS"
+- assertVisible:
+    text: "Verifikasi Wajah"
+# NOTE: tapping Check In opens face capture or an enrollment alert depending
+# on device state, so the smoke flow stops at visibility assertions.
