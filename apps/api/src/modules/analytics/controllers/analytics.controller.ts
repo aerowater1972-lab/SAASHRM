@@ -144,6 +144,13 @@ export class AnalyticsController {
     return this.analyticsService.getOvertimeByGrade(tenantId, filters);
   }
 
+  @Get('gender-pay-gap')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Gender Pay Gap (KEBSD requirement)' })
+  getGenderPayGap(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getGenderPayGap(tenantId, filters);
+  }
+
   @Post('export')
   @Permissions('analytics:read')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
