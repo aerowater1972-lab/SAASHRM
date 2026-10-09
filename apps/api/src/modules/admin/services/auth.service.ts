@@ -137,6 +137,28 @@ export class AuthService {
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
+  /**
+   * Issue a full session for an already-authenticated user id.
+   * Used by SSO (SAML/OIDC) logins so they share the exact token pipeline
+   * (slim JWT + rotation-ready refresh token) as password logins.
+   */
+  async issueSessionForUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.deletedAt) {
+      throw new UnauthorizedException('User not found');
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+    const tokens = this.generateTokens(
+      user,
+      await this.loadPermissions(user.id),
+      await this.loadRoleIds(user.id),
+    );
+    return { user: this.sanitizeUser(user), ...tokens };
+  }
+
   async refresh(refreshToken: string) {
     try {
       if (await this.isTokenBlacklisted(refreshToken)) {

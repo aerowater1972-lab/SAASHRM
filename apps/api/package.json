@@ -20,6 +20,7 @@
     "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^11.4.5",
     "@nestjs/throttler": "^6.5.0",
+    "@node-saml/node-saml": "^5.1.0",
     "@opentelemetry/api": "latest",
     "@opentelemetry/auto-instrumentations-node": "latest",
     "@opentelemetry/exporter-trace-otlp-grpc": "latest",
