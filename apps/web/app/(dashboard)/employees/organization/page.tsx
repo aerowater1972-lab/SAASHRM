@@ -20,7 +20,8 @@ import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createDepartmentSchema, createPositionSchema, createGradeSchema, type CreateDepartmentInput, type CreatePositionInput, type CreateGradeInput } from '@/lib/schemas/organization';
-import { Building2, Users, Layers, Plus, GitBranch, ChevronRight, ChevronDown } from 'lucide-react';
+import { Building2, Users, Layers, Plus, GitBranch, ChevronRight, ChevronDown, ListTree, Network } from 'lucide-react';
+import OrgChartVisual from '@/components/organization/org-chart-visual';
 
 function DepartmentForm({ onSuccess }: { onSuccess: () => void }) {
   const createDept = useCreateDepartment();
@@ -95,6 +96,7 @@ export default function OrganizationPage() {
 
   const [asOfDate, setAsOfDate] = useState('');
   const [selected, setSelected] = useState<{ node: any; level: number } | null>(null);
+  const [chartView, setChartView] = useState<'list' | 'visual'>('visual');
 
   const { data: departments, isLoading: deptLoading, error: deptError, refetch: deptRefetch } = useDepartments();
   const { data: positions, isLoading: posLoading, error: posError, refetch: posRefetch } = usePositions();
@@ -275,7 +277,7 @@ export default function OrganizationPage() {
         </TabsContent>
 
          <TabsContent value="orgchart" className="space-y-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Label htmlFor="asof">Berlaku per tanggal</Label>
             <Input
               id="asof"
@@ -284,10 +286,60 @@ export default function OrganizationPage() {
               value={asOfDate}
               onChange={(e) => setAsOfDate(e.target.value)}
             />
+            <div className="ml-auto flex items-center gap-1" role="tablist" aria-label="Tampilan struktur">
+              <Button
+                variant={chartView === 'list' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setChartView('list')}
+                aria-pressed={chartView === 'list'}
+              >
+                <ListTree className="mr-2 h-4 w-4" />
+                Daftar
+              </Button>
+              <Button
+                variant={chartView === 'visual' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setChartView('visual')}
+                aria-pressed={chartView === 'visual'}
+              >
+                <Network className="mr-2 h-4 w-4" />
+                Visual
+              </Button>
+            </div>
           </div>
           {chartLoading && <TableSkeleton rows={8} columns={1} />}
           {!chartLoading && !orgChart && <EmptyState title="Struktur tidak tersedia" description="Belum ada data struktur organisasi." />}
-          {!chartLoading && orgChart && (
+          {!chartLoading && orgChart && chartView === 'visual' && (
+            <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+              <Card>
+                <CardContent className="p-4">
+                  <OrgChartVisual root={orgChart} onSelect={(n, l) => setSelected({ node: n, level: l })} />
+                </CardContent>
+              </Card>
+              <Card className="h-fit">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Detail</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm">
+                  {!selected && <p className="text-muted-foreground">Klik node pada bagan untuk melihat detail.</p>}
+                  {selected && (
+                    <div className="space-y-2">
+                      <p className="font-semibold">{selected.node.label}</p>
+                      <Badge variant={selected.node.type === 'department' ? 'info' : selected.node.type === 'position' ? 'warning' : 'success'} className="text-[10px]">
+                        {selected.node.type === 'department' ? 'Departemen' : selected.node.type === 'position' ? 'Posisi' : 'Karyawan'}
+                      </Badge>
+                      {selected.node.vacant && <Badge variant="destructive" className="ml-1 text-[10px]">Kosong</Badge>}
+                      {selected.node.headName && <p className="text-xs text-muted-foreground">Pimpinan: {selected.node.headName}</p>}
+                      {selected.node.positionTitle && <p className="text-xs text-muted-foreground">Jabatan: {selected.node.positionTitle}</p>}
+                      {selected.node.email && <p className="text-xs text-muted-foreground">Email: {selected.node.email}</p>}
+                      {selected.node.employeeId && <p className="text-xs text-muted-foreground">ID: {selected.node.employeeId}</p>}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          {!chartLoading && orgChart && chartView === 'list' && (
             <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
               <Card>
                 <CardContent className="p-6">
