@@ -68,6 +68,11 @@ model Tenant {
   wfhRequests              WfhRequest[]
   wfhPolicies              WfhPolicy[]
   Alumni                   Alumni[]
+  outsourcingVendors       OutsourcingVendor[]
+  outsourcingContracts     OutsourcingContract[]
+  outsourcedWorkers        OutsourcedWorker[]
+  outsourcedAttendances    OutsourcedAttendance[]
+  outsourcedCostLogs       OutsourcedCostLog[]
   ShiftGroup               ShiftGroup[]
 }
 
@@ -4022,3 +4027,159 @@ model ManpowerPlanItem {
 }
 
 // Add relation to JobRequisition for manpower plan linkage
+
+// =======================================================================
+// OUTSOURCING / EOR MODULE
+// =======================================================================
+
+model OutsourcingVendor {
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
+  code            String
+  email           String?
+  phone           String?
+  address         String?
+  npwp            String?
+  contactPerson   String?
+  status          VendorStatus @default(ACTIVE)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contracts       OutsourcingContract[]
+  workers         OutsourcedWorker[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+  BLACKLISTED
+}
+
+model OutsourcingContract {
+  id              String         @id @default(uuid())
+  tenantId        String
+  vendorId        String
+  contractNumber  String
+  startDate       DateTime
+  endDate         DateTime?
+  status          ContractStatus @default(ACTIVE)
+  contractValue   Decimal?       @db.Decimal(18, 2)
+  currency        String         @default("IDR")
+  description     String?
+  fileUrl         String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  vendor          OutsourcingVendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  workers         OutsourcedWorker[]
+
+  @@unique([tenantId, contractNumber])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, status])
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+model OutsourcedWorker {
+  id              String        @id @default(uuid())
+  tenantId        String
+  vendorId        String
+  contractId      String?
+  employeeId      String        // NIK / ID karyawan di vendor
+  fullName        String
+  email           String?
+  phone           String?
+  position        String?
+  department      String?
+  startDate       DateTime
+  endDate         DateTime?
+  status          WorkerStatus  @default(ACTIVE)
+  hourlyRate      Decimal?      @db.Decimal(18, 2)
+  monthlyCost     Decimal?      @db.Decimal(18, 2)
+  currency        String        @default("IDR")
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  vendor          OutsourcingVendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  contract        OutsourcingContract?      @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  attendances     OutsourcedAttendance[]
+  costLogs        OutsourcedCostLog[]
+
+  @@unique([tenantId, vendorId, employeeId])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, status])
+}
+
+enum WorkerStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+model OutsourcedAttendance {
+  id            String          @id @default(uuid())
+  tenantId      String
+  workerId      String
+  date          DateTime        @db.Date
+  clockIn       DateTime?
+  clockOut      DateTime?
+  hoursWorked   Decimal?        @db.Decimal(5, 2)
+  status        AttendanceStatus @default(PRESENT)
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  worker        OutsourcedWorker         @relation(fields: [workerId], references: [id], onDelete: Restrict)
+
+  @@unique([workerId, date])
+  @@index([tenantId, date])
+}
+
+model OutsourcedCostLog {
+  id            String           @id @default(uuid())
+  tenantId      String
+  workerId      String
+  periodStart   DateTime         @db.Date
+  periodEnd     DateTime         @db.Date
+  hoursWorked   Decimal          @db.Decimal(10, 2)
+  rate          Decimal          @db.Decimal(18, 2)
+  totalCost     Decimal          @db.Decimal(18, 2)
+  currency      String           @default("IDR")
+  status        CostLogStatus    @default(PENDING)
+  invoiceRef    String?
+  paidAt        DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  worker        OutsourcedWorker         @relation(fields: [workerId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, periodStart, periodEnd])
+  @@index([tenantId, status])
+}
+
+enum CostLogStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
