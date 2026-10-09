@@ -1801,13 +1801,34 @@ model Asset {
   condition     AssetCondition @default(GOOD)
   status        AssetStatus    @default(AVAILABLE)
   notes         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  qrToken       String?  // token stabil untuk QR inventaris (URL verifikasi publik; unik ditegakkan di service)
+  usefulLifeMonths Int? // masa manfaat (bulan) untuk depresiasi
+  residualValue Decimal? @db.Decimal(18, 2) // nilai sisa
+  depreciationMethod String @default("STRAIGHT_LINE") // STRAIGHT_LINE | DECLINING_BALANCE
+  depreciationStartDate DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   deletedAt     DateTime?
 
   assignments AssetAssignment[]
+  depreciations AssetDepreciation[]
 
   @@unique([tenantId, code])
+  @@index([qrToken])
+}
+
+model AssetDepreciation {
+  id             String   @id @default(uuid())
+  assetId        String
+  asset          Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  year           Int
+  month          Int // 1-12
+  amount         Decimal  @db.Decimal(18, 2)
+  bookValueAfter Decimal  @db.Decimal(18, 2)
+  createdAt      DateTime @default(now())
+
+  @@unique([assetId, year, month])
+  @@index([year, month])
 }
 
 model AssetAssignment {

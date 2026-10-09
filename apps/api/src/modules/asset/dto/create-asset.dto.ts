@@ -50,5 +50,23 @@ export class CreateAssetDto {
   @IsOptional()
   @IsString()
   notes?: string;
+  @ApiPropertyOptional({ description: 'Masa manfaat (bulan) untuk depresiasi garis lurus/saldo menurun' })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  usefulLifeMonths?: number;
+  @ApiPropertyOptional({ description: 'Nilai sisa (residu)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  residualValue?: number;
+  @ApiPropertyOptional({ description: 'STRAIGHT_LINE | DECLINING_BALANCE', default: 'STRAIGHT_LINE' })
+  @IsOptional()
+  @IsString()
+  depreciationMethod?: string;
+  @ApiPropertyOptional({ description: 'Tanggal mulai depresiasi (default: purchaseDate)' })
+  @IsOptional()
+  @IsDateString()
+  depreciationStartDate?: string;
 }
 export class UpdateAssetDto extends PartialType(CreateAssetDto) {}

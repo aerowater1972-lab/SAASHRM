@@ -7,11 +7,16 @@ import {
   Body,
   Param,
   Query,
+  Res,
+  Req,
   UseGuards} from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { Permissions } from '@common/decorators/permissions.decorator';
+import { Public } from '@common/decorators/public.decorator';
+import { SkipCsrf } from '@common/decorators/skip-csrf.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import type { Response, Request } from 'express';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { AssetService } from '../services/asset.service';
 import { CreateAssetDto, UpdateAssetDto } from '../dto/create-asset.dto';
@@ -114,5 +119,46 @@ export class AssetController {
   @ApiOperation({ summary: 'Get assignment history for an asset' })
   getHistory(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.assetService.getHistory(tenantId, id);
+  }
+
+  @Get(':id/qr')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Download QR PNG inventaris (payload = URL verifikasi publik)' })
+  async getQr(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const base = `${req.protocol}://${req.get('host')}/api/v1`;
+    const qr = await this.assetService.getQrPng(tenantId, id, base);
+    res.setHeader('Content-Type', qr.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${qr.filename}"`);
+    res.send(Buffer.from(qr.data, 'base64'));
+  }
+
+  @Get('verify/:token')
+  @Public()
+  @SkipCsrf()
+  @ApiOperation({ summary: 'Verifikasi publik aset via QR (tanpa PII)' })
+  verify(@Param('token') token: string) {
+    return this.assetService.verifyByToken(token);
+  }
+
+  @Post('depreciation/run')
+  @Permissions('assets:update')
+  @ApiOperation({ summary: 'Posting depresiasi bulanan (idempoten)' })
+  runDepreciation(
+    @TenantId() tenantId: string,
+    @Body() data: { year: number; month: number },
+  ) {
+    return this.assetService.runDepreciation(tenantId, Number(data.year), Number(data.month));
+  }
+
+  @Get(':id/depreciation')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Jadwal + nilai buku depresiasi aset' })
+  getDepreciation(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.assetService.getDepreciationSchedule(tenantId, id);
   }
 }

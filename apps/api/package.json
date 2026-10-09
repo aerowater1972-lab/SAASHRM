@@ -43,6 +43,7 @@
     "multer": "^2.2.0",
     "node-fetch": "^3.3.2",
     "nodemailer": "^10.0.16",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
@@ -59,6 +60,7 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^26.1.1",
     "@types/nodemailer": "^8.0.2",
+    "@types/qrcode": "^1.5.6",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
