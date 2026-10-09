@@ -1279,6 +1279,8 @@ model Payslip {
   bankTransferCode String?
   status           PayslipStatus @default(DRAFT)
   employeeNotes    String?
+  emailedAt        DateTime? // kapan slip dikirim via email
+  emailTo          String? // alamat tujuan (audit)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

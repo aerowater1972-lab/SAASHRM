@@ -6,11 +6,12 @@ import { GovernmentReportingService } from './services/government-reporting.serv
 import { GovernmentReportingController } from './controllers/government-reporting.controller';
 import { WhatsappService } from './services/whatsapp.service';
 import { WhatsappController } from './controllers/whatsapp.controller';
+import { MailService } from './services/mail.service';
 
 @Module({
   imports: [PrismaModule],
   controllers: [AccountingConnectorController, GovernmentReportingController, WhatsappController],
-  providers: [AccountingConnectorService, GovernmentReportingService, WhatsappService],
-  exports: [AccountingConnectorService, GovernmentReportingService, WhatsappService],
+  providers: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService],
+  exports: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService],
 })
 export class IntegrationsModule {}

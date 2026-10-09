@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PayslipService } from './payslip.service';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { MailService } from '@modules/integrations/services/mail.service';
+
+const mockMail = { sendMail: jest.fn() };
 
 /**
  * Privasi slip gaji: tanpa payroll:run:read, query dipaksa ke milik token;
@@ -23,7 +26,7 @@ describe('PayslipService - viewer scoping', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PayslipService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [PayslipService, { provide: PrismaService, useValue: mockPrisma }, { provide: MailService, useValue: mockMail }],
     }).compile();
 
     service = module.get<PayslipService>(PayslipService);
@@ -119,7 +122,7 @@ describe('PayslipService - generatePdf', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PayslipService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [PayslipService, { provide: PrismaService, useValue: mockPrisma }, { provide: MailService, useValue: mockMail }],
     }).compile();
 
     service = module.get<PayslipService>(PayslipService);
@@ -154,5 +157,91 @@ describe('PayslipService - generatePdf', () => {
     expect(raw.startsWith('%PDF-1.4')).toBe(true);
     expect(raw).toContain('Gaji Pokok');
     expect(raw).toContain('YTD');
+  });
+});
+
+describe('PayslipService - sendEmail', () => {
+  let service: PayslipService;
+
+  const mockPrisma: any = {
+    payslip: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    employment: { findMany: jest.fn() },
+    payrollItem: { findMany: jest.fn() },
+    payslipItem: { findMany: jest.fn() },
+  };
+  const mockMailSvc = { sendMail: jest.fn() };
+  const hrViewer = { employeeId: 'hr-1', permissions: ['payroll:payslip:read', 'payroll:run:read', 'payroll:run:approve'] };
+
+  const slip = (over: any = {}) => ({
+    id: 'p-1', tenantId: 't1', employeeId: 'emp-1',
+    grossPay: 8000000, totalDeductions: 1000000, netPay: 7000000,
+    employee: { fullName: 'Budi', employeeId: 'E001', email: 'budi@example.id', employments: [] },
+    run: { name: 'PR-1', period: { name: 'Jan 2026' } },
+    items: [],
+    ...over,
+  });
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PayslipService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: MailService, useValue: mockMailSvc },
+      ],
+    }).compile();
+    service = module.get<PayslipService>(PayslipService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('sends PDF to employee registered email and stamps emailedAt', async () => {
+    mockPrisma.payslip.findFirst.mockResolvedValue(slip());
+    mockPrisma.payrollItem.findMany.mockResolvedValue([]);
+    mockPrisma.payslip.findMany.mockResolvedValue([]);
+    mockMailSvc.sendMail.mockResolvedValue({ success: true, provider: 'LOG', messageId: 'm1', to: 'budi@example.id' });
+    mockPrisma.payslip.update.mockImplementation((args: any) => Promise.resolve({ id: 'p-1', ...args.data }));
+
+    const res: any = await service.sendEmail('t1', 'p-1', hrViewer);
+    expect(res.mailed).toBe(true);
+    expect(res.to).toBe('budi@example.id');
+    expect(mockMailSvc.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'budi@example.id',
+      attachments: [expect.objectContaining({ contentType: 'application/pdf' })],
+    }));
+    expect(mockPrisma.payslip.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ emailTo: 'budi@example.id' }),
+    }));
+  });
+
+  it('allows HR override address, blocks non-FULL override', async () => {
+    mockPrisma.payslip.findFirst.mockResolvedValue(slip());
+    mockPrisma.payrollItem.findMany.mockResolvedValue([]);
+    mockPrisma.payslip.findMany.mockResolvedValue([]);
+    mockMailSvc.sendMail.mockResolvedValue({ success: true, provider: 'LOG', messageId: 'm2', to: 'x@y.id' });
+
+    const res: any = await service.sendEmail('t1', 'p-1', hrViewer, 'x@y.id');
+    expect(res.to).toBe('x@y.id');
+
+    const mgrViewer = { employeeId: 'mgr-1', permissions: ['payroll:payslip:read', 'payroll:run:read'] };
+    mockPrisma.employment.findMany.mockResolvedValue([{ departmentId: 'd1' }]);
+    const slipMgr = slip({ employee: { fullName: 'Budi', employeeId: 'E001', email: 'budi@example.id', employments: [{ departmentId: 'd1', isActive: true }] } });
+    mockPrisma.payslip.findFirst.mockResolvedValue(slipMgr);
+    const res2: any = await service.sendEmail('t1', 'p-1', mgrViewer, 'x@y.id');
+    expect(res2.to).toBe('budi@example.id');
+  });
+
+  it('fails when employee has no email and no override', async () => {
+    mockPrisma.payslip.findFirst.mockResolvedValue(slip({ employee: { fullName: 'Anon', employments: [] } }));
+    await expect(service.sendEmail('t1', 'p-1', hrViewer)).rejects.toThrow('tidak punya email');
+    expect(mockMailSvc.sendMail).not.toHaveBeenCalled();
+  });
+
+  it('surfaces mail provider failure without stamping', async () => {
+    mockPrisma.payslip.findFirst.mockResolvedValue(slip());
+    mockPrisma.payrollItem.findMany.mockResolvedValue([]);
+    mockPrisma.payslip.findMany.mockResolvedValue([]);
+    mockMailSvc.sendMail.mockResolvedValue({ success: false, provider: 'SMTP', to: 'budi@example.id', error: 'ECONNREFUSED' });
+    await expect(service.sendEmail('t1', 'p-1', hrViewer)).rejects.toThrow('Gagal mengirim email');
+    expect(mockPrisma.payslip.update).not.toHaveBeenCalled();
   });
 });

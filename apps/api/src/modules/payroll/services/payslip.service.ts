@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { MailService } from '@modules/integrations/services/mail.service';
 
 export interface PayslipViewer {
   employeeId?: string | null;
@@ -8,7 +9,10 @@ export interface PayslipViewer {
 
 @Injectable()
 export class PayslipService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   /**
    * Cakupan baca slip (privasi gaji), tiga tingkat berbasis permission:
@@ -206,6 +210,45 @@ export class PayslipService {
       where: { id },
       data: { status: 'ACKNOWLEDGED' as any, acknowledgedAt: new Date(), employeeNotes: 'Acknowledged' } as any,
     });
+  }
+
+  /**
+   * Kirim slip gaji via email (PDF terlampir). Privasi: findOne menegakkan
+   * cakupan viewer; alamat tujuan default email karyawan terdaftar.
+   * Override `to` hanya untuk viewer FULL (payroll:run:approve).
+   */
+  async sendEmail(tenantId: string, id: string, viewer?: PayslipViewer, toOverride?: string) {
+    const payslip: any = await this.findOne(tenantId, id, viewer);
+    const employeeEmail = payslip.employee?.email as string | undefined;
+    const canOverride = (viewer?.permissions ?? []).includes('payroll:run:approve');
+    const to = (toOverride && canOverride ? toOverride : undefined) ?? employeeEmail;
+    if (!to) {
+      throw new BadRequestException('Karyawan tidak punya email terdaftar; berikan alamat tujuan (butuh payroll:run:approve)');
+    }
+    const pdf = await this.generatePdf(tenantId, id, viewer);
+    const fmtRp = (n: unknown) => 'Rp' + Number(n || 0).toLocaleString('id-ID');
+    const period = pdf.filename.replace(/^payslip-.*?-/, '').replace(/\.pdf$/, '').replace(/-/g, ' ') || 'periode berjalan';
+    const subject = `Slip Gaji ${payslip.employee?.fullName ?? ''} - ${period}`.trim();
+    const text =
+      `Yth. ${payslip.employee?.fullName ?? 'Bapak/Ibu'},\n\n` +
+      `Slip gaji Anda periode ${period} terlampir pada email ini.\n` +
+      `Gaji bersih: ${fmtRp(payslip.netPay)}\n\n` +
+      `Dokumen ini rahasia dan hanya untuk Anda. Abaikan bila Anda merasa tidak berhak menerimanya.\n\n` +
+      `Hormat kami,\nHRD`;
+    const result = await this.mail.sendMail({
+      to,
+      subject,
+      text,
+      attachments: [{ filename: pdf.filename, contentType: pdf.contentType, data: pdf.data }],
+    });
+    if (!result.success) {
+      throw new BadRequestException(`Gagal mengirim email: ${result.error ?? 'unknown'}`);
+    }
+    await this.prisma.payslip.update({
+      where: { id },
+      data: { emailedAt: new Date(), emailTo: to } as any,
+    });
+    return { mailed: true, to, provider: result.provider, messageId: result.messageId };
   }
 }
 

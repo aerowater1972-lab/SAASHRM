@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Query , UseGuards} from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -65,5 +65,17 @@ export class PayslipController {
     @Query('employeeId') employeeId?: string,
   ) {
     return this.payslipService.acknowledge(tenantId, id, employeeId);
+  }
+
+  @Post(':id/send-email')
+  @Permissions('payroll:payslip:read')
+  @ApiOperation({ summary: 'Email payslip PDF (default: employee registered email)' })
+  sendEmail(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user?: JwtUser,
+    @Body() data?: { to?: string },
+  ) {
+    return this.payslipService.sendEmail(tenantId, id, this.viewerOf(user), data?.to);
   }
 }

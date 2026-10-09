@@ -23,9 +23,10 @@ import { SeveranceService } from './services/severance.service';
 import { BankTransferFormatterService } from './services/bank-transfer-formatter.service';
 import { PayrollEventConsumer } from './services/payroll-event.consumer';
 import { RegulatorySyncService } from './services/regulatory-sync.service';
+import { IntegrationsModule } from '@modules/integrations/integrations.module';
 
 @Module({
-  imports: [EmployeeModule],
+  imports: [EmployeeModule, IntegrationsModule],
   controllers: [
     ComponentController,
     PeriodController,
