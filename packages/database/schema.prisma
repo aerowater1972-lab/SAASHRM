@@ -45,6 +45,7 @@ model Tenant {
   ppeAssignments           PpeAssignment[]
   tenantBranding           TenantBranding?
   ssoConnection            SsoConnection?
+  accountingConnectors     AccountingConnector[]
   locationPings            LocationPing[]
   fieldTerritories         FieldTerritory[]
   liveTrackingSettings     LiveTrackingSettings?
@@ -238,6 +239,68 @@ model Integration {
   updatedAt    DateTime          @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+// =======================================================================
+// ACCOUNTING CONNECTORS (Jurnal, Xero, Accurate)
+// =======================================================================
+
+enum AccountingConnectorType {
+  JURNAL
+  XERO
+  ACCURATE
+  QUICKBOOKS
+  CUSTOM
+}
+
+model AccountingConnector {
+  id              String                   @id @default(uuid())
+  tenantId        String
+  name            String
+  type            AccountingConnectorType
+  status          IntegrationStatus        @default(ACTIVE)
+  credentials     String                   // encrypted JSON
+  config          Json                     @default("{}")
+  lastSyncAt      DateTime?
+  lastErrorAt     DateTime?
+  errorMessage    String?
+  syncPayroll     Boolean                  @default(true)
+  syncExpense     Boolean                  @default(false)
+  syncAsset       Boolean                  @default(false)
+  chartOfAccounts Json?                    // mapped account codes
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  syncLogs        AccountingSyncLog[]
+
+  @@unique([tenantId, name])
+}
+
+model AccountingSyncLog {
+  id              String              @id @default(uuid())
+  connectorId     String
+  connector       AccountingConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  syncType        String              // PAYROLL, EXPENSE, ASSET, MANUAL
+  status          SyncStatus          @default(PENDING)
+  recordsTotal    Int                 @default(0)
+  recordsSuccess  Int                 @default(0)
+  recordsFailed   Int                 @default(0)
+  errorDetails    Json?
+  startedAt       DateTime            @default(now())
+  completedAt     DateTime?
+  payload         Json?
+  response        Json?
+
+  @@index([connectorId, startedAt])
+}
+
+enum SyncStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  PARTIAL
+  FAILED
 }
 
 // =======================================================================

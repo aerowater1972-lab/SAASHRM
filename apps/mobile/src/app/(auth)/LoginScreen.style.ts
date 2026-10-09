@@ -1,0 +1,165 @@
+import { StyleSheet } from 'react-native';
+
+export default StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: '#1e3a8a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#1e3a8a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  logoText: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  tagline: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 4,
+  },
+  formContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 28,
+  },
+  errorContainer: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#dc2626',
+    textAlign: 'center',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  input: {
+    height: 52,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#0f172a',
+    backgroundColor: '#fff',
+  },
+  eyeButton: {
+    padding: 4,
+  },
+  eyeText: {
+    fontSize: 18,
+  },
+  submitButton: {
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#1e3a8a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#93c5fd',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  ssoButton: {
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#1e3a8a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ssoButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e3a8a',
+  },
+  footer: {
+    alignItems: 'center',
+    paddingTop: 32,
+    paddingBottom: 16,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+});
