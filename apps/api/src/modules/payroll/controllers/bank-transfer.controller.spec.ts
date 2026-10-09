@@ -1,22 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BankTransferController } from './bank-transfer.controller';
-import { PrismaService } from '@common/prisma/prisma.service';
+import { BankTransferFormatterService } from '../services/bank-transfer-formatter.service';
+import { RunService } from '../services/run.service';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 
 describe('BankTransferController', () => {
   let controller: BankTransferController;
-  const mockPrisma: any = {
-    bankTransferBatch: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-    },
+  const mockFormatter: any = {
+    getSupportedBanks: jest.fn().mockReturnValue([]),
+    generateTransferFile: jest.fn(),
+    validateRecord: jest.fn().mockReturnValue({ valid: true, errors: [] }),
+  };
+  const mockRunService: any = {
+    findOne: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [BankTransferController],
-      providers: [{ provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        { provide: BankTransferFormatterService, useValue: mockFormatter },
+        { provide: RunService, useValue: mockRunService },
+      ],
     })
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -32,24 +38,20 @@ describe('BankTransferController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('findAll scopes batches to tenant via run', async () => {
-    mockPrisma.bankTransferBatch.findMany.mockResolvedValue(['list']);
-    const result = await controller.findAll('default');
-    expect(mockPrisma.bankTransferBatch.findMany).toHaveBeenCalledWith({
-      where: { run: { tenantId: 'default' } },
-      include: { run: true },
-      orderBy: { generatedAt: 'desc' },
-    });
-    expect(result).toEqual(['list']);
+  it('getSupportedBanks returns list of banks', async () => {
+    const result = await controller.getSupportedBanks();
+    expect(mockFormatter.getSupportedBanks).toHaveBeenCalled();
+    expect(result).toEqual([]);
   });
 
-  it('findOne returns batch by id', async () => {
-    mockPrisma.bankTransferBatch.findUnique.mockResolvedValue('one');
-    const result = await controller.findOne('id-1');
-    expect(mockPrisma.bankTransferBatch.findUnique).toHaveBeenCalledWith({
-      where: { id: 'id-1' },
-      include: { run: true },
-    });
-    expect(result).toBe('one');
+  it('validateRecords returns validation results', async () => {
+    const records = [
+      { employeeName: 'Test', bankCode: 'BCA', bankAccountNumber: '123', bankAccountName: 'Test', amount: 1000, reference: 'REF1', description: 'Test' },
+    ];
+    const result = await controller.validateRecords(records);
+    expect(result).toHaveProperty('total');
+    expect(result).toHaveProperty('valid');
+    expect(result).toHaveProperty('invalid');
+    expect(result).toHaveProperty('details');
   });
 });

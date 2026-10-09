@@ -20,6 +20,7 @@ import { TaxService } from './services/tax.service';
 import { PayrollAdjustmentService } from './services/payroll-adjustment.service';
 import { ThrService } from './services/thr.service';
 import { SeveranceService } from './services/severance.service';
+import { BankTransferFormatterService } from './services/bank-transfer-formatter.service';
 import { PayrollEventConsumer } from './services/payroll-event.consumer';
 import { RegulatorySyncService } from './services/regulatory-sync.service';
 
@@ -50,6 +51,7 @@ import { RegulatorySyncService } from './services/regulatory-sync.service';
     SeveranceService,
     RegulatorySyncService,
     PayrollEventConsumer,
+    BankTransferFormatterService,
   ],
   exports: [
     ComponentService,
