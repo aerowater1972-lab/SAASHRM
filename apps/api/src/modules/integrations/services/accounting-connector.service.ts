@@ -580,6 +580,79 @@ export class AccountingConnectorService {
 
 // ============ Base Connector ============
 
+const HTTP_TIMEOUT_MS = 25_000;
+
+class HttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly snippet: string,
+  ) {
+    super(`HTTP ${status}: ${snippet}`);
+  }
+}
+
+async function readSnippet(res: Response): Promise<string> {
+  try {
+    const text = await res.text();
+    return text.slice(0, 500);
+  } catch {
+    return '<unreadable body>';
+  }
+}
+
+/** POST JSON with timeout + one retry on network errors / 5xx. Throws HttpError on 4xx/5xx. */
+async function postJson(url: string, body: unknown, headers: Record<string, string>, timeoutMs = HTTP_TIMEOUT_MS): Promise<any> {
+  const attempt = async (): Promise<any> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new HttpError(res.status, await readSnippet(res));
+      const text = await res.text();
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { raw: text.slice(0, 500) };
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  try {
+    return await attempt();
+  } catch (err) {
+    // Retry once on network-level failures and 5xx (never on 4xx).
+    const retryable = !(err instanceof HttpError) || err.status >= 500;
+    if (!retryable) throw err;
+    await new Promise((r) => setTimeout(r, 1000));
+    return attempt();
+  }
+}
+
+async function getJson(url: string, headers: Record<string, string>, timeoutMs = HTTP_TIMEOUT_MS): Promise<any> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { method: 'GET', headers, signal: ctrl.signal });
+    if (!res.ok) throw new HttpError(res.status, await readSnippet(res));
+    const text = await res.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text.slice(0, 500) };
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 abstract class AccountingConnectorBase {
   protected credentials: AccountingCredentials;
   protected config: AccountingConnectorConfig;
@@ -589,29 +662,51 @@ abstract class AccountingConnectorBase {
     this.config = config;
   }
 
+  /** Base URL: credential override wins, then vendor default. */
+  protected resolveBaseUrl(vendorDefault: string): string {
+    const raw = (this.credentials.baseUrl || vendorDefault).replace(/\/$/, '');
+    if (!/^https:\/\//i.test(raw)) {
+      throw new Error('Accounting baseUrl must use https');
+    }
+    return raw;
+  }
+
   abstract createJournalEntries(entries: JournalEntry[]): Promise<SyncResult>;
   abstract testConnection(): Promise<boolean>;
   abstract getName(): string;
+
+  protected newResult(total: number): SyncResult {
+    return { success: true, recordsProcessed: total, recordsSucceeded: 0, recordsFailed: 0, errors: [], externalIds: {} };
+  }
+
+  protected finalize(result: SyncResult): SyncResult {
+    result.success = result.recordsFailed === 0;
+    return result;
+  }
 }
 
 // ============ Jurnal.id Connector ============
 
-class JurnalConnector extends AccountingConnectorBase {
-  private baseUrl = 'https://api.jurnal.id/v1';
+export class JurnalConnector extends AccountingConnectorBase {
+  private vendorDefaultBaseUrl = 'https://api.jurnal.id/v1';
+
+  private authHeaders(): Record<string, string> {
+    const key = this.credentials.apiKey || this.credentials.jurnalApiKey;
+    if (!key) throw new Error('Jurnal API key missing (credentials.apiKey)');
+    const name = this.credentials.extra?.authHeaderName || 'Authorization';
+    const scheme = this.credentials.extra?.authScheme ?? 'Bearer ';
+    return { [name]: `${scheme}${key}` };
+  }
 
   async createJournalEntries(entries: JournalEntry[]): Promise<SyncResult> {
-    const result: SyncResult = {
-      success: true,
-      recordsProcessed: entries.length,
-      recordsSucceeded: 0,
-      recordsFailed: 0,
-      errors: [],
-      externalIds: {},
-    };
+    const result = this.newResult(entries.length);
 
     for (const entry of entries) {
       try {
-        // Jurnal.id API format
+        const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+        // Endpoint path follows the Jurnal Open API version in use; override via
+        // credentials.extra.journalsPath without code changes.
+        const path = this.credentials.extra?.journalsPath || '/journals';
         const payload = {
           date: entry.date.toISOString().split('T')[0],
           reference: entry.reference,
@@ -625,8 +720,9 @@ class JurnalConnector extends AccountingConnectorBase {
           })),
         };
 
-        // const response = await this.httpPost('/journals', payload);
-        // result.externalIds[entry.sourceId] = response.data.id;
+        const response = await postJson(`${base}${path}`, payload, this.authHeaders());
+        const id = response?.data?.id ?? response?.id ?? null;
+        if (id) result.externalIds[entry.sourceId] = String(id);
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
@@ -634,13 +730,15 @@ class JurnalConnector extends AccountingConnectorBase {
       }
     }
 
-    result.success = result.recordsFailed === 0;
-    return result;
+    return this.finalize(result);
   }
 
   async testConnection(): Promise<boolean> {
     try {
-      // await this.httpGet('/me');
+      const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+      // Lightweight reachability + auth check; override path per API version.
+      const path = this.credentials.extra?.healthPath || '/me';
+      await getJson(`${base}${path}`, this.authHeaders(), 10_000);
       return true;
     } catch {
       return false;
@@ -652,56 +750,64 @@ class JurnalConnector extends AccountingConnectorBase {
 
 // ============ Xero Connector ============
 
-class XeroConnector extends AccountingConnectorBase {
-  private baseUrl = 'https://api.xero.com/api.xro/2.0';
+export class XeroConnector extends AccountingConnectorBase {
+  private vendorDefaultBaseUrl = 'https://api.xero.com/api.xro/2.0';
+
+  private tenantHeaders(): Record<string, string> {
+    const token = this.credentials.xeroAccessToken;
+    const tenantId = this.credentials.xeroTenantId;
+    if (!token) throw new Error('Xero access token missing — reconnect OAuth (credentials.xeroAccessToken)');
+    if (!tenantId) throw new Error('Xero tenant id missing (credentials.xeroTenantId)');
+    return { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId };
+  }
 
   async createJournalEntries(entries: JournalEntry[]): Promise<SyncResult> {
-    const result: SyncResult = {
-      success: true,
-      recordsProcessed: entries.length,
-      recordsSucceeded: 0,
-      recordsFailed: 0,
-      errors: [],
-      externalIds: {},
-    };
+    const result = this.newResult(entries.length);
 
     for (const entry of entries) {
       try {
-        // Xero API format
+        const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+        // Xero ManualJournals: LineAmount is + for debits, − for credits.
         const payload = {
-          Journals: [{
-            JournalDate: entry.date.toISOString().split('T')[0],
-            JournalNumber: entry.reference,
-            Reference: entry.description,
-            JournalLines: entry.lines.map(line => ({
-              AccountCode: line.accountCode,
-              Description: line.description,
-              DebitAmount: line.debit,
-              CreditAmount: line.credit,
-              TrackingCategories: line.costCenter ? [{
-                Name: 'Cost Center',
-                Option: line.costCenter,
-              }] : [],
-            })),
-          }],
+          Narration: entry.description,
+          JournalDate: entry.date.toISOString().split('T')[0],
+          JournalNumber: entry.reference,
+          Reference: entry.description,
+          JournalLines: entry.lines.map(line => ({
+            AccountCode: line.accountCode,
+            Description: line.description,
+            LineAmount: line.debit > 0 ? line.debit : -line.credit,
+            TrackingCategories: line.costCenter ? [{
+              Name: 'Cost Center',
+              Option: line.costCenter,
+            }] : [],
+          })),
         };
 
-        // const response = await this.httpPost('/Journals', payload, { 'Xero-tenant-id': this.credentials.xeroTenantId });
-        // result.externalIds[entry.sourceId] = response.data.Journals[0].JournalID;
+        const response = await postJson(`${base}/ManualJournals`, payload, this.tenantHeaders());
+        const id = response?.Journals?.[0]?.JournalID ?? response?.ManualJournals?.[0]?.JournalID ?? null;
+        if (id) result.externalIds[entry.sourceId] = String(id);
         result.recordsSucceeded++;
       } catch (error) {
+        if (error instanceof HttpError && error.status === 401) {
+          result.recordsFailed++;
+          result.errors.push(`${entry.sourceId}: Xero token expired — reconnect OAuth, then retry`);
+          continue;
+        }
         result.recordsFailed++;
         result.errors.push(`${entry.sourceId}: ${(error as Error).message}`);
       }
     }
 
-    result.success = result.recordsFailed === 0;
-    return result;
+    return this.finalize(result);
   }
 
   async testConnection(): Promise<boolean> {
     try {
-      // await this.httpGet('/Organisation', { 'Xero-tenant-id': this.credentials.xeroTenantId });
+      const token = this.credentials.xeroAccessToken;
+      if (!token) return false;
+      // Verified endpoint: lists tenants the OAuth token can access.
+      await getJson('https://api.xero.com/connections', { Authorization: `Bearer ${token}` }, 10_000);
       return true;
     } catch {
       return false;
@@ -713,22 +819,29 @@ class XeroConnector extends AccountingConnectorBase {
 
 // ============ Accurate Connector ============
 
-class AccurateConnector extends AccountingConnectorBase {
-  private baseUrl = 'https://api.accurate.id/accurate/api';
+export class AccurateConnector extends AccountingConnectorBase {
+  private vendorDefaultBaseUrl = 'https://api.accurate.id/accurate/api';
+
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    // Session/token scheme follows the Accurate API version in use;
+    // override header name via credentials.extra.authHeaderName.
+    const token = this.credentials.accurateAccessToken || this.credentials.apiKey;
+    if (!token) throw new Error('Accurate access token missing (credentials.accurateAccessToken)');
+    headers[this.credentials.extra?.authHeaderName || 'Authorization'] = `Bearer ${token}`;
+    if (this.credentials.accurateDbName) headers['X-Database-Name'] = this.credentials.accurateDbName;
+    return headers;
+  }
 
   async createJournalEntries(entries: JournalEntry[]): Promise<SyncResult> {
-    const result: SyncResult = {
-      success: true,
-      recordsProcessed: entries.length,
-      recordsSucceeded: 0,
-      recordsFailed: 0,
-      errors: [],
-      externalIds: {},
-    };
+    const result = this.newResult(entries.length);
 
     for (const entry of entries) {
       try {
-        // Accurate API format
+        const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+        // Endpoint path follows the Accurate API version in use; override via
+        // credentials.extra.journalsPath without code changes.
+        const path = this.credentials.extra?.journalsPath || '/journals/save.do';
         const payload = {
           transDate: entry.date.toISOString().split('T')[0],
           transNo: entry.reference,
@@ -742,8 +855,9 @@ class AccurateConnector extends AccountingConnectorBase {
           })),
         };
 
-        // const response = await this.httpPost(`/journals/save.do`, payload, { 'X-Database-Name': this.credentials.accurateDbName });
-        // result.externalIds[entry.sourceId] = response.d.id;
+        const response = await postJson(`${base}${path}`, payload, this.authHeaders());
+        const id = response?.d?.id ?? response?.data?.id ?? response?.id ?? null;
+        if (id) result.externalIds[entry.sourceId] = String(id);
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
@@ -751,13 +865,14 @@ class AccurateConnector extends AccountingConnectorBase {
       }
     }
 
-    result.success = result.recordsFailed === 0;
-    return result;
+    return this.finalize(result);
   }
 
   async testConnection(): Promise<boolean> {
     try {
-      // await this.httpGet('/company/get.do', { 'X-Database-Name': this.credentials.accurateDbName });
+      const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+      const path = this.credentials.extra?.healthPath || '/company/get.do';
+      await getJson(`${base}${path}`, this.authHeaders(), 10_000);
       return true;
     } catch {
       return false;
@@ -769,43 +884,50 @@ class AccurateConnector extends AccountingConnectorBase {
 
 // ============ QuickBooks Connector ============
 
-class QuickBooksConnector extends AccountingConnectorBase {
-  private baseUrl = 'https://quickbooks.api.intuit.com/v3/company';
+export class QuickBooksConnector extends AccountingConnectorBase {
+  private vendorDefaultBaseUrl = 'https://quickbooks.api.intuit.com/v3/company';
+
+  private realmHeaders(): Record<string, string> {
+    const token = (this.credentials.extra as any)?.qbAccessToken || this.credentials.apiKey;
+    const realmId = (this.credentials.extra as any)?.qbRealmId;
+    if (!token) throw new Error('QuickBooks access token missing (credentials.extra.qbAccessToken)');
+    if (!realmId) throw new Error('QuickBooks realm id missing (credentials.extra.qbRealmId)');
+    return { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+  }
+
+  private realmId(): string {
+    return String((this.credentials.extra as any)?.qbRealmId);
+  }
 
   async createJournalEntries(entries: JournalEntry[]): Promise<SyncResult> {
-    const result: SyncResult = {
-      success: true,
-      recordsProcessed: entries.length,
-      recordsSucceeded: 0,
-      recordsFailed: 0,
-      errors: [],
-      externalIds: {},
-    };
+    const result = this.newResult(entries.length);
 
     for (const entry of entries) {
       try {
-        // QuickBooks API format
+        // QBO REST base; sandbox vs production is just a different host/port,
+        // set via credentials.baseUrl (e.g. https://sandbox-quickbooks.api.intuit.com/v3/company).
+        const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+        const minor = this.credentials.extra?.qbMinorVersion ? `?minorversion=${this.credentials.extra.qbMinorVersion}` : '';
         const payload = {
-          JournalEntry: {
-            TxnDate: entry.date.toISOString().split('T')[0],
-            DocNumber: entry.reference,
-            PrivateNote: entry.description,
-            Line: entry.lines.map((line, idx) => ({
-              Id: idx + 1,
-              LineNum: idx + 1,
-              Description: line.description,
-              Amount: line.debit > 0 ? line.debit : line.credit,
-              DetailType: 'JournalEntryLineDetail',
-              JournalEntryLineDetail: {
-                PostingType: line.debit > 0 ? 'Debit' : 'Credit',
-                AccountRef: { value: line.accountCode },
-              },
-            })),
-          },
+          TxnDate: entry.date.toISOString().split('T')[0],
+          DocNumber: entry.reference,
+          PrivateNote: entry.description,
+          Line: entry.lines.map((line, idx) => ({
+            Id: String(idx + 1),
+            LineNum: idx + 1,
+            Description: line.description,
+            Amount: line.debit > 0 ? line.debit : line.credit,
+            DetailType: 'JournalEntryLineDetail',
+            JournalEntryLineDetail: {
+              PostingType: line.debit > 0 ? 'Debit' : 'Credit',
+              AccountRef: { value: line.accountCode },
+            },
+          })),
         };
 
-        // const response = await this.httpPost(`/${this.credentials.quickbooksRealmId}/journalentry`, payload);
-        // result.externalIds[entry.sourceId] = response.JournalEntry.Id;
+        const response = await postJson(`${base}/${this.realmId()}/journalentry${minor}`, { JournalEntry: payload }, this.realmHeaders());
+        const id = response?.JournalEntry?.Id ?? null;
+        if (id) result.externalIds[entry.sourceId] = String(id);
         result.recordsSucceeded++;
       } catch (error) {
         result.recordsFailed++;
@@ -813,13 +935,13 @@ class QuickBooksConnector extends AccountingConnectorBase {
       }
     }
 
-    result.success = result.recordsFailed === 0;
-    return result;
+    return this.finalize(result);
   }
 
   async testConnection(): Promise<boolean> {
     try {
-      // await this.httpGet(`/${this.credentials.quickbooksRealmId}/companyinfo/${this.credentials.quickbooksRealmId}`);
+      const base = this.resolveBaseUrl(this.vendorDefaultBaseUrl);
+      await getJson(`${base}/${this.realmId()}/companyinfo/${this.realmId()}`, this.realmHeaders(), 10_000);
       return true;
     } catch {
       return false;
@@ -831,7 +953,7 @@ class QuickBooksConnector extends AccountingConnectorBase {
 
 // ============ Generic Connector ============
 
-class GenericConnector extends AccountingConnectorBase {
+export class GenericConnector extends AccountingConnectorBase {
   async createJournalEntries(entries: JournalEntry[]): Promise<SyncResult> {
     // Generic implementation - just log and return success for testing
     return {
