@@ -7,6 +7,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { AnalyticsService } from '../services/analytics.service';
+import { WorkforceInsightsService } from '../services/workforce-insights.service';
 import { AnalyticsFilterDto } from '../dto/analytics-filter.dto';
 import { AnalyticsExportDto } from '../dto/analytics-export.dto';
 
@@ -15,7 +16,10 @@ import { AnalyticsExportDto } from '../dto/analytics-export.dto';
 @UseGuards(AuthGuard, PermissionGuard)
 @Controller('analytics')
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly insightsService: WorkforceInsightsService,
+  ) {}
 
   @Get('headcount')
   @Permissions('analytics:read')
@@ -117,6 +121,13 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Heuristik risiko keluar karyawan (Bradford, SP, lembur, PIP, IDP)' })
   getFlightRisk(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
     return this.analyticsService.getFlightRisk(tenantId, filters);
+  }
+
+  @Get('insights')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Sinyal proaktif berbasis aturan (tren telat/absen, kontrak, probation, cuti, spoof, headcount)' })
+  getInsights(@TenantId() tenantId: string) {
+    return this.insightsService.getInsights(tenantId);
   }
 
   @Get('lk-kphpp')
