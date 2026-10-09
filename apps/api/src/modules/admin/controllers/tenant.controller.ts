@@ -67,4 +67,18 @@ export class TenantController {
   listEntities(@Param('id') tenantId: string) {
     return this.tenantService.listEntities(tenantId);
   }
+
+  @Get(':id/hierarchy')
+  @Permissions('admin:tenant:read')
+  @ApiOperation({ summary: 'Get tenant company hierarchy tree' })
+  getHierarchy(@Param('id') id: string) {
+    return this.tenantService.getHierarchy(id);
+  }
+
+  @Get(':id/descendants')
+  @Permissions('admin:tenant:read')
+  @ApiOperation({ summary: 'Get all descendant tenants (flattened)' })
+  getDescendants(@Param('id') id: string) {
+    return this.tenantService.getDescendants(id);
+  }
 }

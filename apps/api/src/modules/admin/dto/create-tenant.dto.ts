@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, MinLength, MaxLength, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class CreateTenantDto {
   @ApiProperty({ example: 'Acme Corp' })
@@ -19,4 +19,8 @@ export class CreateTenantDto {
   @IsOptional()
   @IsObject()
   settings?: Record<string, any>;
+  @ApiPropertyOptional({ description: 'Parent tenant ID untuk multi-company hierarchy' })
+  @IsOptional()
+  @IsUUID()
+  parentTenantId?: string;
 }

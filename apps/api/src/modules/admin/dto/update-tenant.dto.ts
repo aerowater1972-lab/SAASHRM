@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, MaxLength, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateTenantDto {
@@ -28,4 +28,9 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsObject()
   settings?: Record<string, any>;
+
+  @ApiPropertyOptional({ description: 'Parent tenant ID (null untuk melepas dari parent)' })
+  @IsOptional()
+  @IsUUID()
+  parentTenantId?: string | null;
 }
