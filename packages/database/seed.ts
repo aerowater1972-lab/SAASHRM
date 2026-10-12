@@ -26,21 +26,25 @@ async function main() {
   });
   console.log(`Tenant created: ${tenant.name}`);
 
-  // 2. Create Default Entity
-  const entity = await prisma.tenantEntity.upsert({
-    where: { id: 'entity-1' },
-    update: {},
-    create: {
-      id: 'entity-1',
-      tenantId: 'default',
-      name: 'Head Office',
-      code: 'HQ',
-      address: 'Jl. Sudirman No. 1',
-      city: 'Jakarta',
-      province: 'DKI Jakarta',
-      timezone: 'Asia/Jakarta',
-    },
+  // 2. Create Default Entity (find-or-create by tenant+code agar idempotent
+  //    walau DB sudah berisi entity lain dengan code sama)
+  let entity = await prisma.tenantEntity.findFirst({
+    where: { tenantId: tenant.id, code: 'HQ' },
   });
+  if (!entity) {
+    entity = await prisma.tenantEntity.create({
+      data: {
+        id: 'entity-1',
+        tenantId: tenant.id,
+        name: 'Head Office',
+        code: 'HQ',
+        address: 'Jl. Sudirman No. 1',
+        city: 'Jakarta',
+        province: 'DKI Jakarta',
+        timezone: 'Asia/Jakarta',
+      },
+    });
+  }
   console.log(`Entity created: ${entity.name}`);
 
   // 3. Create Organizations
@@ -414,6 +418,11 @@ async function main() {
     'recruitment:offer:update',
     'wage:manage',
     'wage:view',
+    'helpdesk:create',
+    'helpdesk:manage',
+    'helpdesk:view',
+    'ebupot:manage',
+    'ebupot:view',
   ];
 
   for (const perm of permissionStrings) {
@@ -660,6 +669,11 @@ async function main() {
       'attendance:shift-rotation:read',
       'attendance:shift-rotation:trigger',
       'k3:dashboard',
+      'helpdesk:create',
+      'helpdesk:manage',
+      'helpdesk:view',
+      'ebupot:manage',
+      'ebupot:view',
     ],
     'role-manager': [
       'analytics:read',
@@ -748,6 +762,8 @@ async function main() {
       'resignations:create',
       'announcements:view',
       'documents:view',
+      'helpdesk:create',
+      'helpdesk:view',
     ],
   };
 
@@ -802,11 +818,15 @@ async function main() {
   ];
 
   for (const emp of employees) {
-    await prisma.employee.upsert({
-      where: { id: emp.id },
-      update: {},
-      create: { ...emp, tenantId: 'entity-1' },
-    });
+    const payload = { ...emp, tenantId: 'default' };
+    const existing = await prisma.employee.findUnique({ where: { id: emp.id } });
+    if (existing) continue;
+    try {
+      await prisma.employee.create({ data: payload });
+      console.log(`Employee created: ${emp.employeeId} ${emp.fullName}`);
+    } catch (e: any) {
+      console.warn(`Employee ${emp.employeeId} skipped: ${e.code ?? e.message}`);
+    }
   }
   console.log(`${employees.length} employees created`);
 

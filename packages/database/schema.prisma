@@ -78,6 +78,9 @@ model Tenant {
   dataRetentionPolicies      DataRetentionPolicy[]
   dataProcessingLogs         DataProcessingLog[]
   ShiftGroup                 ShiftGroup[]
+  helpdeskTickets            HelpdeskTicket[]
+  helpdeskKbArticles         HelpdeskKbArticle[]
+  ebupotSubmissions          EbupotSubmission[]
 }
 
 model TenantEntity {
@@ -145,6 +148,13 @@ model User {
   talentPoolMembershipsAdded TalentPoolMember[]
   successionPlansCreated     SuccessionPlan[]      @relation("succession_creator")
   successionCandidatesAdded  SuccessionCandidate[] @relation("succession_candidate_adder")
+
+  // HR Helpdesk (GAP-02)
+  helpdeskTicketsAssigned    HelpdeskTicket[]   @relation("helpdesk_assignee")
+  helpdeskComments           HelpdeskComment[]
+  helpdeskKbArticlesCreated  HelpdeskKbArticle[]
+  // e-Bupot / Coretax (GAP-05)
+  ebupotSubmissionsCreated   EbupotSubmission[] @relation("ebupot_creator")
 
   @@unique([tenantId, email])
 }
@@ -637,6 +647,9 @@ model Employee {
   alumni                         Alumni[]
   shiftGroup                     ShiftGroup?                 @relation(fields: [shiftGroupId], references: [id], onDelete: Restrict)
   shiftGroupId                   String?
+  helpdeskTickets                HelpdeskTicket[]
+  helpdeskComments               HelpdeskComment[]
+  ebupotSubmissions              EbupotSubmission[]
 
   @@unique([tenantId, employeeId])
   @@unique([tenantId, email])
@@ -4374,3 +4387,154 @@ model DataProcessingLog {
   @@index([tenantId, processingPurpose])
   @@index([tenantId, status])
 }
+
+// =======================================================================
+// HR HELPDESK & TICKETING (GAP-02)
+// =======================================================================
+
+enum HelpdeskTicketCategory {
+  PAYROLL
+  LEAVE
+  DOCUMENT
+  POLICY
+  BENEFIT
+  OTHER
+}
+
+enum HelpdeskTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum HelpdeskTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model HelpdeskTicket {
+  id                String                 @id @default(uuid())
+  tenantId          String
+  employeeId        String
+  ticketNumber      String
+  category          HelpdeskTicketCategory @default(OTHER)
+  priority          HelpdeskTicketPriority @default(NORMAL)
+  status            HelpdeskTicketStatus   @default(OPEN)
+  title             String
+  description       String
+  assigneeUserId    String?
+  slaDueAt          DateTime?
+  firstResponseDueAt DateTime?
+  firstRespondedAt  DateTime?
+  isEscalated       Boolean                  @default(false)
+  escalatedAt       DateTime?
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  satisfactionRating Int?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  deletedAt         DateTime?
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  assignee User?             @relation("helpdesk_assignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  comments HelpdeskComment[]
+
+  @@unique([tenantId, ticketNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, category])
+  @@index([tenantId, assigneeUserId])
+  @@index([tenantId, slaDueAt])
+  @@index([employeeId])
+}
+
+model HelpdeskComment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  ticketId         String
+  authorEmployeeId String?
+  authorUserId     String?
+  content          String
+  attachmentUrl    String?
+  isInternal       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  ticket         HelpdeskTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorEmployee Employee?      @relation(fields: [authorEmployeeId], references: [id], onDelete: SetNull)
+  authorUser     User?          @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([tenantId])
+}
+
+model HelpdeskKbArticle {
+  id              String                   @id @default(uuid())
+  tenantId        String
+  title           String
+  content         String
+  category        HelpdeskTicketCategory   @default(OTHER)
+  tags            String[]                 @default([])
+  viewCount       Int                      @default(0)
+  helpfulCount    Int                      @default(0)
+  unhelpfulCount  Int                      @default(0)
+  createdByUserId String
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  deletedAt       DateTime?
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy User   @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, category])
+  @@index([tenantId, createdByUserId])
+}
+
+
+// =======================================================================
+// e-BUPOT / CORETAX DJP (GAP-05)
+// =======================================================================
+
+enum EbupotSubmissionStatus {
+  PENDING
+  GENERATED
+  SUBMITTED
+  ACCEPTED
+  FAILED
+}
+
+model EbupotSubmission {
+  id                String                 @id @default(uuid())
+  tenantId          String
+  employeeId        String
+  taxYear           Int
+  taxMonth          Int
+  employeeName      String?
+  npwp              String?
+  receiptNumber     String?
+  bruto             Decimal                @db.Decimal(18, 2)
+  pph21             Decimal                @db.Decimal(18, 2)
+  ptkp              Decimal                @db.Decimal(18, 2)
+  status            EbupotSubmissionStatus @default(PENDING)
+  xmlUrl            String?
+  pdfUrl            String?
+  coretaxReference  String?
+  failureReason     String?
+  retryCount        Int                    @default(0)
+  submittedByUserId String?
+  submittedAt       DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  submittedBy User?    @relation("ebupot_creator", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, employeeId, taxYear, taxMonth])
+  @@index([tenantId, status])
+  @@index([tenantId, taxYear, taxMonth])
+  @@index([employeeId])
+}
+

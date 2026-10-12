@@ -99,10 +99,11 @@ export function useCreateTenant() {
   });
 }
 
-export function useUsers(params?: { page?: number; limit?: number; status?: string; search?: string }) {
+export function useUsers(params?: { page?: number; limit?: number; status?: string; search?: string }, enabled = true) {
   return useQuery({
     queryKey: ['admin', 'users', params],
     queryFn: () => fetchUsers(params),
+    enabled,
   });
 }
 

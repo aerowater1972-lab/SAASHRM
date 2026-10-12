@@ -60,6 +60,13 @@ export class AnalyticsController {
     return this.analyticsService.getLeaveSummary(tenantId, filters);
   }
 
+  @Get('leave/utilization')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: 'Detailed leave utilization per employee, department, and monthly trend' })
+  getLeaveUtilization(@TenantId() tenantId: string, @Query() filters: AnalyticsFilterDto) {
+    return this.analyticsService.getLeaveUtilization(tenantId, filters);
+  }
+
   @Get('payroll')
   @Permissions('analytics:read')
   @ApiOperation({ summary: 'Payroll summary total, avg, by department' })

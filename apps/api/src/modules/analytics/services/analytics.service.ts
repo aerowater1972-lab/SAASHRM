@@ -214,6 +214,148 @@ export class AnalyticsService {
     };
   }
 
+  /**
+   * Detailed leave utilization report per employee & department.
+   * Includes balance, used, pending, utilization rate, and trend.
+   */
+  async getLeaveUtilization(tenantId: string, filters: AnalyticsFilterDto) {
+    const { startDate, endDate, departmentId } = filters;
+    const start = startDate || new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
+    const end = endDate || new Date().toISOString().slice(0, 10);
+    const deptFilter = departmentId
+      ? Prisma.sql`AND e."departmentId" = ${departmentId}`
+      : Prisma.sql``;
+
+    // Current year for leave balance context
+    const year = new Date().getFullYear();
+
+    const [
+      // Per employee: balance, used, pending, utilization
+      employeeUtilization,
+      // Monthly trend for the period
+      monthlyTrend,
+      // Department summary with utilization rate
+      departmentUtilization,
+    ] = await Promise.all([
+      this.prisma.$queryRaw<{
+        employeeId: string;
+        employeeName: string;
+        employeeCode: string;
+        department: string;
+        leaveType: string;
+        entitled: number;
+        carriedForward: number;
+        used: number;
+        pending: number;
+        available: number;
+      }[]>`
+        SELECT
+          emp.id AS "employeeId",
+          emp."fullName" AS "employeeName",
+          emp."employeeId" AS "employeeCode",
+          COALESCE(d.name, 'Tanpa Departemen') AS department,
+          lt.name AS "leaveType",
+          COALESCE(lb."totalEntitled", 0)::numeric AS entitled,
+          COALESCE(lb."carryForward", 0)::numeric AS "carriedForward",
+          COALESCE(lb."totalUsed", 0)::numeric AS used,
+          COALESCE(lb."totalPending", 0)::numeric AS pending,
+          (COALESCE(lb."totalEntitled", 0) + COALESCE(lb."carryForward", 0) - COALESCE(lb."totalUsed", 0) - COALESCE(lb."totalPending", 0))::numeric AS available
+        FROM "LeaveBalance" lb
+        JOIN "Employee" emp ON emp.id = lb."employeeId"
+        JOIN "LeaveType" lt ON lt.id = lb."leaveTypeId"
+        LEFT JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
+        LEFT JOIN "Department" d ON d.id = e."departmentId"
+        WHERE lb."tenantId" = ${tenantId}
+          AND lb.year = ${year}
+          AND lt."isBalanceDeducting" = true
+          ${deptFilter}
+        ORDER BY d.name, emp."fullName", lt.name
+      `,
+      this.prisma.$queryRaw<{
+        month: number;
+        totalDays: number;
+        count: number;
+      }[]>`
+        SELECT
+          EXTRACT(MONTH FROM lr."startDate")::int AS month,
+          COALESCE(SUM(lr."totalDays"), 0)::numeric AS "totalDays",
+          COUNT(*)::int AS count
+        FROM "LeaveRequest" lr
+        JOIN "Employee" emp ON emp.id = lr."employeeId"
+        LEFT JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
+        WHERE lr."tenantId" = ${tenantId}
+          AND lr.status = 'APPROVED'
+          AND lr."startDate" >= ${start}::date
+          AND lr."endDate" <= ${end}::date
+          ${deptFilter}
+        GROUP BY EXTRACT(MONTH FROM lr."startDate")
+        ORDER BY month
+      `,
+      this.prisma.$queryRaw<{
+        department: string;
+        totalEntitled: number;
+        totalUsed: number;
+        totalPending: number;
+        utilizationRate: number;
+        employeeCount: number;
+      }[]>`
+        SELECT
+          COALESCE(d.name, 'Tanpa Departemen') AS department,
+          COALESCE(SUM(lb."totalEntitled" + lb."carryForward"), 0)::numeric AS "totalEntitled",
+          COALESCE(SUM(lb."totalUsed"), 0)::numeric AS "totalUsed",
+          COALESCE(SUM(lb."totalPending"), 0)::numeric AS "totalPending",
+          CASE
+            WHEN SUM(lb."totalEntitled" + lb."carryForward") > 0
+            THEN ROUND((SUM(lb."totalUsed") + SUM(lb."totalPending")) / SUM(lb."totalEntitled" + lb."carryForward") * 100, 2)
+            ELSE 0
+          END AS "utilizationRate",
+          COUNT(DISTINCT lb."employeeId")::int AS "employeeCount"
+        FROM "LeaveBalance" lb
+        JOIN "Employee" emp ON emp.id = lb."employeeId"
+        LEFT JOIN "Employment" e ON e."employeeId" = emp.id AND e."isActive" = true
+        LEFT JOIN "Department" d ON d.id = e."departmentId"
+        WHERE lb."tenantId" = ${tenantId}
+          AND lb.year = ${year}
+          AND lb."isBalanceDeducting" = true
+          ${deptFilter}
+        GROUP BY d.name
+        ORDER BY "utilizationRate" DESC
+      `,
+    ]);
+
+    return {
+      period: { start, end },
+      employeeUtilization: employeeUtilization.map((r: any) => ({
+        employeeId: r.employeeId,
+        employeeName: r.employeeName,
+        employeeCode: r.employeeCode,
+        department: r.department,
+        leaveType: r.leaveType,
+        entitled: Number(r.entitled),
+        carriedForward: Number(r.carriedForward),
+        used: Number(r.used),
+        pending: Number(r.pending),
+        available: Number(r.available),
+        utilizationRate: Number(r.entitled + r.carriedForward) > 0
+          ? Math.round(((Number(r.used) + Number(r.pending)) / (Number(r.entitled) + Number(r.carriedForward))) * 10000) / 100
+          : 0,
+      })),
+      monthlyTrend: monthlyTrend.map((r: any) => ({
+        month: Number(r.month),
+        totalDays: Number(r.totalDays),
+        count: Number(r.count),
+      })),
+      departmentUtilization: departmentUtilization.map((r: any) => ({
+        department: r.department,
+        totalEntitled: Number(r.totalEntitled),
+        totalUsed: Number(r.totalUsed),
+        totalPending: Number(r.totalPending),
+        utilizationRate: Number(r.utilizationRate),
+        employeeCount: Number(r.employeeCount),
+      })),
+    };
+  }
+
   async getPayrollSummary(tenantId: string, filters: AnalyticsFilterDto) {
     const { startDate, endDate } = filters;
     const start = startDate || '1970-01-01';

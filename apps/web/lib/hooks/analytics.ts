@@ -16,6 +16,7 @@ import {
   getDashboardSummary,
   getBradfordScores,
   getFlightRisk,
+  getLeaveUtilization,
 } from '@/lib/api/analytics';
 
 export function useHeadcount(filters?: Record<string, unknown>) {
@@ -86,4 +87,8 @@ export function useBradfordScores(filters?: Record<string, unknown>) {
 
 export function useFlightRisk(filters?: Record<string, unknown>) {
   return useQuery({ queryKey: ['analytics', 'flight-risk', filters], queryFn: () => getFlightRisk(filters) });
+}
+
+export function useLeaveUtilization(filters?: Record<string, unknown>) {
+  return useQuery({ queryKey: ['analytics', 'leave', 'utilization', filters], queryFn: () => getLeaveUtilization(filters) });
 }

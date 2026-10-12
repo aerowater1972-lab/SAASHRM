@@ -23,6 +23,8 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ResignationModule } from './modules/resignation/resignation.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { EmployeeRelationsModule } from './modules/employee-relations/employee-relations.module';
+import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
+import { EbupotModule } from './modules/ebupot/ebupot.module';
 import { EngagementSurveyModule } from './modules/engagement-survey/engagement-survey.module';
 import { ManpowerPlanningModule } from './modules/manpower-planning/manpower-planning.module';
 import { PrismaModule } from './common/prisma/prisma.module';
@@ -100,6 +102,8 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     DocumentManagementModule,
     IntegrationsModule,
     CommunicationsModule,
+    HelpdeskModule,
+    EbupotModule,
     SuccessionPlanningModule,
     OutsourcingModule,
     PdpaModule,

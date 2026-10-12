@@ -63,3 +63,7 @@ export async function getBradfordScores(filters?: Record<string, unknown>): Prom
 export async function getFlightRisk(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
   return api.get<Record<string, unknown>>('/analytics/flight-risk', { params: filters });
 }
+
+export async function getLeaveUtilization(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/analytics/leave/utilization', { params: filters });
+}
