@@ -1,4 +1,4 @@
-﻿-- OA-03 — Webhook Engine (event subscription, retry eksponensial, delivery log)
+-- OA-03 — Webhook Engine (event subscription, retry eksponensial, delivery log)
 
 -- CreateEnum
 CREATE TYPE "WebhookDeliveryStatus" AS ENUM ('PENDING', 'DELIVERED', 'FAILED');

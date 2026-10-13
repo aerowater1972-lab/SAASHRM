@@ -9,9 +9,10 @@ import { WhatsappController } from './controllers/whatsapp.controller';
 import { MailService } from './services/mail.service';
 import { HadirrService } from './services/hadirr.service';
 import { HadirrController } from './controllers/hadirr.controller';
+import { SlackModule } from './slack/slack.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, SlackModule],
   controllers: [AccountingConnectorController, GovernmentReportingController, WhatsappController, HadirrController],
   providers: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService, HadirrService],
   exports: [AccountingConnectorService, GovernmentReportingService, WhatsappService, MailService, HadirrService],

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { OnboardingService } from './onboarding.service';
 import { OnboardingTaskService } from './onboarding-task.service';
+import { ReferralService } from './referral.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
@@ -19,6 +20,7 @@ describe('OnboardingService.convertToEmployee (BR-04)', () => {
   const mockEmployeeService: any = { create: jest.fn() };
   const mockWorkflow: any = {};
   const mockOnboardingTasks: any = { bulkCreateForEmployee: jest.fn().mockResolvedValue([]) };
+  const mockReferrals: any = { awardForHired: jest.fn().mockResolvedValue(undefined) };
 
   const acceptedApplication = {
     id: 'app-1',
@@ -38,6 +40,7 @@ describe('OnboardingService.convertToEmployee (BR-04)', () => {
         { provide: EmployeeService, useValue: mockEmployeeService },
         { provide: WorkflowEngineService, useValue: mockWorkflow },
         { provide: OnboardingTaskService, useValue: mockOnboardingTasks },
+        { provide: ReferralService, useValue: mockReferrals },
       ],
     }).compile();
     service = module.get(OnboardingService);

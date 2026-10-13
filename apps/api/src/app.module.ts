@@ -42,6 +42,8 @@ import { CompensationModule } from './modules/compensation/compensation.module';
 import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
 import { OutsourcingModule } from './modules/outsourcing/outsourcing.module';
 import { PdpaModule } from './modules/pdpa/pdpa.module';
+import { ApiKeyModule } from './modules/api-key/api-key.module';
+import { SandboxModule } from './modules/sandbox/sandbox.module';
 import { DeprecationInterceptor } from './common/interceptors/deprecation.interceptor';
 
 @Module({
@@ -111,6 +113,8 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     HelpdeskModule,
     EbupotModule,
     TasksModule,
+    ApiKeyModule,
+    SandboxModule,
     SuccessionPlanningModule,
     OutsourcingModule,
     PdpaModule,

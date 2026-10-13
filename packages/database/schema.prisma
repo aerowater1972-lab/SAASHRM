@@ -5112,7 +5112,7 @@ model ScheduledReport {
 
 
 // =======================================================================
-// OPEN API — Webhook Engine (OA-03, GAP-18)
+// OPEN API ï¿½ Webhook Engine (OA-03, GAP-18)
 // =======================================================================
 
 enum WebhookDeliveryStatus {
@@ -5163,3 +5163,34 @@ model WebhookDelivery {
   @@index([endpointId, createdAt])
   @@index([tenantId, createdAt])
 }
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String
+  name       String
+  keyHash    String    @unique // sha256 hash of the API key
+  keyPrefix  String // first 12 chars for display
+  scopes     String[]  @default(["*"])
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  @@index([tenantId, isActive])
+  @@index([keyHash])
+}
+
+model SandboxEnvironment {
+  id             String   @id @default(uuid())
+  tenantId       String
+  status         String   @default("active")
+  sampleType     String
+  recordsCreated Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, createdAt])
+}
+
