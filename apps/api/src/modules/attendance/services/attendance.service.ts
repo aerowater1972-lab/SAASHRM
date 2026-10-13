@@ -16,6 +16,7 @@ import { AttendanceFilterDto } from '../dto/attendance-filter.dto';
 import { AttendanceCorrectionDto } from '../dto/attendance-correction.dto';
 import { OvertimeService } from './overtime.service';
 import { BiometricService } from './biometric.service';
+import { LivenessService } from './liveness.service';
 import {
   AttendanceStatus,
   PayrollPeriodStatus,
@@ -48,6 +49,7 @@ export class AttendanceService {
     private readonly eventBus: EventBusService,
     private readonly overtimeService: OvertimeService,
     private readonly biometricService: BiometricService,
+    private readonly livenessService: LivenessService,
   ) {
     // ConfigService returns raw strings for env vars, so coerce to numbers to
     // keep the anti-spoof thresholds strictly numeric everywhere downstream.
@@ -106,6 +108,7 @@ export class AttendanceService {
       if (!dto.embedding) {
         throw new BadRequestException('Face embedding is required for FACE clock-in');
       }
+      this.livenessService.assertToken(tenantId, employeeId, dto.livenessToken);
       const result = await this.biometricService.verifyFace(tenantId, employeeId, dto.embedding);
       if (!result.matched) {
         throw new BadRequestException(`Face verification failed (score ${result.score.toFixed(3)})`);
@@ -201,6 +204,7 @@ export class AttendanceService {
       if (!dto.embedding) {
         throw new BadRequestException('Face embedding is required for FACE clock-out');
       }
+      this.livenessService.assertToken(tenantId, employeeId, dto.livenessToken);
       const result = await this.biometricService.verifyFace(tenantId, employeeId, dto.embedding);
       if (!result.matched) {
         throw new BadRequestException(`Face verification failed (score ${result.score.toFixed(3)})`);

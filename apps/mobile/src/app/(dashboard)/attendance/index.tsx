@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  Modal,
   Platform,
   PermissionsAndroid,
 } from 'react-native';
@@ -51,6 +52,8 @@ export default function AttendanceScreen() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [showFaceCapture, setShowFaceCapture] = useState(false);
+  // Arah capture yang sedang berjalan: 'in' = check-in, 'out' = check-out.
+  const [faceAction, setFaceAction] = useState<'in' | 'out'>('in');
   const [showGPSLocation, setShowGPSLocation] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
@@ -96,6 +99,7 @@ export default function AttendanceScreen() {
       return;
     }
 
+    setFaceAction('in');
     setShowFaceCapture(true);
   };
 
@@ -110,14 +114,20 @@ export default function AttendanceScreen() {
       return;
     }
 
+    setFaceAction('out');
     setShowFaceCapture(true);
   };
 
-  const onFaceVerified = async (embedding: number[], isCheckIn: boolean) => {
-    const { success, confidence } = await verifyFace(embedding);
+  const onFaceVerified = async (
+    embedding: number[],
+    isCheckIn: boolean,
+    livenessToken?: string,
+  ) => {
+    const { success, confidence } = await verifyFace(embedding, livenessToken);
 
     if (!success) {
       Alert.alert('Verifikasi Gagal', 'Wajah tidak dikenali. Silakan coba lagi dengan pencayaan yang lebih baik.');
+      setShowFaceCapture(false);
       return;
     }
 
@@ -130,6 +140,8 @@ export default function AttendanceScreen() {
           accuracy: currentLocation!.accuracy,
           address: currentLocation!.address,
           method: 'FACE',
+          embedding,
+          livenessToken,
         });
       } else {
         setCheckingOut(true);
@@ -139,8 +151,11 @@ export default function AttendanceScreen() {
           accuracy: currentLocation!.accuracy,
           address: currentLocation!.address,
           method: 'FACE',
+          embedding,
+          livenessToken,
         });
       }
+      setShowFaceCapture(false);
       Alert.alert('Berhasil', isCheckIn ? 'Check-in berhasil!' : 'Check-out berhasil!');
       loadData();
     } catch (error: any) {
@@ -153,8 +168,11 @@ export default function AttendanceScreen() {
           accuracy: currentLocation!.accuracy,
           address: currentLocation!.address,
           method: 'FACE',
+          embedding,
+          livenessToken,
         },
       });
+      setShowFaceCapture(false);
       Alert.alert('Disisipkan ke Antrean', 'Anda offline. Data akan disinkronkan saat online kembali.');
     } finally {
       setCheckingIn(false);
@@ -418,6 +436,24 @@ export default function AttendanceScreen() {
           )
         )}
       </View>
+
+      {/* Face Capture Modal — absensi wajah dengan tantangan liveness */}
+      <Modal
+        visible={showFaceCapture}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowFaceCapture(false)}
+      >
+        <FaceCapture
+          requireLiveness
+          title={faceAction === 'in' ? 'Absen Masuk' : 'Absen Pulang'}
+          subtitle={`Arahkan wajah ke dalam frame untuk ${faceAction === 'in' ? 'check-in' : 'check-out'}`}
+          onCapture={(embedding, _quality, livenessToken) =>
+            onFaceVerified(embedding, faceAction === 'in', livenessToken)
+          }
+          onCancel={() => setShowFaceCapture(false)}
+        />
+      </Modal>
     </ScrollView>
   );
 }

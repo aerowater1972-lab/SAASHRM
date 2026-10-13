@@ -17,12 +17,22 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { TenantId } from '@common/decorators/tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { BiometricService } from '../services/biometric.service';
-import { EnrollBiometricDto, VerifyFaceDto, DeviceClockInDto, AdminEnrollBiometricDto } from '../dto/biometric.dto';
+import { LivenessService } from '../services/liveness.service';
+import {
+  EnrollBiometricDto,
+  VerifyFaceDto,
+  DeviceClockInDto,
+  AdminEnrollBiometricDto,
+} from '../dto/biometric.dto';
+import { VerifyLivenessDto } from '../dto/liveness.dto';
 
 @ApiTags('Attendance - Biometric')
 @Controller('attendance/biometric')
 export class BiometricController {
-  constructor(private readonly biometricService: BiometricService) {}
+  constructor(
+    private readonly biometricService: BiometricService,
+    private readonly livenessService: LivenessService,
+  ) {}
 
   @Post('enroll')
   @UseGuards(AuthGuard, PermissionGuard)
@@ -47,7 +57,44 @@ export class BiometricController {
     @CurrentUser('employeeId') employeeId: string,
     @Body() dto: VerifyFaceDto,
   ) {
+    this.livenessService.assertToken(tenantId, employeeId, dto.livenessToken);
     return this.biometricService.verifyFace(tenantId, employeeId, dto.embedding);
+  }
+
+  // ====================== LIVENESS CHALLENGE (anti-spoof) ======================
+
+  @Post('liveness/challenge')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('ess:attendance:clock')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Minta liveness challenge (urutan gerakan acak: BLINK/TURN_HEAD) sebelum verifikasi wajah',
+  })
+  createLivenessChallenge(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') employeeId: string,
+  ) {
+    return this.livenessService.createChallenge(tenantId, employeeId);
+  }
+
+  @Post('liveness/verify')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @Permissions('ess:attendance:clock')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Tukar gerakan liveness yang selesai menjadi token HMAC sekali pakai',
+  })
+  verifyLiveness(
+    @TenantId() tenantId: string,
+    @CurrentUser('employeeId') employeeId: string,
+    @Body() dto: VerifyLivenessDto,
+  ) {
+    return this.livenessService.verifyChallenge(
+      tenantId,
+      employeeId,
+      dto.challengeId,
+      dto.events,
+    );
   }
 
   @Post('admin/enroll')

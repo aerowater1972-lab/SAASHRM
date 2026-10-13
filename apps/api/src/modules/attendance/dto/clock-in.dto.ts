@@ -36,6 +36,10 @@ export class ClockInDto {
   @ApiPropertyOptional({ description: 'Probe face embedding (required when method=FACE)' })
   @IsOptional()
   embedding?: number[];
+  @ApiPropertyOptional({ description: 'Liveness token (required when method=FACE)' })
+  @IsOptional()
+  @IsString()
+  livenessToken?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -87,6 +87,7 @@ const navItems: NavGroup[] = [
       { href: '/attendance/overtime', label: 'Lembur', icon: Clock },
       { href: '/attendance/shifts', label: 'Shift', icon: CalendarCheck },
       { href: '/attendance/flagged', label: 'Presensi Mencurigakan', icon: ShieldAlert },
+      { href: '/attendance/timesheet', label: 'Timesheet', icon: CalendarCheck, permission: 'tasks:view' },
       { href: '/leaves', label: 'Cuti', icon: CalendarCheck },
       { href: '/helpdesk', label: 'Helpdesk', icon: LifeBuoy, permission: 'helpdesk:view' },
       { href: '/helpdesk/queue', label: 'Antrian Helpdesk', icon: Inbox, permission: 'helpdesk:manage' },

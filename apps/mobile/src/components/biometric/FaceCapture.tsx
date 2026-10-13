@@ -16,19 +16,30 @@ import {
 import * as FaceDetector from 'expo-face-detector';
 import { FaceFeature, Point } from 'expo-face-detector';
 import { Ionicons } from '@expo/vector-icons';
+import { attendanceApi } from '@/lib/api';
+
+type LivenessAction = 'BLINK' | 'TURN_HEAD';
 
 interface FaceCaptureProps {
-  onCapture: (embedding: number[], quality: number) => Promise<void>;
+  onCapture: (embedding: number[], quality: number, livenessToken?: string) => Promise<void>;
   onCancel: () => void;
   title?: string;
   subtitle?: string;
+  /** Ambil tantangan liveness dulu sebelum capture (anti photo-spoof). */
+  requireLiveness?: boolean;
 }
+
+const ACTION_LABEL: Record<LivenessAction, string> = {
+  BLINK: 'Kedipkan mata Anda sekali',
+  TURN_HEAD: 'Putar kepala perlahan ke kiri atau kanan',
+};
 
 export default function FaceCapture({
   onCapture,
   onCancel,
   title = 'Verifikasi Wajah',
   subtitle = 'Arahkan wajah ke dalam frame',
+  requireLiveness = false,
 }: FaceCaptureProps) {
   const [hasPermission, setHasPermission] = useState(false);
   const [cameraType, setCameraType] = useState<CameraType>('front');
@@ -37,6 +48,19 @@ export default function FaceCapture({
   const [quality, setQuality] = useState(0);
   const [captured, setCaptured] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Liveness challenge state
+  const [challenge, setChallenge] = useState<{ challengeId: string; actions: LivenessAction[] } | null>(null);
+  const [actionIndex, setActionIndex] = useState(0);
+  const [livenessToken, setLivenessToken] = useState<string | null>(null);
+  const [livenessBusy, setLivenessBusy] = useState(false);
+  const eventsRef = useRef<Array<{ action: LivenessAction; at: number }>>([]);
+  const eyesClosedRef = useRef(false);
+  const actionIndexRef = useRef(0);
+  const livenessTokenRef = useRef<string | null>(null);
+  // Refs agar loop deteksi (useCallback) tidak membaca state yang sudah stale.
+  const challengeRef = useRef<{ challengeId: string; actions: LivenessAction[] } | null>(null);
+  const livenessBusyRef = useRef(false);
 
   const cameraRef = useRef<Camera>(null);
   const faceDetectorRef = useRef<FaceDetector.FaceDetector | null>(null);
@@ -56,6 +80,68 @@ export default function FaceCapture({
       }
     };
   }, []);
+
+  // Ambil tantangan liveness saat mount (jika diminta).
+  useEffect(() => {
+    if (!requireLiveness) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await attendanceApi.createLivenessChallenge();
+        if (!cancelled) {
+          const ch = { challengeId: res.challengeId, actions: res.actions };
+          setChallenge(ch);
+          challengeRef.current = ch;
+          setActionIndex(0);
+          actionIndexRef.current = 0;
+        }
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Gagal memuat tantangan liveness');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [requireLiveness]);
+
+  /** Tandai satu gerakan selesai; saat semua selesai → tukar jadi token. */
+  const completeAction = async (action: LivenessAction) => {
+    const ch = challengeRef.current;
+    if (!ch || livenessTokenRef.current || livenessBusyRef.current) return;
+    if (ch.actions[actionIndexRef.current] !== action) return;
+    eventsRef.current.push({ action, at: Date.now() });
+    const next = actionIndexRef.current + 1;
+    actionIndexRef.current = next;
+    setActionIndex(next);
+    if (next < ch.actions.length) return;
+
+    livenessBusyRef.current = true;
+    setLivenessBusy(true);
+    try {
+      const res = await attendanceApi.verifyLiveness({
+        challengeId: ch.challengeId,
+        events: eventsRef.current,
+      });
+      livenessTokenRef.current = res.token;
+      setLivenessToken(res.token);
+    } catch (err: any) {
+      // Challenge gagal (mis. terlalu cepat) — minta challenge baru dan ulangi.
+      eventsRef.current = [];
+      actionIndexRef.current = 0;
+      setActionIndex(0);
+      try {
+        const fresh = await attendanceApi.createLivenessChallenge();
+        const nextCh = { challengeId: fresh.challengeId, actions: fresh.actions };
+        setChallenge(nextCh);
+        challengeRef.current = nextCh;
+      } catch {
+        setError(err?.message || 'Liveness gagal — coba lagi');
+      }
+    } finally {
+      livenessBusyRef.current = false;
+      setLivenessBusy(false);
+    }
+  };
 
   const requestCameraPermission = async () => {
     try {
@@ -128,11 +214,17 @@ export default function FaceCapture({
         setFaceDetected(true);
         setQuality(faceQuality);
 
-        // Auto-capture when quality is good
-        if (faceQuality > 0.7 && !captured) {
+        // Evaluasi gerakan liveness pada frame ini (sebelum capture).
+        if (requireLiveness && challengeRef.current && !livenessTokenRef.current && !livenessBusyRef.current) {
+          evaluateLivenessGesture(face);
+        }
+
+        // Auto-capture when quality is good (dan liveness selesai bila diminta).
+        const livenessDone = !requireLiveness || !!livenessTokenRef.current;
+        if (faceQuality > 0.7 && !captured && livenessDone) {
           setCaptured(true);
           const embedding = generateEmbedding(face);
-          await onCapture(embedding, faceQuality);
+          await onCapture(embedding, faceQuality, livenessTokenRef.current ?? undefined);
         }
       } else {
         setFaceDetected(false);
@@ -162,6 +254,35 @@ export default function FaceCapture({
       }
     };
   }, [hasPermission, captured, detectFaces]);
+
+  /**
+   * Deteksi gerakan liveness dari klasifikasi wajah:
+   * - BLINK: kedua mata tertutup lalu terbuka lagi.
+   * - TURN_HEAD: yaw melewati ambang ±12°.
+   * Saat urutan tantangan selesai → tukar jadi token via completeAction().
+   */
+  const evaluateLivenessGesture = (face: FaceFeature) => {
+    const ch = challengeRef.current;
+    const expected = ch?.actions[actionIndexRef.current];
+    if (!expected || livenessBusyRef.current) return;
+
+    if (expected === 'BLINK') {
+      const leftClosed = (face.leftEyeOpenProbability ?? 1) < 0.3;
+      const rightClosed = (face.rightEyeOpenProbability ?? 1) < 0.3;
+      if (leftClosed || rightClosed) {
+        eyesClosedRef.current = true;
+      } else if (eyesClosedRef.current) {
+        // mata terbuka kembali setelah tertutup → blink terdeteksi
+        eyesClosedRef.current = false;
+        void completeAction('BLINK');
+      }
+    } else if (expected === 'TURN_HEAD') {
+      const yaw = Math.abs(face.yawAngle ?? 0);
+      if (yaw >= 12) {
+        void completeAction('TURN_HEAD');
+      }
+    }
+  };
 
   const calculateFaceQuality = (face: FaceFeature): number => {
     let score = 0;
@@ -304,10 +425,28 @@ export default function FaceCapture({
 
         <View style={styles.instructions}>
           <Text style={styles.instructionText}>{subtitle}</Text>
+          {requireLiveness && challenge && (
+            <View style={styles.livenessBox}>
+              <Ionicons
+                name={livenessToken ? 'shield-checkmark' : 'walk-outline'}
+                size={18}
+                color={livenessToken ? '#34d399' : '#fbbf24'}
+              />
+              <Text style={styles.livenessText}>
+                {livenessToken
+                  ? 'Liveness terverifikasi ✓'
+                  : livenessBusy
+                    ? 'Memverifikasi gerakan…'
+                    : `Liveness (${actionIndex + 1}/${challenge.actions.length}): ${ACTION_LABEL[challenge.actions[actionIndex]] ?? ''}`}
+              </Text>
+            </View>
+          )}
           <View style={styles.instructionList}>
             <Text style={styles.instructionItem}>• Posisikan wajah di dalam kotak</Text>
             <Text style={styles.instructionItem}>• Pastikan pencahayaan cukup</Text>
-            <Text style={styles.instructionItem}>• Lepaskan kacamata jika memungkinkan</Text>
+            {requireLiveness && (
+              <Text style={styles.instructionItem}>• Selesaikan gerakan liveness lebih dulu</Text>
+            )}
             <Text style={styles.instructionItem}>• Tatap kamera dengan wajah lurus</Text>
           </View>
         </View>
@@ -337,6 +476,11 @@ export default function FaceCapture({
               ]}
               onPress={async () => {
                 if (!faceDetected) return;
+                const livenessOk = !requireLiveness || !!livenessTokenRef.current;
+                if (!livenessOk) {
+                  setError('Selesaikan tantangan liveness terlebih dahulu');
+                  return;
+                }
                 const image = await cameraRef.current?.takePictureAsync({
                   quality: 0.9,
                   base64: true,
@@ -349,7 +493,7 @@ export default function FaceCapture({
                     const embedding = generateEmbedding(faces[0]);
                     const q = calculateFaceQuality(faces[0]);
                     setCaptured(true);
-                    await onCapture(embedding, q);
+                    await onCapture(embedding, q, livenessTokenRef.current ?? undefined);
                   }
                 }
               }}
@@ -512,6 +656,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
     marginBottom: 12,
+  },
+  livenessBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  livenessText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '600',
   },
   instructionList: {
     gap: 6,

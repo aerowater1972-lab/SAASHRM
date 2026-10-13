@@ -16,7 +16,7 @@ interface BiometricState {
 
   checkEnrollmentStatus: () => Promise<void>;
   enrollFace: (embedding: number[], quality: number) => Promise<void>;
-  verifyFace: (embedding: number[]) => Promise<{ success: boolean; confidence?: number }>;
+  verifyFace: (embedding: number[], livenessToken?: string) => Promise<{ success: boolean; confidence?: number }>;
   clearEnrollment: () => Promise<void>;
   clearError: () => void;
   clearVerifyResult: () => void;
@@ -82,7 +82,7 @@ export const useBiometricStore = create<BiometricState>()(
         }
       },
 
-      verifyFace: async (embedding) => {
+      verifyFace: async (embedding, livenessToken?: string) => {
         set({ isVerifying: true, error: null, verifyResult: null });
         try {
           const storedEmbeddingStr = await SecureStore.getItemAsync('face_embedding');
@@ -99,7 +99,7 @@ export const useBiometricStore = create<BiometricState>()(
               message: similarity >= threshold ? 'Wajah dikenali' : 'Wajah tidak cocok',
             };
           } else {
-            const serverResult = await attendanceApi.verifyFace({ embedding });
+            const serverResult = await attendanceApi.verifyFace({ embedding, livenessToken });
             result = {
               success: serverResult.success,
               confidence: serverResult.confidence,

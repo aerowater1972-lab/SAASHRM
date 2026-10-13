@@ -83,10 +83,10 @@ export const useSyncStore = create<SyncState>()(
             // Process based on type
             switch (item.type) {
               case 'ATTENDANCE_CHECKIN':
-                await api.post('/attendance/check-in', item.payload);
+                await api.post('/attendance/clock-in', item.payload);
                 break;
               case 'ATTENDANCE_CHECKOUT':
-                await api.post('/attendance/check-out', item.payload);
+                await api.post('/attendance/clock-out', item.payload);
                 break;
               case 'LEAVE_REQUEST':
                 await api.post('/attendance/leave-requests', item.payload);

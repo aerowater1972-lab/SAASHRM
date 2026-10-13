@@ -14,6 +14,7 @@ import { ShiftService } from './services/shift.service';
 import { OvertimeService } from './services/overtime.service';
 import { LeaveService } from './services/leave.service';
 import { BiometricService } from './services/biometric.service';
+import { LivenessService } from './services/liveness.service';
 import { LiveTrackingService } from './services/live-tracking.service';
 import { ShiftRotationService } from './services/shift-rotation.service';
 import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adjustment.service';
@@ -37,6 +38,7 @@ import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adju
     OvertimeService,
     LeaveService,
     BiometricService,
+    LivenessService,
     LiveTrackingService,
     ShiftRotationService,
     PayrollAdjustmentService,
@@ -47,6 +49,7 @@ import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adju
     OvertimeService,
     LeaveService,
     BiometricService,
+    LivenessService,
     LiveTrackingService,
     ShiftRotationService,
   ],

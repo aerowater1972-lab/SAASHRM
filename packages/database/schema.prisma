@@ -93,6 +93,7 @@ model Tenant {
   compSalaryStructures       CompSalaryStructure[]
   compReviewCycles           CompReviewCycle[]
   compAdjustments            CompAdjustment[]
+  timesheetEntries           TimesheetEntry[]
 }
 
 model TenantEntity {
@@ -683,6 +684,8 @@ model Employee {
   forumMentionsReceived        ForumMention[]
   // Compensation Management (GAP-06)
   compAdjustments              CompAdjustment[]
+  // Timesheet (attendance x tasks) — gap parity Talenta
+  timesheetEntries             TimesheetEntry[]
 
   @@unique([tenantId, employeeId])
   @@unique([tenantId, email])
@@ -4682,6 +4685,7 @@ model Project {
   department Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   members    ProjectMember[]
   tasks      Task[]
+  timesheetEntries TimesheetEntry[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -4733,6 +4737,7 @@ model Task {
   comments  TaskComment[]
   blockedBy TaskDependency[] @relation("task_blocked_by")
   blocking  TaskDependency[] @relation("task_blocking")
+  timesheetEntries TimesheetEntry[]
 
   @@index([tenantId, status])
   @@index([tenantId, projectId])
@@ -4784,6 +4789,47 @@ enum TaskDependencyType {
   START_TO_START
   FINISH_TO_FINISH
 }
+
+// =======================================================================
+// TIMESHEET (attendance x tasks) — gap parity "Timesheet Management"
+// Satu baris per karyawan per hari per tugas; diagregasi jadi grid mingguan.
+// Terikat periode absensi/payroll: entri pada periode CLOSED/LOCKED dikunci.
+// =======================================================================
+enum TimesheetStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model TimesheetEntry {
+  id          String           @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  taskId      String?
+  projectId   String?
+  workDate    DateTime // date-only (midnight) hari kerja
+  hours       Decimal          @db.Decimal(5, 2)
+  description String?
+  billable    Boolean          @default(true)
+  status      TimesheetStatus  @default(DRAFT)
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, taskId, workDate])
+  @@index([tenantId, workDate])
+  @@index([tenantId, employeeId, workDate])
+  @@index([tenantId, projectId, workDate])
+  @@index([taskId])
+}
+
 
 // =======================================================================
 // INTERNAL COMMUNICATION HUB / FORUM (GAP-03)

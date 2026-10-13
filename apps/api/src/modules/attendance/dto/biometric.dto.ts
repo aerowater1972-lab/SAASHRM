@@ -28,6 +28,13 @@ export class VerifyFaceDto {
   @IsArray()
   @IsNumber({}, { each: true })
   embedding!: number[];
+
+  @ApiPropertyOptional({
+    description: 'Liveness token dari POST attendance/biometric/liveness/verify',
+  })
+  @IsOptional()
+  @IsString()
+  livenessToken?: string;
 }
 
 export class AdminEnrollBiometricDto {

@@ -10,6 +10,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 import { EventBusService } from '@modules/shared/events/event-bus.service';
 import { OvertimeService } from './overtime.service';
 import { BiometricService } from './biometric.service';
+import { LivenessService } from './liveness.service';
 import { AttendanceStatus } from '@prisma/client';
 
 describe('AttendanceService', () => {
@@ -80,6 +81,12 @@ describe('AttendanceService', () => {
     verifyFace: jest.fn(),
   };
 
+  const mockLivenessService = {
+    assertToken: jest.fn(),
+    createChallenge: jest.fn(),
+    verifyChallenge: jest.fn(),
+  };
+
   const mockConfig = {
     get: jest.fn((key: string, defaultValue?: any) => defaultValue),
   };
@@ -110,6 +117,7 @@ describe('AttendanceService', () => {
         { provide: EventBusService, useValue: mockEventBus },
         { provide: OvertimeService, useValue: mockOvertimeService },
         { provide: BiometricService, useValue: mockBiometricService },
+        { provide: LivenessService, useValue: mockLivenessService },
       ],
     }).compile();
 

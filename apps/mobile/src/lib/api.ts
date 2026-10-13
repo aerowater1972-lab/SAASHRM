@@ -207,7 +207,9 @@ export const attendanceApi = {
     photo?: string;
     method: 'FACE' | 'GPS' | 'MANUAL';
     shiftId?: string;
-  }) => api.post<{ record: any }>('/attendance/check-in', data),
+    embedding?: number[];
+    livenessToken?: string;
+  }) => api.post<{ record: any }>('/attendance/clock-in', data),
 
   checkOut: (data: {
     latitude: number;
@@ -216,7 +218,9 @@ export const attendanceApi = {
     address?: string;
     photo?: string;
     method: 'FACE' | 'GPS' | 'MANUAL';
-  }) => api.post<{ record: any }>('/attendance/check-out', data),
+    embedding?: number[];
+    livenessToken?: string;
+  }) => api.post<{ record: any }>('/attendance/clock-out', data),
 
   getTodayRecord: () =>
     api.get<{ record: any }>('/attendance/today'),
@@ -296,11 +300,26 @@ export const attendanceApi = {
   enrollFace: (data: { embedding: number[]; quality: number }) =>
     api.post('/attendance/biometric/enroll', data),
 
-  verifyFace: (data: { embedding: number[] }) =>
+  verifyFace: (data: { embedding: number[]; livenessToken?: string }) =>
     api.post('/attendance/biometric/verify', data),
 
   getBiometricStatus: () =>
     api.get<{ enrolled: boolean; enrolledAt?: string }>('/attendance/biometric/status'),
+
+  // Liveness challenge (anti photo-spoof) — wajib sebelum verify/clock-in FACE.
+  createLivenessChallenge: () =>
+    api.post<{ challengeId: string; actions: ('BLINK' | 'TURN_HEAD')[]; expiresAt: string }>(
+      '/attendance/biometric/liveness/challenge',
+    ),
+
+  verifyLiveness: (data: {
+    challengeId: string;
+    events: Array<{ action: 'BLINK' | 'TURN_HEAD'; at: number }>;
+  }) =>
+    api.post<{ token: string; expiresAt: string; actions: string[] }>(
+      '/attendance/biometric/liveness/verify',
+      data,
+    ),
 };
 
 // Employee API
