@@ -368,33 +368,41 @@ describe('AttendanceService', () => {
 
   describe('clockOut overtime auto-generation (FR-11/BR-06)', () => {
     it('should reconcile overtime when eligible overtime exceeds the threshold', async () => {
-      const shift = {
-        id: 'shift-1',
-        startTime: '00:00',
-        endTime: '00:00',
-        overtimeBeforeMinutes: 0,
-        overtimeAfterMinutes: 0,
-      };
-      const clockIn = new Date();
-      clockIn.setHours(0, 0, 0, 0);
+      // Freeze time at noon: this test is time-of-day dependent (clock-in at
+      // 00:00 + elapsed time ≥ 30 min), so running the suite after midnight
+      // used to make it flaky.
+      jest.useFakeTimers({ now: new Date('2026-10-13T12:00:00') });
+      try {
+        const shift = {
+          id: 'shift-1',
+          startTime: '00:00',
+          endTime: '00:00',
+          overtimeBeforeMinutes: 0,
+          overtimeAfterMinutes: 0,
+        };
+        const clockIn = new Date();
+        clockIn.setHours(0, 0, 0, 0);
 
-      mockPrisma.attendanceRecord.findUnique.mockResolvedValue({
-        ...baseRecord,
-        clockIn,
-        clockOut: null,
-        shiftId: 'shift-1',
-      });
-      mockPrisma.shift.findUnique.mockResolvedValue(shift);
-      mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, clockOut: new Date() });
+        mockPrisma.attendanceRecord.findUnique.mockResolvedValue({
+          ...baseRecord,
+          clockIn,
+          clockOut: null,
+          shiftId: 'shift-1',
+        });
+        mockPrisma.shift.findUnique.mockResolvedValue(shift);
+        mockPrisma.attendanceRecord.update.mockResolvedValue({ ...baseRecord, clockOut: new Date() });
 
-      await service.clockOut('default', 'emp-1', { method: 'GPS' } as any);
+        await service.clockOut('default', 'emp-1', { method: 'GPS' } as any);
 
-      expect(mockOvertimeService.reconcile).toHaveBeenCalledTimes(1);
-      const [tenantId, employeeId, , eligibleMinutes] =
-        mockOvertimeService.reconcile.mock.calls[0];
-      expect(tenantId).toBe('default');
-      expect(employeeId).toBe('emp-1');
-      expect(eligibleMinutes).toBeGreaterThanOrEqual(30);
+        expect(mockOvertimeService.reconcile).toHaveBeenCalledTimes(1);
+        const [tenantId, employeeId, , eligibleMinutes] =
+          mockOvertimeService.reconcile.mock.calls[0];
+        expect(tenantId).toBe('default');
+        expect(employeeId).toBe('emp-1');
+        expect(eligibleMinutes).toBeGreaterThanOrEqual(30);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('should not reconcile overtime when none is accrued', async () => {
