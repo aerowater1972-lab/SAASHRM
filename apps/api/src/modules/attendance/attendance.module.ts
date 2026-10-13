@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EmployeeModule } from '@modules/employee/employee.module';
+import { IntegrationsModule } from '@modules/integrations/integrations.module';
 import { AttendanceController } from './controllers/attendance.controller';
 import { ShiftController } from './controllers/shift.controller';
 import { OvertimeController } from './controllers/overtime.controller';
@@ -18,7 +19,7 @@ import { ShiftRotationService } from './services/shift-rotation.service';
 import { PayrollAdjustmentService } from '@modules/payroll/services/payroll-adjustment.service';
 
 @Module({
-  imports: [EmployeeModule],
+  imports: [EmployeeModule, IntegrationsModule],
   controllers: [
     AttendanceController,
     ShiftController,

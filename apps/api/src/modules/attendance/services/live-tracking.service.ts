@@ -1,14 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional, Logger } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { AuditService } from '@modules/admin/services/audit.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NotificationService } from '@modules/shared/notification/notification.service';
+import { MailService } from '@modules/integrations/services/mail.service';
 import { LocationPingDto, CreateFieldTerritoryDto, UpdateFieldTerritoryDto, UpdateLiveTrackingSettingsDto } from '../dto/live-tracking.dto';
 
 @Injectable()
 export class LiveTrackingService {
+  private readonly logger = new Logger(LiveTrackingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Optional() private readonly notification?: NotificationService,
+    @Optional() private readonly mail?: MailService,
   ) {}
 
   // Location Pings
@@ -187,10 +193,41 @@ export class LiveTrackingService {
     return { deleted: true };
   }
 
+  /** Daftar pelanggaran wilayah (antrian moderasi) untuk dashboard admin. */
+  async listViolations(
+    tenantId: string,
+    filters: { employeeId?: string; notified?: boolean; startDate?: string; endDate?: string; page?: number; limit?: number } = {},
+  ) {
+    const { employeeId, notified, startDate, endDate, page = 1, limit = 50 } = filters;
+    const where: any = { tenantId };
+    if (employeeId) where.employeeId = employeeId;
+    if (typeof notified === 'boolean') where.notified = notified;
+    if (startDate || endDate) {
+      where.recordedAt = {};
+      if (startDate) where.recordedAt.gte = new Date(startDate);
+      if (endDate) where.recordedAt.lte = new Date(endDate);
+    }
+    const [data, total] = await Promise.all([
+      this.prisma.territoryViolation.findMany({
+        where,
+        orderBy: { recordedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: Math.min(200, Math.max(1, limit)),
+        include: {
+          employee: { select: { id: true, fullName: true, employeeId: true } },
+          territory: { select: { id: true, territoryName: true } },
+        },
+      }),
+      this.prisma.territoryViolation.count({ where }),
+    ]);
+    return { data, total, page, pageSize: Math.min(200, Math.max(1, limit)) };
+  }
+
   // Territory Violation Check
   private async checkTerritoryViolation(tenantId: string, employeeId: string, lat: number, lng: number) {
     const territory = await this.prisma.fieldTerritory.findFirst({
       where: { employeeId, tenantId },
+      include: { employee: { select: { id: true, fullName: true, employeeId: true } } },
     });
 
     if (!territory) return; // No territory assigned
@@ -199,18 +236,79 @@ export class LiveTrackingService {
     const inside = this.isPointInPolygon([lng, lat], boundary);
 
     if (!inside) {
-      // Log violation for manager notification
-      await this.prisma.territoryViolation.create({
+      const distanceMeters = this.calculateDistanceToPolygon([lng, lat], boundary);
+      // Log violation, then notify the responsible HR/manager (best-effort).
+      const violation = await this.prisma.territoryViolation.create({
         data: {
           tenantId,
           employeeId,
           territoryId: territory.id,
           lat,
           lng,
-          distanceMeters: this.calculateDistanceToPolygon([lng, lat], boundary),
+          distanceMeters,
           recordedAt: new Date(),
         },
       });
+      await this.notifyTerritoryViolation(tenantId, {
+        employeeName: territory.employee?.fullName ?? employeeId,
+        territoryName: territory.territoryName,
+        distanceMeters,
+        lat,
+        lng,
+        violationId: violation.id,
+      });
+    }
+  }
+
+  /**
+   * Kirim notifikasi pelanggaran wilayah ke HR admin (in-app + email).
+   * Best-effort: kegagalan kirim TIDAK menggagalkan pencatatan ping/violation.
+   * Ditandai `notified = true` pada baris violation bila pengiriman berhasil.
+   */
+  private async notifyTerritoryViolation(
+    tenantId: string,
+    info: { employeeName: string; territoryName: string; distanceMeters: number; lat: number; lng: number; violationId: string },
+  ) {
+    const title = 'Pelanggaran wilayah kerja';
+    const body =
+      `${info.employeeName} berada ±${Math.round(info.distanceMeters)} m di luar wilayah "${info.territoryName}". ` +
+      `Lokasi: ${info.lat.toFixed(5)}, ${info.lng.toFixed(5)}.`;
+    try {
+      // HR admin = user dengan permission attendance / live-tracking:read.
+      const recipients = await (this.prisma as any).user.findMany({
+        where: {
+          tenantId,
+          userRoles: { some: { role: { rolePermissions: { some: { permission: { module: 'attendance', action: 'live-tracking:read' } } } } } },
+        },
+        select: { id: true, email: true },
+      }).catch(() => []);
+
+      let notifiedAny = false;
+      for (const u of recipients as Array<{ id: string; email?: string | null }>) {
+        if (this.notification) {
+          await this.notification.send({
+            tenantId,
+            userId: u.id,
+            templateKey: 'attendance.territory.violation',
+            title,
+            body,
+            payload: { violationId: info.violationId, territoryName: info.territoryName, distanceMeters: info.distanceMeters },
+          });
+          notifiedAny = true;
+        }
+        if (this.mail && u.email) {
+          await this.mail.sendMail({ to: u.email, subject: `[Live Tracking] ${title}`, text: body });
+        }
+      }
+      if (notifiedAny) {
+        await this.prisma.territoryViolation.update({
+          where: { id: info.violationId },
+          data: { notified: true },
+        });
+        this.logger.log(`Pelanggaran wilayah dinotifikasi (${recipients.length} penerima): ${info.employeeName}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Notifikasi pelanggaran wilayah gagal (${info.violationId}): ${(err as Error).message}`);
     }
   }
 

@@ -485,3 +485,27 @@ export const forumApi = {
   reportThread: (id: string, reason: string) =>
     api.post(`/forum/threads/${id}/report`, { reason }),
 };
+
+// Live Tracking API — GPS ping untuk karyawan lapangan
+export interface LiveFieldWorker {
+  id: string;
+  fullName: string;
+  employeeId: string;
+  profilePicture?: string | null;
+  lastPing?: { lat: number; lng: number; recordedAt: string; accuracyMeters?: number | null };
+}
+
+export const liveTrackingApi = {
+  /** Kirim satu ping lokasi (hanya untuk karyawan ber-flag field worker & aktif). */
+  recordPing: (data: { lat: number; lng: number; accuracyMeters?: number; recordedAt?: string }) =>
+    api.post('/attendance/live-tracking/ping', data),
+
+  getSettings: () => api.get<any>('/attendance/live-tracking/settings'),
+
+  getMyPings: (params?: { startDate?: string; endDate?: string; limit?: number }) =>
+    api.get<{ data: any[]; total: number }>('/attendance/live-tracking/pings', {
+      ...(params ?? {}),
+      // employeeId diambil server-side dari token (CurrentUser) bila didukung;
+      // bila endpoint mewajibkan employeeId, isi dari profil user.
+    } as Record<string, any>),
+};

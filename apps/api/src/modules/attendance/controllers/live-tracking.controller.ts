@@ -64,6 +64,22 @@ export class LiveTrackingController {
     return this.service.getFieldWorkersLive(tenantId, managerId);
   }
 
+  @Get('violations')
+  @Permissions('attendance:live-tracking:read')
+  @ApiOperation({ summary: 'Antrian pelanggaran wilayah (dashboard admin)' })
+  @ApiQuery({ name: 'employeeId', required: false })
+  @ApiQuery({ name: 'notified', required: false, type: Boolean })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listViolations(
+    @TenantId() tenantId: string,
+    @Query() filters: { employeeId?: string; notified?: boolean; startDate?: string; endDate?: string; page?: number; limit?: number },
+  ) {
+    return this.service.listViolations(tenantId, filters);
+  }
+
   @Post('territories')
   @Permissions('attendance:territory:create')
   @ApiOperation({ summary: 'Create field territory for employee' })

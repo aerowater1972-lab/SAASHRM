@@ -26,6 +26,7 @@ import { colors } from '@/lib/theme';
 import { AttendanceRecord, LocationPoint } from '@/types/api';
 import FaceCapture from '@/components/biometric/FaceCapture';
 import GPSLocation from '@/components/location/GPSLocation';
+import { useLocationPing } from '@/hooks/useLocationPing';
 
 const { primary, primaryLight, success, warning, danger, background, card, text, textSecondary, border } = colors;
 
@@ -54,6 +55,12 @@ export default function AttendanceScreen() {
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
   const [cameraPermission, setCameraPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+
+  // Live Tracking foreground ping — aktif hanya untuk field worker & saat izin lokasi ada.
+  const isFieldWorker = Boolean((user as any)?.isFieldWorker);
+  const { lastPingAt, sending: pingSending, error: pingError } = useLocationPing(
+    isFieldWorker && locationPermission === 'granted',
+  );
 
   const loadData = useCallback(async () => {
     await Promise.all([
@@ -209,6 +216,28 @@ export default function AttendanceScreen() {
           )}
         </View>
       </View>
+
+      {/* Live Tracking Status (field worker only) */}
+      {isFieldWorker && (
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="navigate" size={20} color={primary} />
+            <Text style={styles.sectionTitle}>Live Tracking</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}>
+            <View style={[styles.locationDot, { backgroundColor: pingSending ? warning : (lastPingAt ? '#059669' : '#9ca3af') }]} />
+            <Text style={{ color: textSecondary, fontSize: 13, flex: 1 }}>
+              {pingError
+                ? `Gagal mengirim lokasi: ${pingError}`
+                : pingSending
+                  ? 'Mengirim lokasi…'
+                  : lastPingAt
+                    ? `Lokasi terkirim ${new Date(lastPingAt).toLocaleTimeString('id-ID')}`
+                    : 'Menunggu pembaruan lokasi…'}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Location Status */}
       <View style={styles.sectionCard}>
