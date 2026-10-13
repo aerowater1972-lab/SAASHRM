@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { Permissions } from '@common/decorators/permissions.decorator';
@@ -39,6 +40,28 @@ export class FlipController {
     @Body() data: { remark?: string },
   ) {
     return this.flip.disbursePayrollRun(tenantId, runId, data?.remark);
+  }
+
+  @Get('disbursements')
+  @Permissions('payroll:run:read')
+  @ApiOperation({ summary: 'Status dashboard live: ringkasan + daftar disbursement (PD-05)' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter: DRAFT|PENDING|SUCCESS|FAILED|CANCELLED' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Jumlah item (1-200)', type: Number })
+  listDisbursements(
+    @TenantId() tenantId: string,
+    @Query() query: { status?: string; limit?: string },
+  ) {
+    return this.flip.listDisbursements(tenantId, {
+      status: query.status,
+      limit: query.limit ? Number(query.limit) : undefined,
+    });
+  }
+
+  @Post('disbursements/:id/retry')
+  @Permissions('payroll:run:approve')
+  @ApiOperation({ summary: 'Retry satu disbursement yang FAILED (capped FLIP_MAX_RETRIES, PD-04)' })
+  retry(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.flip.retryDisbursement(tenantId, id);
   }
 
   @Get('disbursements/:id/refresh')

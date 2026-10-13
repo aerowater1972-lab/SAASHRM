@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 
 describe('FlipService', () => {
   const mockPrisma: any = {
-    flipDisbursement: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+    flipDisbursement: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), groupBy: jest.fn(), create: jest.fn(), update: jest.fn() },
     payrollRunItem: { findMany: jest.fn() },
   };
 
@@ -72,5 +72,66 @@ describe('FlipService', () => {
     expect(res.total).toBe(1);
     expect(res.failed).toBe(1);
     expect(res.results[0].error).toContain('rekening');
+  });
+
+  // --- PD-05: status dashboard live ---
+  it('listDisbursements: mengembalikan ringkasan per status + item', async () => {
+    const svc = await makeService({});
+    mockPrisma.flipDisbursement.findMany.mockResolvedValue([{ id: 'd-1', status: 'SUCCESS' }]);
+    mockPrisma.flipDisbursement.groupBy.mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 2 }, _sum: { amount: 10_000_000 } },
+      { status: 'FAILED', _count: { _all: 1 }, _sum: { amount: 5_000_000 } },
+    ]);
+    const res: any = await svc.listDisbursements('t1', { limit: 10 });
+    expect(res.mode).toBe('DRY_RUN');
+    expect(res.summary.counts).toEqual({ SUCCESS: 2, FAILED: 1 });
+    expect(res.summary.totalAmount).toBe(15_000_000);
+    expect(res.items).toHaveLength(1);
+  });
+
+  // --- PD-04: retry manual ---
+  it('retryDisbursement: hanya FAILED & memperbarui attempts', async () => {
+    const svc = await makeService({});
+    mockPrisma.flipDisbursement.findFirst.mockResolvedValue({
+      id: 'd-1', tenantId: 't1', status: 'FAILED', attempts: 0,
+      idempotencyKey: 'k-1', bankCode: 'bca', accountNumber: '123', accountName: 'A',
+      amount: 5000, remark: 'Gaji', payrollRunId: null,
+    });
+    mockPrisma.flipDisbursement.findUnique.mockResolvedValue(null); // kunci retry belum ada
+    mockPrisma.flipDisbursement.create.mockImplementation((args: any) =>
+      Promise.resolve({ id: 'd-retry', ...args.data }),
+    );
+    const res: any = await svc.retryDisbursement('t1', 'd-1');
+    expect(mockPrisma.flipDisbursement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ idempotencyKey: 'retry:k-1:1' }),
+      }),
+    );
+    expect(mockPrisma.flipDisbursement.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { attempts: 1 } }),
+    );
+    expect(res.retry.id).toBe('d-retry');
+  });
+
+  it('retryDisbursement: menolak status non-FAILED & melebihi batas', async () => {
+    const svc = await makeService({});
+    mockPrisma.flipDisbursement.findFirst.mockResolvedValue({ id: 'd-2', status: 'PENDING', attempts: 0 });
+    await expect(svc.retryDisbursement('t1', 'd-2')).rejects.toThrow('FAILED');
+    mockPrisma.flipDisbursement.findFirst.mockResolvedValue({ id: 'd-3', status: 'FAILED', attempts: 99 });
+    await expect(svc.retryDisbursement('t1', 'd-3')).rejects.toThrow('Batas retry');
+  });
+
+  // --- PD-03: rekonsiliasi batch ---
+  it('reconcilePending: no-op saat DRY_RUN (uang tidak bergerak)', async () => {
+    const svc = await makeService({});
+    const res: any = await svc.reconcilePending();
+    expect(res).toEqual({ checked: 0, done: 0, failed: 0 });
+    expect(mockPrisma.flipDisbursement.findMany).not.toHaveBeenCalled();
+  });
+
+  it('autoRetryFailed: no-op saat DRY_RUN', async () => {
+    const svc = await makeService({});
+    const res: any = await svc.autoRetryFailed();
+    expect(res).toEqual({ retried: 0, skipped: 0 });
   });
 });

@@ -13,6 +13,7 @@ import { PrismaService } from '@common/prisma/prisma.service';
 export class EngagementSurveyModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EngagementSurveyModule.name);
   private reminderTimer?: ReturnType<typeof setInterval>;
+  private overdueTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly surveyService: EngagementSurveyService,
@@ -26,10 +27,21 @@ export class EngagementSurveyModule implements OnModuleInit, OnModuleDestroy {
       this.reminderTimer = setInterval(() => this.runReminderAllTenants(), 24 * 60 * 60 * 1000);
     }, 120_000);
     this.logger.log('Survey reminder scheduled (interval: 24h, initial delay: 120s)');
+
+    // QW-03: overdue action item reminders (interval 24 jam, delay awal 5 menit)
+    setTimeout(() => {
+      this.runOverdueActionItemsAllTenants();
+      this.overdueTimer = setInterval(
+        () => this.runOverdueActionItemsAllTenants(),
+        24 * 60 * 60 * 1000,
+      );
+    }, 300_000);
+    this.logger.log('Survey action item overdue reminder scheduled (interval: 24h, initial delay: 300s)');
   }
 
   onModuleDestroy() {
     if (this.reminderTimer) clearInterval(this.reminderTimer);
+    if (this.overdueTimer) clearInterval(this.overdueTimer);
   }
 
   private async runReminderAllTenants() {
@@ -46,6 +58,24 @@ export class EngagementSurveyModule implements OnModuleInit, OnModuleDestroy {
       }
     } catch (err) {
       this.logger.error(`Survey reminder job failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** QW-03: dispatch overdue action item reminders for every active tenant. */
+  private async runOverdueActionItemsAllTenants() {
+    try {
+      const tenants = await this.prisma.tenant.findMany({
+        where: { status: 'ACTIVE', deletedAt: null },
+        select: { id: true },
+      });
+      for (const t of tenants) {
+        const sent = await this.surveyService.sendOverdueReminders(t.id);
+        if (sent > 0) {
+          this.logger.log(`Survey action item overdue reminders [${t.id}]: ${sent} sent`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`Survey action item overdue job failed: ${(err as Error).message}`);
     }
   }
 }

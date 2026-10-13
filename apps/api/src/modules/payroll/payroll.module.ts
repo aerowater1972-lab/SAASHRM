@@ -25,6 +25,7 @@ import { BankTransferFormatterService } from './services/bank-transfer-formatter
 import { PayrollEventConsumer } from './services/payroll-event.consumer';
 import { RegulatorySyncService } from './services/regulatory-sync.service';
 import { FlipService } from './services/flip.service';
+import { FlipDisbursementCron } from './services/flip-disbursement.cron';
 import { IntegrationsModule } from '@modules/integrations/integrations.module';
 
 @Module({
@@ -57,6 +58,7 @@ import { IntegrationsModule } from '@modules/integrations/integrations.module';
     PayrollEventConsumer,
     BankTransferFormatterService,
     FlipService,
+    FlipDisbursementCron,
   ],
   exports: [
     ComponentService,

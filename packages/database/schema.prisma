@@ -81,6 +81,18 @@ model Tenant {
   helpdeskTickets            HelpdeskTicket[]
   helpdeskKbArticles         HelpdeskKbArticle[]
   ebupotSubmissions          EbupotSubmission[]
+  projects                   Project[]
+  tasks                      Task[]
+  taskComments               TaskComment[]
+  taskDependencies           TaskDependency[]
+  forumThreads               ForumThread[]
+  forumComments              ForumComment[]
+  forumReactions             ForumReaction[]
+  forumMentions              ForumMention[]
+  forumReports               ForumReport[]
+  compSalaryStructures       CompSalaryStructure[]
+  compReviewCycles           CompReviewCycle[]
+  compAdjustments            CompAdjustment[]
 }
 
 model TenantEntity {
@@ -155,6 +167,20 @@ model User {
   helpdeskKbArticlesCreated  HelpdeskKbArticle[]
   // e-Bupot / Coretax (GAP-05)
   ebupotSubmissionsCreated   EbupotSubmission[] @relation("ebupot_creator")
+  // Task & Project Management (GAP-02)
+  projectsOwned                Project[]           @relation("project_owner")
+  tasksReported                Task[]              @relation("task_reporter")
+  taskComments                 TaskComment[]
+  // Internal Communication Hub / Forum (GAP-03)
+  forumThreadsCreated          ForumThread[]
+  forumCommentsCreated         ForumComment[]
+  forumReactionsGiven          ForumReaction[]
+  forumReportsCreated          ForumReport[]        @relation("forum_reporter")
+  forumReportsReviewed         ForumReport[]        @relation("forum_reviewer")
+  // Compensation Management (GAP-06)
+  compReviewCyclesCreated      CompReviewCycle[]    @relation("comp_cycle_creator")
+  compReviewCyclesApproved     CompReviewCycle[]    @relation("comp_cycle_approver")
+  compAdjustmentsApproved      CompAdjustment[]     @relation("comp_adjustment_approver")
 
   @@unique([tenantId, email])
 }
@@ -650,6 +676,13 @@ model Employee {
   helpdeskTickets                HelpdeskTicket[]
   helpdeskComments               HelpdeskComment[]
   ebupotSubmissions              EbupotSubmission[]
+  // Task & Project Management (GAP-02)
+  projectMemberships           ProjectMember[]
+  tasksAssigned                Task[]                 @relation("task_assignee")
+  taskComments                 TaskComment[]
+  forumMentionsReceived        ForumMention[]
+  // Compensation Management (GAP-06)
+  compAdjustments              CompAdjustment[]
 
   @@unique([tenantId, employeeId])
   @@unique([tenantId, email])
@@ -781,6 +814,8 @@ model Department {
   employments             Employment[]
   documents               Document[]
   successionPlans         SuccessionPlan[]
+  projects                Project[]
+  forumThreads              ForumThread[]
 
   @@unique([tenantId, code])
 }
@@ -1690,6 +1725,31 @@ model Candidate {
   anonymizedAt DateTime? // set once PII has been anonymized/deleted
 
   applications Application[]
+  referrals    EmployeeReferral[]
+}
+
+model EmployeeReferral {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  referrerEmployeeId  String // employee who submitted the referral
+  referredCandidateId String? // linked Candidate record created for this referral
+  candidateName       String
+  candidateEmail      String
+  candidatePhone      String?
+  resumeUrl           String?
+  positionApplied     String?
+  notes               String?
+  bonusAmount         Decimal?      @db.Decimal(18, 2)
+  status              ReferralStatus @default(PENDING)
+  bonusPaidAt         DateTime? // set automatically when the referred candidate is hired
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  candidate Candidate? @relation(fields: [referredCandidateId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, referrerEmployeeId])
+  @@index([tenantId, candidateEmail])
 }
 
 model Application {
@@ -1893,6 +1953,7 @@ model FlipDisbursement {
   remark         String?
   status         FlipDisbursementStatus @default(DRAFT)
   dryRun         Boolean                @default(true)
+  attempts       Int                    @default(0) // jumlah retry (PD-04), max via FLIP_MAX_RETRIES
   rawResponse    Json?
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
@@ -3012,6 +3073,13 @@ enum CandidateStatus {
   BLACKLISTED
 }
 
+enum ReferralStatus {
+  PENDING
+  REVIEWING
+  HIRED
+  REJECTED
+}
+
 enum ApplicationStatus {
   NEW
   SCREENING
@@ -3321,6 +3389,10 @@ enum JobStatus {
   FAILED
   CANCELLED
 }
+
+// QW-01 — Scheduled Report: model & enum didefinisikan di bagian bawah file
+// (bagian "QW-01 — SCHEDULED REPORT"). Blok duplikat di sini dihapus agar
+// Prisma tidak menolak nama tipe yang kembar.
 
 // =======================================================================
 // EMPLOYEE RELATIONS & SAFETY MANAGEMENT
@@ -3990,15 +4062,22 @@ model SurveyActionItem {
   surveyId    String
   title       String
   description String?
-  assigneeId  String
+  assigneeId  String // User id of the action item owner
   dueDate     DateTime
   status      ActionStatus @default(PENDING)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  // QW-03: percent completion of the action plan (0-100). 100 auto-completes.
+  progress       Int       @default(0)
+  completedAt    DateTime? // set automatically when the item is COMPLETED
+  reminderSentAt DateTime? // last overdue reminder dispatched to the assignee
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
   survey EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
   @@index([surveyId, assigneeId])
+  @@index([assigneeId, status])
+  @@index([dueDate, status])
 }
 
 // =======================================================================
@@ -4536,5 +4615,498 @@ model EbupotSubmission {
   @@index([tenantId, status])
   @@index([tenantId, taxYear, taxMonth])
   @@index([employeeId])
+}
+
+
+// =======================================================================
+// TASK & PROJECT MANAGEMENT (GAP-02)
+// =======================================================================
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProjectMemberRole {
+  OWNER
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+enum ProjectTaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  BLOCKED
+}
+
+enum ProjectTaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Project {
+  id          String          @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String
+  description String?
+  status      ProjectStatus   @default(PLANNING)
+  priority    ProjectPriority @default(MEDIUM)
+  ownerUserId String
+  departmentId String?
+  startDate   DateTime?
+  endDate     DateTime?
+  color       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  owner      User            @relation("project_owner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  department Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  members    ProjectMember[]
+  tasks      Task[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([tenantId, ownerUserId])
+}
+
+model ProjectMember {
+  id         String            @id @default(uuid())
+  tenantId   String
+  projectId  String
+  employeeId String
+  role       ProjectMemberRole @default(MEMBER)
+  createdAt  DateTime          @default(now())
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, employeeId])
+  @@index([tenantId])
+  @@index([employeeId])
+}
+
+model Task {
+  id               String        @id @default(uuid())
+  tenantId         String
+  projectId        String?
+  title            String
+  description      String?
+  status           ProjectTaskStatus    @default(TODO)
+  priority         ProjectTaskPriority  @default(MEDIUM)
+  assigneeEmployeeId String?
+  reporterUserId   String
+  dueDate          DateTime?
+  estimateHours    Decimal?      @db.Decimal(8, 2)
+  loggedHours      Decimal?      @db.Decimal(8, 2)
+  tags             String[]      @default([])
+  parentTaskId     String?
+  completedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  project   Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee  Employee?     @relation("task_assignee", fields: [assigneeEmployeeId], references: [id], onDelete: SetNull)
+  reporter  User          @relation("task_reporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  parent    Task?         @relation("task_subtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks  Task[]        @relation("task_subtasks")
+  comments  TaskComment[]
+  blockedBy TaskDependency[] @relation("task_blocked_by")
+  blocking  TaskDependency[] @relation("task_blocking")
+
+  @@index([tenantId, status])
+  @@index([tenantId, projectId])
+  @@index([tenantId, assigneeEmployeeId])
+  @@index([tenantId, reporterUserId])
+  @@index([assigneeEmployeeId])
+  @@index([parentTaskId])
+  @@index([tenantId, dueDate])
+}
+
+model TaskComment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  taskId           String
+  authorEmployeeId String?
+  authorUserId     String?
+  content          String
+  createdAt        DateTime @default(now())
+
+  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  task           Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorEmployee Employee?  @relation(fields: [authorEmployeeId], references: [id], onDelete: SetNull)
+  authorUser     User?      @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@index([tenantId])
+}
+
+// Task dependency graph (TM-04 Gantt): task tidak bisa DONE sebelum blocker DONE.
+model TaskDependency {
+  id              String             @id @default(uuid())
+  tenantId        String
+  taskId          String
+  dependsOnTaskId String
+  type            TaskDependencyType @default(FINISH_TO_START)
+  createdAt       DateTime           @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  task      Task   @relation("task_blocked_by", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn Task   @relation("task_blocking", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, taskId, dependsOnTaskId])
+  @@index([tenantId, taskId])
+  @@index([dependsOnTaskId])
+}
+
+enum TaskDependencyType {
+  FINISH_TO_START
+  START_TO_START
+  FINISH_TO_FINISH
+}
+
+// =======================================================================
+// INTERNAL COMMUNICATION HUB / FORUM (GAP-03)
+// Spesifikasi: gaps-audit/03-deep-dive.md (GAP-03)
+// feed: timeline pinned + chronological, filter department/topic/type,
+// rich content, reactions, nested comments (maks 3 level).
+// Thread types: ANNOUNCEMENT (admin-only create), DISCUSSION, POLL, EVENT.
+// Moderasi: pin/lock (admin), report queue, delete/edit (admin atau author).
+// =======================================================================
+
+model ForumThread {
+  id             String            @id @default(uuid())
+  tenantId       String
+  authorUserId   String
+  type           ForumThreadType   @default(DISCUSSION)
+  title          String?
+  content        String            @db.Text
+  attachments    Json              @default("[]")
+  visibility     ForumVisibility   @default(PUBLIC)
+  departmentId   String?
+  pollOptions    Json?
+  eventDate      DateTime?
+  eventLocation  String?
+  isPinned       Boolean           @default(false)
+  isLocked       Boolean           @default(false)
+  viewCount      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  author     User        @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  comments   ForumComment[]
+  reactions  ForumReaction[]
+  mentions   ForumMention[]
+  reports    ForumReport[]
+
+  @@index([tenantId, isPinned(sort: Desc), createdAt(sort: Desc)])
+  @@index([tenantId, type])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, authorUserId])
+}
+
+model ForumComment {
+  id              String   @id @default(uuid())
+  tenantId        String
+  threadId        String
+  parentCommentId String?
+  authorUserId    String
+  content         String   @db.Text
+  attachments     Json     @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  thread   ForumThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  parent   ForumComment? @relation("forum_nested_comments", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  replies  ForumComment[] @relation("forum_nested_comments")
+  reactions ForumReaction[]
+  author   User          @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  mentions ForumMention[]
+  reports  ForumReport[]
+
+  @@index([threadId, createdAt])
+  @@index([tenantId])
+  @@index([parentCommentId])
+}
+
+model ForumReaction {
+  id           String            @id @default(uuid())
+  tenantId     String
+  targetType   ForumTargetType
+  threadId     String?
+  commentId    String?
+  userId       String
+  reactionType ForumReactionType @default(LIKE)
+  createdAt    DateTime          @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  thread  ForumThread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  comment ForumComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([targetType, threadId, commentId, userId, reactionType])
+  @@index([tenantId, targetType])
+  @@index([threadId])
+  @@index([commentId])
+}
+
+model ForumMention {
+  id               String   @id @default(uuid())
+  tenantId         String
+  threadId         String?
+  commentId        String?
+  mentionedUserId  String?
+  mentionedEmployeeId String?
+  isRead           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  thread            ForumThread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  comment           ForumComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedEmployee Employee?    @relation(fields: [mentionedEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, mentionedEmployeeId, isRead])
+  @@index([threadId])
+  @@index([commentId])
+}
+
+model ForumReport {
+  id         String            @id @default(uuid())
+  tenantId   String
+  targetType ForumTargetType
+  threadId   String?
+  commentId  String?
+  reportedBy String
+  reason     String            @db.Text
+  status     ForumReportStatus @default(PENDING)
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime          @default(now())
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  thread   ForumThread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  comment  ForumComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter User         @relation("forum_reporter", fields: [reportedBy], references: [id], onDelete: Restrict)
+  reviewer User?        @relation("forum_reviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@index([threadId])
+  @@index([commentId])
+}
+
+enum ForumThreadType {
+  ANNOUNCEMENT
+  DISCUSSION
+  POLL
+  EVENT
+}
+
+enum ForumVisibility {
+  PUBLIC
+  DEPARTMENT
+  ROLE
+}
+
+enum ForumTargetType {
+  THREAD
+  COMMENT
+}
+
+enum ForumReactionType {
+  LIKE
+  LOVE
+  CELEBRATE
+  INSIGHTFUL
+  CURIOUS
+}
+
+enum ForumReportStatus {
+  PENDING
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
+// =======================================================================
+// COMPENSATION MANAGEMENT (GAP-06 / Epic 2.1 roadmap)
+// Spesifikasi: gaps-audit/03-deep-dive.md (GAP-06), tasks: 02-roadmap.md CM-01..CM-06
+// Salary structure builder (grade + job family + min/mid/max), review cycle
+// (bulk/individual adjustment + approval), internal equity analysis
+// (compa-ratio), total rewards view, sync approved adjustment ke payroll.
+// =======================================================================
+
+model CompSalaryStructure {
+  id            String   @id @default(uuid())
+  tenantId      String
+  jobFamily     String
+  grade         String
+  minSalary     Decimal  @db.Decimal(18, 2)
+  midSalary     Decimal  @db.Decimal(18, 2)
+  maxSalary     Decimal  @db.Decimal(18, 2)
+  currency      String   @default("IDR")
+  effectiveDate DateTime @db.Date
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, jobFamily, grade, effectiveDate])
+  @@index([tenantId, jobFamily])
+  @@index([tenantId, effectiveDate])
+}
+
+model CompReviewCycle {
+  id               String              @id @default(uuid())
+  tenantId         String
+  name             String
+  type             CompReviewCycleType @default(ANNUAL)
+  status           CompReviewStatus    @default(DRAFT)
+  effectiveDate    DateTime            @db.Date
+  totalBudget      Decimal?            @db.Decimal(18, 2)
+  allocatedBudget  Decimal             @default(0) @db.Decimal(18, 2)
+  createdBy        String
+  approvedBy       String?
+  createdAt        DateTime            @default(now())
+  approvedAt       DateTime?
+  deletedAt        DateTime?
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  creator    User          @relation("comp_cycle_creator", fields: [createdBy], references: [id], onDelete: Restrict)
+  approver   User?         @relation("comp_cycle_approver", fields: [approvedBy], references: [id], onDelete: SetNull)
+  adjustments CompAdjustment[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, effectiveDate])
+}
+
+model CompAdjustment {
+  id                   String                @id @default(uuid())
+  tenantId             String
+  reviewCycleId        String?
+  employeeId           String
+  currentSalary        Decimal               @db.Decimal(18, 2)
+  proposedSalary       Decimal               @db.Decimal(18, 2)
+  adjustmentType       CompAdjustmentType    @default(MERIT)
+  adjustmentPercentage Decimal?              @db.Decimal(7, 2)
+  reason               String?               @db.Text
+  status               CompAdjustmentStatus  @default(PENDING)
+  approvedBy           String?
+  approvedAt           DateTime?
+  effectiveDate        DateTime              @db.Date
+  syncedToPayroll      Boolean               @default(false)
+  syncedAt             DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  reviewCycle CompReviewCycle? @relation(fields: [reviewCycleId], references: [id], onDelete: SetNull)
+  employee    Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  approver    User?            @relation("comp_adjustment_approver", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([reviewCycleId, status])
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, effectiveDate])
+}
+
+enum CompReviewCycleType {
+  ANNUAL
+  MID_YEAR
+  PROMOTION
+  AD_HOC
+}
+
+enum CompReviewStatus {
+  DRAFT
+  OPEN
+  IN_REVIEW
+  APPROVED
+  APPLIED
+  CLOSED
+  CANCELLED
+}
+
+enum CompAdjustmentType {
+  MERIT
+  PROMOTION
+  MARKET_ADJUST
+  COLA
+}
+
+enum CompAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+  CANCELLED
+}
+
+// =======================================================================
+// QW-01 — SCHEDULED REPORT (auto-email laporan terjadwal)
+// Pengguna menjadwalkan laporan analytics (CSV/PDF) yang dikirim otomatis
+// ke daftar email pada interval harian/mingguan/bulanan.
+// =======================================================================
+
+enum ScheduledReportFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ScheduledReportStatus {
+  IDLE
+  SUCCESS
+  FAILED
+}
+
+model ScheduledReport {
+  id         String                   @id @default(uuid())
+  tenantId   String
+  name       String
+  report     String // analytics report key (headcount, turnover, ...)
+  format     String                   @default("csv") // csv | pdf
+  frequency  ScheduledReportFrequency @default(DAILY)
+  hour       Int                      @default(7) // jam kirim 0-23
+  dayOfWeek  Int? // 0=Minggu..6=Sabtu (WEEKLY)
+  dayOfMonth Int? // 1-28 (MONTHLY)
+  recipients String[] // daftar email tujuan
+  filters    Json? // snapshot AnalyticsFilterDto
+  isActive   Boolean                  @default(true)
+  nextRunAt  DateTime?
+  lastRunAt  DateTime?
+  lastStatus ScheduledReportStatus    @default(IDLE)
+  lastError  String?
+  createdBy  String?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  @@index([tenantId, isActive])
+  @@index([isActive, nextRunAt])
 }
 

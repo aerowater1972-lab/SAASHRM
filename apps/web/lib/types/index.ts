@@ -789,6 +789,21 @@ export interface PerformanceReview {
   goals?: Goal[];
   employee?: Employee;
   cycle?: ReviewCycle;
+  // TM-07: objective feed — completion rate tugas karyawan pada periode review (dari backend).
+  taskCompletion?: TaskCompletion | null;
+}
+
+// TM-07: ringkasan penyelesaian tugas karyawan untuk performance review.
+export interface TaskCompletion {
+  employeeId: string;
+  from: string;
+  to: string;
+  total: number;
+  done: number;
+  overdue: number;
+  onTime: number;
+  completionRate: number; // fraksi 0..1
+  onTimeRate: number; // fraksi 0..1
 }
 
 export interface Rating {
@@ -974,8 +989,41 @@ export interface SurveyActionItem {
   assigneeId: string;
   dueDate: string;
   status: ActionItemStatus;
+  /** QW-03: percent completion (0-100) */
+  progress: number;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** Parent survey summary (populated by the API) */
+  survey?: Pick<EngagementSurvey, 'id' | 'title' | 'type' | 'status'>;
+  /** QW-03 derived flags */
+  isOverdue?: boolean;
+  daysRemaining?: number;
+}
+
+export interface SurveyActionItemSummary {
+  total: number;
+  byStatus: Record<ActionItemStatus, number>;
+  overdue: number;
+  completionRate: number;
+  averageProgress: number;
+  byAssignee: {
+    assigneeId: string;
+    total: number;
+    completed: number;
+    overdue: number;
+    completionRate: number;
+  }[];
+}
+
+export interface SurveyActionItemListParams {
+  status?: string;
+  surveyStatus?: string;
+  overdueOnly?: boolean;
+  mineOnly?: boolean;
+  search?: string;
+  page?: number;
+  limit?: number;
 }
 
 export interface SurveyResults {

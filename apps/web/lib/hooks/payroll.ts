@@ -29,6 +29,9 @@ import {
   fetchSalaryComponent,
   fetchBankTransferBatches,
   fetchBankTransferBatch,
+  fetchFlipDisbursements,
+  retryFlipDisbursement,
+  refreshFlipDisbursement,
   fetchTaxConfigs,
   createTaxConfig,
   updateTaxConfig,
@@ -227,6 +230,32 @@ export function useCreateSalaryComponent() {
 
 export function useBankTransferBatches() {
   return useQuery({ queryKey: ['payroll', 'bank-transfers'], queryFn: fetchBankTransferBatches });
+}
+
+// --- Flip disbursement (PD-03..PD-05) ---
+
+export function useFlipDisbursements(params?: { status?: string; limit?: number }) {
+  return useQuery({
+    queryKey: ['payroll', 'flip', 'disbursements', params],
+    queryFn: () => fetchFlipDisbursements(params),
+    refetchInterval: 30_000, // dashboard live: poll tiap 30 detik
+  });
+}
+
+export function useRetryFlipDisbursement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => retryFlipDisbursement(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'flip'] }),
+  });
+}
+
+export function useRefreshFlipDisbursement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => refreshFlipDisbursement(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'flip'] }),
+  });
 }
 
 export function useBankTransferBatch(id: string) {

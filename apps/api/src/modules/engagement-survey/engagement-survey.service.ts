@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException,
 import { PrismaService } from '@common/prisma/prisma.service';
 import { AuditService } from '@modules/admin/services/audit.service';
 import { NotificationService } from '@modules/shared/notification/notification.service';
-import { CreateEngagementSurveyDto, UpdateEngagementSurveyDto, SubmitSurveyResponseDto, CreateSurveyActionItemDto, UpdateSurveyActionItemDto, SurveyFilterDto } from './dto/engagement-survey.dto';
+import { CreateEngagementSurveyDto, UpdateEngagementSurveyDto, SubmitSurveyResponseDto, CreateSurveyActionItemDto, UpdateSurveyActionItemDto, SurveyActionItemFilterDto, SurveyFilterDto } from './dto/engagement-survey.dto';
 import { SurveyType, SurveyStatus, QuestionType, ActionStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 
@@ -419,16 +419,79 @@ export class EngagementSurveyService {
       .sort((a, b) => a.period.localeCompare(b.period));
   }
 
-  async createActionItem(tenantId: string, dto: { surveyId: string; title: string; description?: string; assigneeId: string; dueDate: string }, actorId: string) {
+  /**
+   * QW-03 — Action plan derived from survey results.
+   * Reaching 100% progress auto-completes the item (and marking COMPLETED
+   * forces progress to 100).
+   */
+  private resolveStatusAndProgress(
+    status: ActionStatus | undefined,
+    progress: number | undefined,
+    current: { status: ActionStatus; progress: number },
+  ) {
+    let nextStatus = status ?? current.status;
+    let nextProgress = progress ?? current.progress;
+
+    if (progress !== undefined) {
+      if (progress >= 100) nextStatus = 'COMPLETED';
+      else if (nextStatus === 'COMPLETED') nextStatus = 'IN_PROGRESS';
+      else if (nextStatus === 'PENDING' && progress > 0) nextStatus = 'IN_PROGRESS';
+    }
+    if (nextStatus === 'COMPLETED') nextProgress = 100;
+
+    return { status: nextStatus as ActionStatus, progress: nextProgress };
+  }
+
+  /** Load a single action item scoped by tenant (via its parent survey). */
+  private async findActionItemOrFail(tenantId: string, id: string) {
+    const item = await this.prisma.surveyActionItem.findFirst({
+      where: { id, deletedAt: null, survey: { tenantId, deletedAt: null } },
+      include: { survey: { select: { id: true, title: true, type: true, status: true } } },
+    });
+    if (!item) throw new NotFoundException('Action item not found');
+    return item;
+  }
+
+  /** Decorate an action item with overdue / days-remaining information. */
+  private decorate(item: any, now: Date = new Date()) {
+    const isOpen = item.status !== 'COMPLETED' && item.status !== 'CANCELLED';
+    const dueDate = new Date(item.dueDate);
+    const daysRemaining = Math.ceil((dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    return {
+      ...item,
+      isOverdue: isOpen && dueDate < now,
+      daysRemaining: isOpen ? daysRemaining : 0,
+    };
+  }
+
+  async createActionItem(
+    tenantId: string,
+    dto: {
+      surveyId: string;
+      title: string;
+      description?: string;
+      assigneeId: string;
+      dueDate: string;
+      progress?: number;
+    },
+    actorId: string,
+  ) {
     const survey = await this.findOne(tenantId, dto.surveyId);
+    const { status, progress } = this.resolveStatusAndProgress(undefined, dto.progress ?? 0, {
+      status: 'PENDING',
+      progress: 0,
+    });
+
     const item = await this.prisma.surveyActionItem.create({
       data: {
-        surveyId: dto.surveyId,
+        surveyId: survey.id,
         title: dto.title,
         description: dto.description,
         assigneeId: dto.assigneeId,
         dueDate: new Date(dto.dueDate),
-        status: 'PENDING',
+        progress,
+        status,
+        completedAt: status === 'COMPLETED' ? new Date() : null,
       },
     });
 
@@ -441,21 +504,31 @@ export class EngagementSurveyService {
       changedBy: actorId,
     });
 
-    return item;
+    await this.notifyAssignee(tenantId, item, survey.title, 'assigned');
+
+    return this.decorate(item);
   }
 
   async updateActionItem(tenantId: string, id: string, dto: UpdateSurveyActionItemDto, actorId: string) {
-    const item = await this.prisma.surveyActionItem.findFirst({ where: { id, survey: { tenantId } } });
-    if (!item) throw new NotFoundException('Action item not found');
+    const existing = await this.findActionItemOrFail(tenantId, id);
+
+    const { status, progress } = this.resolveStatusAndProgress(dto.status, dto.progress, {
+      status: existing.status as ActionStatus,
+      progress: existing.progress,
+    });
 
     const updated = await this.prisma.surveyActionItem.update({
       where: { id },
-      data: { 
-        title: dto.title, 
-        description: dto.description, 
-        assigneeId: dto.assigneeId, 
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined, 
-        status: dto.status,
+      data: {
+        title: dto.title,
+        description: dto.description,
+        assigneeId: dto.assigneeId,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        progress,
+        status,
+        completedAt: status === 'COMPLETED' ? (existing.completedAt ?? new Date()) : null,
+        // Re-arm the overdue reminder when the deadline moves.
+        reminderSentAt: dto.dueDate ? null : undefined,
       },
     });
 
@@ -468,7 +541,165 @@ export class EngagementSurveyService {
       changedBy: actorId,
     });
 
-    return updated;
+    if (dto.assigneeId && dto.assigneeId !== existing.assigneeId) {
+      await this.notifyAssignee(tenantId, updated, (existing.survey as any)?.title ?? 'survey', 'assigned');
+    }
+
+    return this.decorate(updated);
+  }
+
+  /** Owner (assignee) updates progress only — cannot rename or reassign. */
+  async updateProgress(tenantId: string, id: string, progress: number, actorId: string) {
+    const existing = await this.findActionItemOrFail(tenantId, id);
+    if (existing.assigneeId !== actorId) {
+      throw new ForbiddenException('You can only update progress on action items assigned to you');
+    }
+
+    const { status } = this.resolveStatusAndProgress(undefined, progress, {
+      status: existing.status as ActionStatus,
+      progress: existing.progress,
+    });
+
+    const updated = await this.prisma.surveyActionItem.update({
+      where: { id },
+      data: {
+        progress: status === 'COMPLETED' ? 100 : progress,
+        status,
+        completedAt: status === 'COMPLETED' ? (existing.completedAt ?? new Date()) : null,
+      },
+    });
+
+    await this.audit.ingest({
+      tenantId,
+      module: 'engagement_survey',
+      entity: 'survey_action_item',
+      entityId: id,
+      action: 'UPDATE_PROGRESS',
+      changedBy: actorId,
+    });
+
+    return this.decorate(updated);
+  }
+
+  /** Aggregated progress dashboard for a survey, or for the whole tenant. */
+  async getActionItemSummary(tenantId: string, surveyId?: string) {
+    const items = await this.prisma.surveyActionItem.findMany({
+      where: {
+        deletedAt: null,
+        survey: { tenantId, deletedAt: null },
+        ...(surveyId ? { surveyId } : {}),
+      },
+      select: { id: true, status: true, progress: true, dueDate: true, assigneeId: true },
+    });
+
+    const now = new Date();
+    const byStatus: Record<ActionStatus, number> = { PENDING: 0, IN_PROGRESS: 0, COMPLETED: 0, CANCELLED: 0 };
+    const perAssignee = new Map<string, { total: number; completed: number; overdue: number }>();
+    let overdue = 0;
+    let progressSum = 0;
+
+    for (const item of items) {
+      byStatus[item.status as ActionStatus] += 1;
+      progressSum += item.progress ?? 0;
+      const isOpen = item.status !== 'COMPLETED' && item.status !== 'CANCELLED';
+      const isLate = isOpen && item.dueDate < now;
+      if (isLate) overdue += 1;
+
+      const acc = perAssignee.get(item.assigneeId) ?? { total: 0, completed: 0, overdue: 0 };
+      acc.total += 1;
+      if (item.status === 'COMPLETED') acc.completed += 1;
+      if (isLate) acc.overdue += 1;
+      perAssignee.set(item.assigneeId, acc);
+    }
+
+    const total = items.length;
+    const completed = byStatus.COMPLETED;
+
+    return {
+      total,
+      byStatus,
+      overdue,
+      completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      averageProgress: total > 0 ? Math.round(progressSum / total) : 0,
+      byAssignee: Array.from(perAssignee.entries())
+        .map(([assigneeId, v]) => ({
+          assigneeId,
+          ...v,
+          completionRate: v.total > 0 ? Math.round((v.completed / v.total) * 100) : 0,
+        }))
+        .sort((a, b) => b.total - a.total),
+    };
+  }
+
+  /**
+   * Notify assignees of overdue action items. Driven by the module scheduler;
+   * throttled to one reminder per item per 24h through `reminderSentAt`.
+   */
+  async sendOverdueReminders(tenantId: string, now: Date = new Date()): Promise<number> {
+    const overdue = await this.prisma.surveyActionItem.findMany({
+      where: {
+        deletedAt: null,
+        status: { in: ['PENDING', 'IN_PROGRESS'] },
+        dueDate: { lt: now },
+        survey: { tenantId, deletedAt: null },
+        OR: [
+          { reminderSentAt: null },
+          { reminderSentAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+        ],
+      },
+      include: { survey: { select: { title: true } } },
+    });
+
+    let sent = 0;
+    for (const item of overdue) {
+      await this.notification
+        .send({
+          tenantId,
+          userId: item.assigneeId,
+          templateKey: 'survey_action_item_overdue',
+          title: 'Action Item Terlambat',
+          body: `Action item "${item.title}" (${
+            (item.survey as any)?.title ?? 'survey'
+          }) sudah melewati deadline ${new Date(item.dueDate).toLocaleDateString(
+            'id-ID',
+          )}. Progress saat ini ${item.progress}%.`,
+          payload: { actionItemId: item.id, surveyId: item.surveyId },
+        })
+        .catch((err) =>
+          this.logger.warn(`[QW-03] overdue reminder failed for ${item.id}: ${err.message}`),
+        );
+
+      await this.prisma.surveyActionItem.update({
+        where: { id: item.id },
+        data: { reminderSentAt: now },
+      });
+      sent += 1;
+    }
+    return sent;
+  }
+
+  /** Fire-and-forget notification to an action item owner. */
+  private async notifyAssignee(
+    tenantId: string,
+    item: { id: string; assigneeId: string; title: string; dueDate: Date },
+    surveyTitle: string,
+    kind: 'assigned' | 'completed',
+  ) {
+    await this.notification
+      .send({
+        tenantId,
+        userId: item.assigneeId,
+        templateKey: `survey_action_item_${kind}`,
+        title: kind === 'assigned' ? 'Action Item Baru untuk Anda' : 'Action Item Selesai',
+        body:
+          kind === 'assigned'
+            ? `Anda ditugaskan mengerjakan action item "${item.title}" dari survei "${surveyTitle}", deadline ${new Date(
+                item.dueDate,
+              ).toLocaleDateString('id-ID')}.`
+            : `Action item "${item.title}" telah diselesaikan.`,
+        payload: { actionItemId: item.id },
+      })
+      .catch((err) => this.logger.warn(`[QW-03] assignee notification failed: ${err.message}`));
   }
 
   async delete(tenantId: string, id: string, actorId: string) {
@@ -488,9 +719,84 @@ export class EngagementSurveyService {
   }
 
   async getActionItems(tenantId: string, surveyId: string) {
-    return this.prisma.surveyActionItem.findMany({
-      where: { surveyId, survey: { tenantId } },
-      orderBy: { dueDate: 'asc' },
+    await this.findOne(tenantId, surveyId);
+    const items = await this.prisma.surveyActionItem.findMany({
+      where: { surveyId, deletedAt: null, survey: { tenantId, deletedAt: null } },
+      orderBy: [{ dueDate: 'asc' }],
+      include: { survey: { select: { id: true, title: true, type: true, status: true } } },
     });
+    return items.map((i) => this.decorate(i));
+  }
+
+  /** Cross-survey action item list with filters (HR view + "my items"). */
+  async listActionItems(
+    tenantId: string,
+    filters: SurveyActionItemFilterDto = {},
+    viewerId?: string,
+  ) {
+    const { status, surveyStatus, overdueOnly, mineOnly, search, page = 1, limit = 20 } = filters;
+
+    const surveyScope: Prisma.EngagementSurveyWhereInput = { tenantId, deletedAt: null };
+    if (surveyStatus) surveyScope.status = surveyStatus;
+
+    const where: Prisma.SurveyActionItemWhereInput = { deletedAt: null, survey: surveyScope };
+    if (status) where.status = status;
+    if (mineOnly && viewerId) where.assigneeId = viewerId;
+    if (overdueOnly) {
+      where.dueDate = { lt: new Date() };
+      where.status = { in: ['PENDING', 'IN_PROGRESS'] };
+    }
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.surveyActionItem.findMany({
+        where,
+        orderBy: [{ dueDate: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { survey: { select: { id: true, title: true, type: true, status: true } } },
+      }),
+      this.prisma.surveyActionItem.count({ where }),
+    ]);
+
+    return { data: data.map((i) => this.decorate(i)), total, page, pageSize: limit };
+  }
+
+  /** Action items assigned to the current user, across all surveys. */
+  async getMyActionItems(tenantId: string, userId: string, status?: ActionStatus) {
+    const items = await this.prisma.surveyActionItem.findMany({
+      where: {
+        assigneeId: userId,
+        deletedAt: null,
+        survey: { tenantId, deletedAt: null },
+        ...(status ? { status } : {}),
+      },
+      orderBy: { dueDate: 'asc' },
+      include: { survey: { select: { id: true, title: true, type: true, status: true } } },
+    });
+    return items.map((i) => this.decorate(i));
+  }
+
+  /** Soft-delete an action item (kept for auditability). */
+  async deleteActionItem(tenantId: string, id: string, actorId: string) {
+    await this.findActionItemOrFail(tenantId, id);
+    await this.prisma.surveyActionItem.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.ingest({
+      tenantId,
+      module: 'engagement_survey',
+      entity: 'survey_action_item',
+      entityId: id,
+      action: 'DELETE',
+      changedBy: actorId,
+    });
+    return { deleted: true };
   }
 }

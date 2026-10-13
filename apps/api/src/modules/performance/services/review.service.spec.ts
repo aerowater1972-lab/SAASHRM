@@ -4,6 +4,7 @@ import { ReviewService } from './review.service';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
+import { TasksService } from '@modules/tasks/tasks.service';
 
 describe('ReviewService (BR-03)', () => {
   let service: ReviewService;
@@ -22,6 +23,7 @@ describe('ReviewService (BR-03)', () => {
   };
   const mockEmployeeService = { findById: jest.fn() };
   const mockWorkflow = { transition: jest.fn() };
+  const mockTasks = { completionRate: jest.fn().mockResolvedValue({ total: 0, done: 0, completionRate: 0 }) };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -30,6 +32,7 @@ describe('ReviewService (BR-03)', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EmployeeService, useValue: mockEmployeeService },
         { provide: WorkflowEngineService, useValue: mockWorkflow },
+        { provide: TasksService, useValue: mockTasks },
       ],
     }).compile();
 

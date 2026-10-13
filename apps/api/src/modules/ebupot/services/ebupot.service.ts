@@ -281,7 +281,7 @@ export class EbupotService {
    * - Bila CORETAX_API_URL + CORETAX_API_KEY tersedia -> POST XML ke API.
    * - Bila tidak -> mode offline: status SUBMITTED, HR unduh XML manual.
    */
-  async submit(tenantId: string, taxYear: number, taxMonth: number, userId: string) {
+  async submit(tenantId: string, taxYear: number, taxMonth: number, userId?: string) {
     this.assertPeriod(taxYear, taxMonth);
 
     const submissions = await this.prisma.ebupotSubmission.findMany({
@@ -408,6 +408,41 @@ export class EbupotService {
     });
     return { updated: result.count };
   }
+  /**
+   * Auto-retry massal lintas-tenant (dipakai scheduler).
+   * Mengembalikan submission FAILED ke GENERATED selama belum melewati
+   * batas retry (EBUPOT_MAX_RETRIES, default 5). No-op bila kosong.
+   */
+  async autoRetryFailed() {
+    const maxRetries = Number(process.env.EBUPOT_MAX_RETRIES ?? 5);
+    const failed = await this.prisma.ebupotSubmission.findMany({
+      where: {
+        status: EbupotSubmissionStatus.FAILED,
+        retryCount: { lt: maxRetries },
+      },
+      select: { id: true, tenantId: true },
+      take: 500,
+    });
+    if (failed.length === 0) {
+      return { updated: 0 };
+    }
+
+    const result = await this.prisma.ebupotSubmission.updateMany({
+      where: { id: { in: failed.map((f) => f.id) } },
+      data: {
+        status: EbupotSubmissionStatus.GENERATED,
+        failureReason: null,
+        retryCount: { increment: 1 },
+      },
+    });
+    const tenants = new Set(failed.map((f) => f.tenantId));
+    this.logger.log(
+      `e-Bupot auto-retry: ${result.count} submission FAILED dikembalikan ke GENERATED (${tenants.size} tenant)`,
+    );
+    return { updated: result.count };
+  }
+
+
 
   // â”€â”€ Serializers (XML & CSV untuk Coretax) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

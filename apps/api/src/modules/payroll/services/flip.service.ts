@@ -181,4 +181,139 @@ export class FlipService {
     const ok = results.filter((r) => r.ok).length;
     return { total: results.length, ok, failed: results.length - ok, mode: this.mode, results };
   }
+
+  // ------------------------------------------------------------------
+  // PD-03/PD-05 — Status dashboard live (list + ringkasan per status)
+  // ------------------------------------------------------------------
+  async listDisbursements(
+    tenantId: string,
+    opts: { status?: string; limit?: number } = {},
+  ): Promise<{
+    mode: 'LIVE' | 'DRY_RUN';
+    summary: { counts: Record<string, number>; totalAmount: number; items: number };
+    items: any[];
+  }> {
+    const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
+    const where: any = { tenantId };
+    if (opts.status) where.status = opts.status.toUpperCase();
+
+    const [items, grouped] = await Promise.all([
+      (this.prisma as any).flipDisbursement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      (this.prisma as any).flipDisbursement.groupBy({
+        by: ['status'],
+        where: { tenantId },
+        _count: { _all: true },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const counts: Record<string, number> = {};
+    let totalAmount = 0;
+    let counted = 0;
+    for (const g of grouped) {
+      counts[g.status] = g._count?._all ?? 0;
+      totalAmount += Number(g._sum?.amount ?? 0);
+      counted += g._count?._all ?? 0;
+    }
+    return {
+      mode: this.mode,
+      summary: { counts, totalAmount: Math.round(totalAmount * 100) / 100, items: counted },
+      items,
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // PD-04 — Retry manual per record (FAILED saja; capped FLIP_MAX_RETRIES)
+  // ------------------------------------------------------------------
+  private get maxRetries(): number {
+    const raw = Number(this.config.get<string>('FLIP_MAX_RETRIES'));
+    return Number.isFinite(raw) && raw >= 0 ? raw : 3;
+  }
+
+  async retryDisbursement(tenantId: string, id: string) {
+    const rec: any = await (this.prisma as any).flipDisbursement.findFirst({
+      where: { id, tenantId },
+    });
+    if (!rec) throw new NotFoundException('Disbursement tidak ditemukan');
+    if (rec.status !== 'FAILED') {
+      throw new BadRequestException(`Hanya record FAILED yang bisa di-retry (status: ${rec.status})`);
+    }
+    if (rec.attempts >= this.maxRetries) {
+      throw new BadRequestException(
+        `Batas retry tercapai (${rec.attempts}/${this.maxRetries}); periksa data rekening secara manual.`,
+      );
+    }
+
+    // Percobaan ulang = record baru dengan kunci idempotency berbeda,
+    // sehingga record lama tetap sebagai riwayat kegagalan.
+    const attempt = rec.attempts + 1;
+    const retryKey = `retry:${rec.idempotencyKey}:${attempt}`;
+    const created = await this.createDisbursement(
+      tenantId,
+      {
+        bankCode: rec.bankCode,
+        accountNumber: rec.accountNumber,
+        accountName: rec.accountName,
+        amount: Number(rec.amount),
+        remark: rec.remark ?? undefined,
+        idempotencyKey: retryKey,
+      },
+      rec.payrollRunId ?? undefined,
+    );
+    await (this.prisma as any).flipDisbursement.update({
+      where: { id: rec.id },
+      data: { attempts: attempt },
+    });
+    return { original: { id: rec.id, status: rec.status, attempts: attempt }, retry: created, mode: this.mode };
+  }
+
+  // ------------------------------------------------------------------
+  // PD-03 — Rekonsiliasi batch: semua PENDING (LIVE) difinalkan ke Flip
+  // ------------------------------------------------------------------
+  async reconcilePending(): Promise<{ checked: number; done: number; failed: number }> {
+    if (this.mode !== 'LIVE') return { checked: 0, done: 0, failed: 0 };
+    const pending: any[] = await (this.prisma as any).flipDisbursement.findMany({
+      where: { status: 'PENDING', dryRun: false, flipId: { not: null } },
+      take: 200,
+      orderBy: { updatedAt: 'asc' },
+    });
+    let done = 0;
+    let failed = 0;
+    for (const rec of pending) {
+      try {
+        const updated = await this.refreshStatus(rec.id);
+        if (updated.status !== 'PENDING') done += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { checked: pending.length, done, failed };
+  }
+
+  // ------------------------------------------------------------------
+  // PD-03/PD-04 — Auto-retry FAILED (LIVE) sampai FLIP_MAX_RETRIES
+  // ------------------------------------------------------------------
+  async autoRetryFailed(): Promise<{ retried: number; skipped: number }> {
+    if (this.mode !== 'LIVE') return { retried: 0, skipped: 0 };
+    const failed: any[] = await (this.prisma as any).flipDisbursement.findMany({
+      where: { status: 'FAILED', dryRun: false, attempts: { lt: this.maxRetries } },
+      take: 20,
+      orderBy: { updatedAt: 'asc' },
+    });
+    let retried = 0;
+    let skipped = 0;
+    for (const rec of failed) {
+      try {
+        await this.retryDisbursement(rec.tenantId, rec.id);
+        retried += 1;
+      } catch {
+        skipped += 1; // batas retry / validasi — biarkan manusia yang tinjau
+      }
+    }
+    return { retried, skipped };
+  }
 }

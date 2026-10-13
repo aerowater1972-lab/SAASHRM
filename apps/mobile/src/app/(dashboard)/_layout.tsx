@@ -97,6 +97,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           ),
         }}
       />
+      <Tabs.Screen
+        name="forum"
+        options={{
+          title: 'Forum',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen name="forum/[id]" options={{ href: null }} />
       {canAccessPayroll && (
         <Tabs.Screen
           name="payroll"

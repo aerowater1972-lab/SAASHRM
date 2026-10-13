@@ -67,3 +67,25 @@ export async function getFlightRisk(filters?: Record<string, unknown>): Promise<
 export async function getLeaveUtilization(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
   return api.get<Record<string, unknown>>('/analytics/leave/utilization', { params: filters });
 }
+
+// --- AI module endpoints (AI-03: disengagement, AI-04: readiness, AI-06: SHAP, AI-08: drift/retrain) ---
+
+export async function getDisengagement(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/ai/disengagement', { params: filters });
+}
+
+export async function getReadiness(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/ai/readiness', { params: filters });
+}
+
+export async function getExplainDisengagement(employeeId: string, filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>(`/ai/explain/${employeeId}`, { params: filters });
+}
+
+export async function getDrift(filters?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.get<Record<string, unknown>>('/ai/drift', { params: filters });
+}
+
+export async function retrainJob(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api.post<Record<string, unknown>>('/ai/retrain', data);
+}

@@ -70,6 +70,20 @@ export interface CreateTicketDto {
   priority?: (typeof TICKET_PRIORITIES)[number];
 }
 
+export interface CreateKbArticleDto {
+  category?: (typeof TICKET_CATEGORIES)[number];
+  title: string;
+  content: string;
+  tags?: string[];
+}
+
+export interface UpdateKbArticleDto {
+  category?: (typeof TICKET_CATEGORIES)[number];
+  title?: string;
+  content?: string;
+  tags?: string[];
+}
+
 @Injectable()
 export class HelpdeskTicketService {
   constructor(private readonly prisma: PrismaService) {}
@@ -563,6 +577,102 @@ export class HelpdeskTicketService {
       data: helpful
         ? { helpfulCount: { increment: 1 } }
         : { unhelpfulCount: { increment: 1 } },
+    });
+  }
+
+  /** Daftar semua artikel KB untuk admin (termasuk yang soft-delete disembunyikan). */
+  async listKnowledgeBaseArticles(tenantId: string, category?: string) {
+    return this.prisma.helpdeskKbArticle.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        ...(category ? { category: category as HelpdeskTicketCategory } : {}),
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      include: { createdBy: { select: { id: true, fullName: true, email: true } } },
+    });
+  }
+
+  /** Buat artikel KB baru (HD-07 admin). */
+  async createKnowledgeBaseArticle(
+    tenantId: string,
+    userId: string,
+    dto: CreateKbArticleDto,
+  ) {
+    const title = dto.title?.trim();
+    const content = dto.content?.trim();
+    if (!title) {
+      throw new BadRequestException('Judul artikel wajib diisi');
+    }
+    if (!content) {
+      throw new BadRequestException('Isi artikel wajib diisi');
+    }
+
+    return this.prisma.helpdeskKbArticle.create({
+      data: {
+        tenantId,
+        createdByUserId: userId,
+        title,
+        content,
+        category: (dto.category ?? 'OTHER') as HelpdeskTicketCategory,
+        tags: (dto.tags ?? []).map((t) => t.toLowerCase()),
+      },
+    });
+  }
+
+  /** Ubah artikel KB (HD-07 admin). */
+  async updateKnowledgeBaseArticle(
+    tenantId: string,
+    articleId: string,
+    dto: UpdateKbArticleDto,
+  ) {
+    const article = await this.prisma.helpdeskKbArticle.findFirst({
+      where: { id: articleId, tenantId, deletedAt: null },
+    });
+    if (!article) {
+      throw new NotFoundException('Artikel tidak ditemukan');
+    }
+
+    const data: Prisma.HelpdeskKbArticleUpdateInput = {};
+    if (dto.title !== undefined) {
+      const title = dto.title.trim();
+      if (!title) {
+        throw new BadRequestException('Judul artikel tidak boleh kosong');
+      }
+      data.title = title;
+    }
+    if (dto.content !== undefined) {
+      const content = dto.content.trim();
+      if (!content) {
+        throw new BadRequestException('Isi artikel tidak boleh kosong');
+      }
+      data.content = content;
+    }
+    if (dto.category !== undefined) {
+      data.category = dto.category as HelpdeskTicketCategory;
+    }
+    if (dto.tags !== undefined) {
+      data.tags = dto.tags.map((t) => t.toLowerCase());
+    }
+
+    return this.prisma.helpdeskKbArticle.update({
+      where: { id: article.id },
+      data,
+    });
+  }
+
+  /** Hapus artikel KB / soft-delete (HD-07 admin). */
+  async deleteKnowledgeBaseArticle(tenantId: string, articleId: string) {
+    const article = await this.prisma.helpdeskKbArticle.findFirst({
+      where: { id: articleId, tenantId, deletedAt: null },
+    });
+    if (!article) {
+      throw new NotFoundException('Artikel tidak ditemukan');
+    }
+
+    return this.prisma.helpdeskKbArticle.update({
+      where: { id: article.id },
+      data: { deletedAt: new Date() },
     });
   }
 }

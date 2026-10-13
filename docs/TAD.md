@@ -250,6 +250,20 @@ No Docker. Production runs via PM2 + Nginx. PostgreSQL is the single external da
 | Filter by department, period, status | — | — | ✅ |
 | Audit logging | — | — | ✅ |
 
+### 2.20 AI Analytics (`modules/ai/`) — Epic 1.1 porsi AI-03/04/06/08
+| Fitur | Controller | Service | Status |
+|-------|-----------|---------|--------|
+| Disengagement signal (Isolation Forest, top-N + per-employee) | `ai-analytics.controller.ts` (`GET /ai/disengagement`, `GET /ai/disengagement/:employeeId`) | `ai-analytics.service.ts` + `ai-isolation-forest.service.ts` | ✅ |
+| Promotion readiness (regression heuristik, top-N + per-employee) | `ai-analytics.controller.ts` (`GET /ai/readiness`, `GET /ai/readiness/:employeeId`) | `ai-analytics.service.ts` | ✅ |
+| Explainability (kontribusi fitur SHAP-style, 3 alasan teratas) | `ai-analytics.controller.ts` (`GET /ai/explain/:employeeId`) | `ai-analytics.service.ts` | ✅ |
+| Drift monitoring (PSI 90 vs 180 hari) | `ai-analytics.controller.ts` (`GET /ai/drift`) | `ai-analytics.service.ts` | ✅ |
+| Retraining job (re-fit Isolation Forest + modelVersion, manual `POST /ai/retrain`) | `ai-analytics.controller.ts` (`POST /ai/retrain`) | `ai-analytics.service.ts` | ✅ |
+| RBAC `ai:view` / `ai:manage` + tenant scoping via `@TenantId()` | — | — | ✅ |
+| Web: AI Insights Dashboard (summary cards + tabel Top-10) | — | `components/ai-insights-dashboard.tsx` + `lib/api/analytics.ts` + `lib/hooks/analytics.ts` | ✅ |
+| Unit tests AI (9 tests: disengagement, readiness, explain, drift, retrain) | — | `ai-analytics.service.spec.ts` | ✅ All 9 passing |
+
+> Catatan: AI-01 (data pipeline), AI-02 (Retention Risk XGBoost), AI-05 (dashboard widget penuh), AI-07 (notifikasi high-risk) belum dikerjakan — modul ini menutup AI-03/04/06/08 saja.
+
 ---
 
 ## 3. Cross-Cutting Concerns
@@ -340,6 +354,7 @@ No Docker. Production runs via PM2 + Nginx. PostgreSQL is the single external da
 | 31 | FR-06: No version tracking on manpower plan updates | backend | Closed | ✅ version auto-increment (2026-07-28) |
 | 32 | FR-04: No auto-requisition on approval | backend | Closed | ✅ Auto-create job requisitions on final approval (2026-07-28) |
 | 33 | FR-03: Cost estimate not using grade salary range | backend | Closed | ✅ Fallback to grade midpoint (2026-07-28) |
+| 34 | Epic 1.1 AI Analytics (GAP-01) porsi AI-03/04/06/08 belum ada di TAD | docs | Closed | ✅ Ditambahkan §2.20 (2026-10-13): disengagement, readiness, explain, drift, retrain + dashboard + 9 unit tests |
 
 ---
 
@@ -347,7 +362,7 @@ No Docker. Production runs via PM2 + Nginx. PostgreSQL is the single external da
 
 | Suite | Jumlah | Status |
 |-------|--------|--------|
-| Unit tests | 197 (30 suites — includes 16 employee-relations) | ✅ All passing |
+| Unit tests | 206 (31 suites — includes 16 employee-relations + 9 AI analytics) | ✅ All passing |
 | e2e tests | 81 (16 suites: health, auth, tenant-isolation, employee, employee-id, employee-relations, expense, medical, integrations, event-chain, attendance-*, leave-*, user-management) | ✅ All 81 passing (15 ER tests) |
 | Frontend typecheck | `tsc --noEmit` | ✅ 0 errors |
 | Frontend build | `npm run build` (Next.js) | ✅ (verified) |
@@ -401,3 +416,6 @@ ManpowerPlan, ManpowerPlanItem
 | 2026-07-26 | 2.6 | Enabled Workflow Designer step editing (FR-05): added useUpdateWorkflow hook, step add/edit/delete UI to existing workflow page, active Simpan Alur button now functional via PUT /admin/workflows/:id. |
 | 2026-07-26 | 2.7 | Updated Known Gaps #20-#22: closed Import CSV (#20), closed Workflow Designer stepping (#21), added #22 AI Copilot as blocked pending mobile ESS ADR decision. |
 | 2026-07-28 | 2.8 | Added §2.18 Engagement Survey, §2.19 Manpower Planning. Updated workflow defs 10→12 (overtime, manpower-plan). Added 6 models (EngagementSurvey, SurveyQuestion, SurveyResponse, SurveyActionItem, ManpowerPlan, ManpowerPlanItem). Added Known Gaps #23–#33 (all Closed). |
+
+| 2026-08-01 | 2.9 | GAP-02 Task & Project Management: synced API DTOs with Prisma enums (ARCHIVED/URGENT/BACKLOG/BLOCKED), fixed stats()/assignee validation, added `GET /tasks/my` + `POST /tasks/:id/log-hours`, seeded `tasks:create` permission (HR/Manager/Employee). Built web pages: /tasks list, /tasks/[id] detail, /tasks/board kanban (drag-drop), /tasks/projects, /tasks/projects/[id]. Added 22 unit tests for TasksService (all passing). |
+| 2026-10-13 | 3.0 | Added §2.20 AI Analytics (Epic 1.1 porsi AI-03/04/06/08): Isolation Forest disengagement, promotion readiness, SHAP-style explain, PSI drift, retrain job (`/ai/*`, RBAC ai:view/ai:manage), AI Insights Dashboard web, 9 unit tests passing. Fixed NaN guards (empty forest, PSI smoothing). tsc API+web 0 errors. Added Known Gap #34 (Closed). |

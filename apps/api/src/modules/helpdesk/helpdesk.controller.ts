@@ -229,5 +229,60 @@ export class HelpdeskController {
       body.helpful,
     );
   }
+
+  // ============================================================
+  // KNOWLEDGE BASE — ADMIN CRUD (HD-07)
+  // ============================================================
+
+  @Get('kb/articles')
+  @Permissions('helpdesk:manage')
+  @ApiOperation({ summary: 'Daftar artikel KB (admin)' })
+  listKbArticles(@Req() req: any, @Query('category') category?: string) {
+    return this.helpdesk.listKnowledgeBaseArticles(req.user.tenantId, category);
+  }
+
+  @Post('kb/articles')
+  @Permissions('helpdesk:manage')
+  @ApiOperation({ summary: 'Buat artikel KB (admin)' })
+  createKbArticle(
+    @Req() req: any,
+    @Body()
+    body: {
+      category?: (typeof TICKET_CATEGORIES)[number];
+      title: string;
+      content: string;
+      tags?: string[];
+    },
+  ) {
+    return this.helpdesk.createKnowledgeBaseArticle(
+      req.user.tenantId,
+      req.user.sub,
+      body,
+    );
+  }
+
+  @Patch('kb/articles/:id')
+  @Permissions('helpdesk:manage')
+  @ApiOperation({ summary: 'Ubah artikel KB (admin)' })
+  updateKbArticle(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      category?: (typeof TICKET_CATEGORIES)[number];
+      title?: string;
+      content?: string;
+      tags?: string[];
+    },
+  ) {
+    return this.helpdesk.updateKnowledgeBaseArticle(req.user.tenantId, id, body);
+  }
+
+  @Post('kb/articles/:id/delete')
+  @Permissions('helpdesk:manage')
+  @ApiOperation({ summary: 'Hapus artikel KB / soft-delete (admin)' })
+  deleteKbArticle(@Req() req: any, @Param('id') id: string) {
+    return this.helpdesk.deleteKnowledgeBaseArticle(req.user.tenantId, id);
+  }
 }
 

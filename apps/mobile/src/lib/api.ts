@@ -435,3 +435,53 @@ export const adminApi = {
   sendNotification: (data: { userIds: string[]; title: string; message: string; type: string }) =>
     api.post('/admin/notifications/send', data),
 };
+
+// Forum API — IC-06 (mobile feed + thread view)
+export interface ForumThread {
+  id: string;
+  title: string;
+  content: string;
+  type: 'ANNOUNCEMENT' | 'DISCUSSION' | 'POLL' | 'EVENT';
+  isPinned?: boolean;
+  isLocked?: boolean;
+  createdAt: string;
+  author?: { id: string; fullName: string; email?: string };
+  department?: { id: string; name: string };
+  pollOptions?: Array<{ text: string; votes: number }>;
+  reactions?: Array<{ user?: { id: string; fullName: string }; reactionType: string }>;
+  comments?: ForumComment[];
+  _count?: { comments?: number; reactions?: number };
+}
+
+export interface ForumComment {
+  id: string;
+  content: string;
+  createdAt: string;
+  author?: { id: string; fullName: string };
+  replies?: ForumComment[];
+}
+
+export const forumApi = {
+  getThreads: (params?: { type?: string; q?: string; page?: number; limit?: number }) =>
+    api.get<{ items: ForumThread[]; total: number; page: number; totalPages: number }>(
+      '/forum/threads',
+      (params ?? {}) as Record<string, any>,
+    ),
+
+  getThread: (id: string) => api.get<ForumThread>(`/forum/threads/${id}`),
+
+  createThread: (data: { title: string; content: string; type?: string; pollOptions?: string[] }) =>
+    api.post<ForumThread>('/forum/threads', data),
+
+  addComment: (threadId: string, data: { content: string; parentCommentId?: string }) =>
+    api.post<ForumComment>(`/forum/threads/${threadId}/comments`, data),
+
+  reactThread: (id: string, reactionType: string) =>
+    api.post(`/forum/threads/${id}/reactions`, { reactionType }),
+
+  votePoll: (id: string, optionIndex: number) =>
+    api.post(`/forum/threads/${id}/vote`, { optionIndex }),
+
+  reportThread: (id: string, reason: string) =>
+    api.post(`/forum/threads/${id}/report`, { reason }),
+};

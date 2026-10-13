@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '@common/prisma/prisma.service';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
+import { TasksService } from '@modules/tasks/tasks.service';
 import { paginate, Paginated } from '@common/prisma/pagination.util';
 import { CreateReviewDto } from '../dto/create-review.dto';
 import { SubmitReviewDto } from '../dto/submit-review.dto';
@@ -14,6 +15,7 @@ export class ReviewService {
     private readonly prisma: PrismaService,
     private readonly employeeService: EmployeeService,
     private readonly workflow: WorkflowEngineService,
+    private readonly tasks: TasksService,
   ) {}
 
   async create(tenantId: string, dto: CreateReviewDto) {
@@ -94,7 +96,7 @@ export class ReviewService {
       where: { id, tenantId },
       include: {
         ratings: true,
-        cycle: { select: { id: true, name: true, period: true, status: true } },
+        cycle: { select: { id: true, name: true, period: true, status: true, startDate: true, endDate: true } },
         employee: { select: { id: true, fullName: true, employeeId: true } },
         goals: {
           select: { id: true, title: true, status: true, targetValue: true, actualValue: true },
@@ -102,6 +104,20 @@ export class ReviewService {
       },
     });
     if (!review) throw new NotFoundException('Performance review not found');
+
+    // TM-07: feed objective — completion rate tugas karyawan pada periode review.
+    try {
+      const cycle = review.cycle as { startDate?: Date; endDate?: Date } | undefined;
+      (review as any).taskCompletion = await this.tasks.completionRate(
+        tenantId,
+        review.employeeId,
+        cycle?.startDate ? new Date(cycle.startDate).toISOString() : undefined,
+        cycle?.endDate ? new Date(cycle.endDate).toISOString() : undefined,
+      );
+    } catch {
+      (review as any).taskCompletion = null; // feed bersifat pelengkap, jangan gagalkan detail review
+    }
+
     this.maskPeerReviews([review], currentUserId);
     return review;
   }

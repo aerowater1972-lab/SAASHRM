@@ -137,13 +137,21 @@ export class CreateSurveyActionItemDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Assignee user ID' })
+  @ApiProperty({ description: 'Assignee user ID (action item owner)' })
   @IsString()
   assigneeId!: string;
 
   @ApiProperty({ description: 'Due date (ISO string)' })
   @IsString()
   dueDate!: string;
+
+  @ApiPropertyOptional({ description: 'Initial progress percentage (0-100)', default: 0, minimum: 0, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progress?: number;
 }
 
 export class UpdateSurveyActionItemDto {
@@ -168,10 +176,73 @@ export class UpdateSurveyActionItemDto {
   @IsString()
   dueDate?: string;
 
+  @ApiPropertyOptional({ description: 'Progress percentage (0-100). 100 auto-completes the item' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progress?: number;
+
   @ApiPropertyOptional({ enum: ActionStatus, description: 'Action item status' })
   @IsOptional()
   @IsEnum(ActionStatus)
   status?: ActionStatus;
+}
+
+/** QW-03: owner updates only the progress of their own action item. */
+export class UpdateActionItemProgressDto {
+  @ApiProperty({ description: 'Progress percentage (0-100). 100 auto-completes the item', minimum: 0, maximum: 100 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progress!: number;
+}
+
+/** QW-03: query filter for the cross-survey action item list. */
+export class SurveyActionItemFilterDto {
+  @ApiPropertyOptional({ enum: SurveyStatus, description: 'Filter by survey status' })
+  @IsOptional()
+  @IsEnum(SurveyStatus)
+  surveyStatus?: SurveyStatus;
+
+  @ApiPropertyOptional({ enum: ActionStatus, description: 'Filter by action item status' })
+  @IsOptional()
+  @IsEnum(ActionStatus)
+  status?: ActionStatus;
+
+  @ApiPropertyOptional({ description: 'Only overdue, not-yet-completed items', default: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  overdueOnly?: boolean;
+
+  @ApiPropertyOptional({ description: 'Only items assigned to the current user', default: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  mineOnly?: boolean;
+
+  @ApiPropertyOptional({ description: 'Search in title / description' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
 }
 
 export class SurveyFilterDto {

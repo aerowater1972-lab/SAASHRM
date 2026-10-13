@@ -168,6 +168,43 @@ export async function fetchBankTransferBatches(): Promise<BankTransferBatch[]> {
   return api.get<BankTransferBatch[]>('/payroll/bank-transfers');
 }
 
+// --- Flip disbursement (PD-05: status dashboard live, PD-04: retry) ---
+
+export interface FlipDisbursementItem {
+  id: string;
+  payrollRunId?: string | null;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  remark?: string | null;
+  status: 'DRAFT' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+  dryRun: boolean;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlipDisbursementList {
+  mode: 'LIVE' | 'DRY_RUN';
+  summary: { counts: Record<string, number>; totalAmount: number; items: number };
+  items: FlipDisbursementItem[];
+}
+
+export async function fetchFlipDisbursements(params?: { status?: string; limit?: number }): Promise<FlipDisbursementList> {
+  return api.get<FlipDisbursementList>('/payroll/flip/disbursements', {
+    params: (params ?? {}) as Record<string, unknown>,
+  });
+}
+
+export async function retryFlipDisbursement(id: string): Promise<Record<string, unknown>> {
+  return api.post<Record<string, unknown>>(`/payroll/flip/disbursements/${id}/retry`);
+}
+
+export async function refreshFlipDisbursement(id: string): Promise<FlipDisbursementItem> {
+  return api.get<FlipDisbursementItem>(`/payroll/flip/disbursements/${id}/refresh`);
+}
+
 export async function fetchBankTransferBatch(id: string): Promise<BankTransferBatch> {
   return api.get<BankTransferBatch>(`/payroll/bank-transfers/${id}`);
 }

@@ -1,5 +1,7 @@
 import { api } from '@/lib/api';
-import type { EngagementSurvey, SurveyResults, EnpsTrend, SurveyActionItem, PaginatedResponse } from '@/lib/types';
+import type { EngagementSurvey, SurveyResults, EnpsTrend, SurveyActionItem, SurveyActionItemSummary, SurveyActionItemListParams, PaginatedResponse } from '@/lib/types';
+
+export type { SurveyActionItemListParams };
 
 export interface EngagementSurveyListParams {
   page?: number;
@@ -48,6 +50,41 @@ export async function createEngagementSurveyActionItem(surveyId: string, data: R
 
 export async function updateEngagementSurveyActionItem(actionItemId: string, data: Record<string, unknown>): Promise<SurveyActionItem> {
   return api.put<SurveyActionItem>(`/engagement-surveys/action-items/${actionItemId}`, data);
+}
+
+/** QW-03: cross-survey action item list (HR view / "my items"). */
+export async function fetchSurveyActionItems(params?: SurveyActionItemListParams): Promise<{
+  data: SurveyActionItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  return api.get<{ data: SurveyActionItem[]; total: number; page: number; pageSize: number }>(
+    '/engagement-surveys/action-items',
+    { params: params as Record<string, unknown> },
+  );
+}
+
+/** QW-03: action items assigned to the signed-in user. */
+export async function fetchMySurveyActionItems(status?: string): Promise<SurveyActionItem[]> {
+  const params = status ? { status } : undefined;
+  return api.get<SurveyActionItem[]>('/engagement-surveys/action-items/my', { params });
+}
+
+/** QW-03: aggregated action item progress summary. */
+export async function fetchSurveyActionItemSummary(surveyId?: string): Promise<SurveyActionItemSummary> {
+  const params = surveyId ? { surveyId } : undefined;
+  return api.get<SurveyActionItemSummary>('/engagement-surveys/action-items/summary', { params });
+}
+
+/** QW-03: owner updates progress (0-100); 100 auto-completes. */
+export async function updateSurveyActionItemProgress(actionItemId: string, progress: number): Promise<SurveyActionItem> {
+  return api.patch<SurveyActionItem>(`/engagement-surveys/action-items/${actionItemId}/progress`, { progress });
+}
+
+/** QW-03: soft-delete an action item. */
+export async function deleteSurveyActionItem(actionItemId: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/engagement-surveys/action-items/${actionItemId}`);
 }
 
 export async function fetchEnpsTrend(periodMonths?: number): Promise<EnpsTrend[]> {

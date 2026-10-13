@@ -5,6 +5,7 @@ import { DomainEventType } from '@modules/shared/events/event-registry';
 import { EmployeeService } from '@modules/employee/services/employee.service';
 import { WorkflowEngineService } from '@modules/shared/workflow/workflow-engine.service';
 import { OnboardingTaskService } from './onboarding-task.service';
+import { ReferralService } from './referral.service';
 import { ConvertEmployeeDto } from '../dto/convert-employee.dto';
 import { ApplicationStatus, OfferStatus, EmployeeStatus } from '@prisma/client';
 
@@ -16,6 +17,7 @@ export class OnboardingService {
     private readonly employeeService: EmployeeService,
     private readonly workflow: WorkflowEngineService,
     private readonly onboardingTasks: OnboardingTaskService,
+    private readonly referrals: ReferralService,
   ) {}
 
   async convertToEmployee(
@@ -93,6 +95,12 @@ export class OnboardingService {
         data: { status: 'HIRED' as any },
       }),
     ]);
+
+    // QW-02: automatically award any pending employee referral bonus now that
+    // the referred candidate has been hired.
+    await this.referrals
+      .awardForHired(tenantId, candidate.id)
+      .catch((err) => console.error('[QW-02] referral award on hire failed', err));
 
     // FR-12: auto-generate the default cross-team onboarding checklist for the
     // newly converted employee (completed per-team per BR-06).

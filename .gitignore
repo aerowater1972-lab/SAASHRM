@@ -20,3 +20,18 @@ nul
 epic2-package/
 apps/api/temp_decls/
 
+
+# Local database dumps & one-off maintenance scratch (not part of the app)
+backups/
+verify_counts.sql
+scripts/ondelete-analysis.json
+scripts/apply-ondelete*.js
+scripts/analyze-ondelete.js
+scripts/parse-ondelete.js
+scripts/fix-backrel.js
+scripts/fix-rel2.js
+scripts/fix-setnull.js
+scripts/find-dto-any.js
+packages/database/check-tenant.js
+DTO_ANY_CLEANUP.md
+ONDELETE_MATRIX.md

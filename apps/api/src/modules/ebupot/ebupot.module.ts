@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EbupotController } from './ebupot.controller';
 import { EbupotService } from './services/ebupot.service';
+import { EbupotRetryCron } from './ebupot.retry.cron';
 
 /**
  * Modul e-Bupot / Coretax DJP (GAP-05).
@@ -8,7 +9,7 @@ import { EbupotService } from './services/ebupot.service';
  */
 @Module({
   controllers: [EbupotController],
-  providers: [EbupotService],
+  providers: [EbupotService, EbupotRetryCron],
   exports: [EbupotService],
 })
 export class EbupotModule {}

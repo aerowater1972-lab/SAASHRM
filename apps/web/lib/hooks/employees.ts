@@ -15,10 +15,11 @@ import {
 import type { CreateEmployeeInput, UpdateEmployeeInput } from '@/lib/schemas/employee';
 import type { Employee, PaginatedResponse } from '@/lib/types/employee';
 
-export function useEmployees(params?: EmployeeListParams) {
+export function useEmployees(params?: EmployeeListParams, enabled = true) {
   return useQuery({
     queryKey: [...queryKeys.employees.all, params],
     queryFn: () => fetchEmployees(params),
+    enabled,
   });
 }
 

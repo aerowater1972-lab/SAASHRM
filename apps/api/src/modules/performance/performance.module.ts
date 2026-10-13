@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EmployeeModule } from '@modules/employee/employee.module';
+import { TasksModule } from '@modules/tasks/tasks.module';
 import { CycleController } from './controllers/cycle.controller';
 import { ReviewController } from './controllers/review.controller';
 import { GoalController } from './controllers/goal.controller';
@@ -11,7 +12,7 @@ import { CalibrationService } from './services/calibration.service';
 import { PerformanceController } from './controllers/performance.controller';
 
 @Module({
-  imports: [EmployeeModule],
+  imports: [EmployeeModule, TasksModule],
   controllers: [
     CycleController,
     ReviewController,

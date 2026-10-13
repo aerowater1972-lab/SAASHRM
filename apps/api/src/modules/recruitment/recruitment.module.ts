@@ -11,9 +11,11 @@ import { ApplicationService } from './services/application.service';
 import { OnboardingDocumentController } from './controllers/onboarding-document.controller';
 import { OnboardingTaskController } from './controllers/onboarding-task.controller';
 import { CareerPortalController } from './controllers/career-portal.controller';
+import { ReferralController } from './controllers/referral.controller';
 import { OnboardingService } from './services/onboarding.service';
 import { OnboardingTaskService } from './services/onboarding-task.service';
 import { CareerPortalService } from './services/career-portal.service';
+import { ReferralService } from './services/referral.service';
 
 const PURGE_INTERVAL_MS = 60 * 60 * 1000; // BR-05 retention sweep every hour
 
@@ -28,6 +30,7 @@ const PURGE_INTERVAL_MS = 60 * 60 * 1000; // BR-05 retention sweep every hour
     OnboardingDocumentController,
     OnboardingTaskController,
     CareerPortalController,
+    ReferralController,
   ],
   providers: [
     JobPostingService,
@@ -36,6 +39,7 @@ const PURGE_INTERVAL_MS = 60 * 60 * 1000; // BR-05 retention sweep every hour
     OnboardingService,
     OnboardingTaskService,
     CareerPortalService,
+    ReferralService,
   ],
   exports: [
     JobPostingService,
@@ -44,6 +48,7 @@ const PURGE_INTERVAL_MS = 60 * 60 * 1000; // BR-05 retention sweep every hour
     OnboardingService,
     OnboardingTaskService,
     CareerPortalService,
+    ReferralService,
   ],
 })
 export class RecruitmentModule implements OnModuleInit, OnModuleDestroy {

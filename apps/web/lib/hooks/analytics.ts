@@ -17,6 +17,11 @@ import {
   getBradfordScores,
   getFlightRisk,
   getLeaveUtilization,
+  getDisengagement,
+  getReadiness,
+  getExplainDisengagement,
+  getDrift,
+  retrainJob,
 } from '@/lib/api/analytics';
 
 export function useHeadcount(filters?: Record<string, unknown>) {
@@ -91,4 +96,26 @@ export function useFlightRisk(filters?: Record<string, unknown>) {
 
 export function useLeaveUtilization(filters?: Record<string, unknown>) {
   return useQuery({ queryKey: ['analytics', 'leave', 'utilization', filters], queryFn: () => getLeaveUtilization(filters) });
+}
+
+// --- AI module queries (AI-03: disengagement, AI-04: readiness, AI-06: SHAP, AI-08: drift/retrain) ---
+
+export function useDisengagement(filters?: Record<string, unknown>) {
+  return useQuery({ queryKey: ['ai', 'disengagement', filters], queryFn: () => getDisengagement(filters) });
+}
+
+export function useReadiness(filters?: Record<string, unknown>) {
+  return useQuery({ queryKey: ['ai', 'readiness', filters], queryFn: () => getReadiness(filters) });
+}
+
+export function useExplainDisengagement(employeeId: string) {
+  return useQuery({ queryKey: ['ai', 'explain', employeeId], queryFn: () => getExplainDisengagement(employeeId) });
+}
+
+export function useDrift() {
+  return useQuery({ queryKey: ['ai', 'drift'], queryFn: () => getDrift() });
+}
+
+export function useRetrainJob() {
+  return useMutation({ mutationFn: (data: Record<string, unknown>) => retrainJob(data) });
 }

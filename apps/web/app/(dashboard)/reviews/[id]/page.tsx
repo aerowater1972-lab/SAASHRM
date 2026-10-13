@@ -9,17 +9,26 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { PageSkeleton, ErrorState } from '@/components/ui/data-states';
-import { ArrowLeft, Star, Target, Edit3, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Star, Target, Edit3, CheckCircle, ListChecks } from 'lucide-react';
 
 interface Rating { id: string; competency: string; score: number; description?: string }
 interface ReviewGoal { id: string; title: string; status: string; targetValue?: number; actualValue?: number }
+// TM-07: objective feed — completion rate tugas karyawan pada periode review (dari backend).
+interface TaskCompletion {
+  employeeId: string; from: string; to: string;
+  total: number; done: number; overdue: number; onTime: number;
+  completionRate: number; onTimeRate: number; // fraksi 0..1
+}
 interface Review {
   id: string; overallScore?: number; summary?: string; strengths?: string; improvements?: string;
   status: string; submittedAt?: string; createdAt: string;
   employee: { id: string; fullName: string; employeeId: string };
   cycle: { id: string; name: string; period?: string; status: string };
   ratings: Rating[]; goals: ReviewGoal[];
+  taskCompletion?: TaskCompletion | null;
 }
+
+const pct = (frac: number) => `${Math.round((frac || 0) * 100)}%`;
 
 const statusVariant: Record<string, 'success' | 'warning' | 'info' | 'secondary'> = {
   COMPLETED: 'success', IN_PROGRESS: 'info', DRAFT: 'secondary', PENDING: 'warning',
@@ -112,6 +121,38 @@ export default function ReviewDetailPage() {
                 <span className="text-muted-foreground">{g.actualValue ?? 0}/{g.targetValue ?? '—'} &middot; <Badge variant="outline" className="text-[10px]">{g.status}</Badge></span>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {review.taskCompletion && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2"><ListChecks className="h-4 w-4" />Task Completion</CardTitle>
+            <p className="text-xs text-muted-foreground">Data objektif penyelesaian tugas pada periode review (TM-07)</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Completion</p>
+                <p className="text-xl font-bold text-green-600">{pct(review.taskCompletion.completionRate)}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">On-time</p>
+                <p className="text-xl font-bold text-blue-600">{pct(review.taskCompletion.onTimeRate)}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Selesai</p>
+                <p className="text-xl font-bold">{review.taskCompletion.done}<span className="text-sm text-muted-foreground">/{review.taskCompletion.total}</span></p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Overdue</p>
+                <p className="text-xl font-bold text-red-600">{review.taskCompletion.overdue}</p>
+              </div>
+            </div>
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-full bg-green-500" style={{ width: pct(review.taskCompletion.completionRate) }} />
+            </div>
           </CardContent>
         </Card>
       )}

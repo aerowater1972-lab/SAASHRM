@@ -20,10 +20,12 @@ import { ExpenseModule } from './modules/expense/expense.module';
 import { AssetModule } from './modules/asset/asset.module';
 import { BenefitModule } from './modules/benefit/benefit.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AIAnalyticsModule } from './modules/ai/ai.module';
 import { ResignationModule } from './modules/resignation/resignation.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { EmployeeRelationsModule } from './modules/employee-relations/employee-relations.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 import { EbupotModule } from './modules/ebupot/ebupot.module';
 import { EngagementSurveyModule } from './modules/engagement-survey/engagement-survey.module';
 import { ManpowerPlanningModule } from './modules/manpower-planning/manpower-planning.module';
@@ -35,6 +37,7 @@ import { ProvincialWageModule } from './modules/provincial-wage/provincial-wage.
 import { DocumentManagementModule } from './modules/document-management/document-management.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
+import { CompensationModule } from './modules/compensation/compensation.module';
 import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
 import { OutsourcingModule } from './modules/outsourcing/outsourcing.module';
 import { PdpaModule } from './modules/pdpa/pdpa.module';
@@ -90,6 +93,7 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     AssetModule,
     BenefitModule,
     AnalyticsModule,
+    AIAnalyticsModule,
     ResignationModule,
     LearningModule,
     EmployeeRelationsModule,
@@ -102,8 +106,10 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     DocumentManagementModule,
     IntegrationsModule,
     CommunicationsModule,
+    CompensationModule,
     HelpdeskModule,
     EbupotModule,
+    TasksModule,
     SuccessionPlanningModule,
     OutsourcingModule,
     PdpaModule,

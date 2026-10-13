@@ -11,8 +11,14 @@ import {
   fetchEngagementSurveyActionItems,
   createEngagementSurveyActionItem,
   updateEngagementSurveyActionItem,
+  fetchSurveyActionItems,
+  fetchMySurveyActionItems,
+  fetchSurveyActionItemSummary,
+  updateSurveyActionItemProgress,
+  deleteSurveyActionItem,
   fetchEnpsTrend,
   type EngagementSurveyListParams,
+  type SurveyActionItemListParams,
 } from '@/lib/api/engagement-survey';
 
 export function useEngagementSurveys(params?: EngagementSurveyListParams) {
@@ -101,6 +107,50 @@ export function useUpdateEngagementSurveyActionItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ actionItemId, data }: { actionItemId: string; data: Record<string, unknown> }) => updateEngagementSurveyActionItem(actionItemId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.engagementSurveys.all });
+    },
+  });
+}
+
+// ——— QW-03: cross-survey action item workspace ———
+
+export function useSurveyActionItems(params?: SurveyActionItemListParams) {
+  return useQuery({
+    queryKey: queryKeys.engagementSurveys.actionItemsAll(params as Record<string, unknown>),
+    queryFn: () => fetchSurveyActionItems(params),
+  });
+}
+
+export function useMySurveyActionItems() {
+  return useQuery({
+    queryKey: queryKeys.engagementSurveys.actionItemsMine,
+    queryFn: () => fetchMySurveyActionItems(),
+  });
+}
+
+export function useSurveyActionItemSummary(surveyId?: string) {
+  return useQuery({
+    queryKey: queryKeys.engagementSurveys.actionItemsSummary(surveyId),
+    queryFn: () => fetchSurveyActionItemSummary(surveyId),
+  });
+}
+
+export function useUpdateSurveyActionItemProgress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ actionItemId, progress }: { actionItemId: string; progress: number }) =>
+      updateSurveyActionItemProgress(actionItemId, progress),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.engagementSurveys.all });
+    },
+  });
+}
+
+export function useDeleteSurveyActionItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (actionItemId: string) => deleteSurveyActionItem(actionItemId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.engagementSurveys.all });
     },

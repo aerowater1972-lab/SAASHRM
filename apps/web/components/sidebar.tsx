@@ -42,6 +42,10 @@ import {
   TrendingUp,
   Network,
   Users2,
+  ListTodo,
+  SquareKanban,
+  FolderKanban,
+  CalendarRange,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -147,6 +151,16 @@ const navItems: NavGroup[] = [
     items: [
       { href: '/manpower-planning', label: 'Manpower Planning', icon: ClipboardList },
       { href: '/engagement-survey', label: 'Engagement Survey', icon: MessageSquare },
+      { href: '/engagement-survey/action-plan', label: 'Action Plan Survei', icon: ListTodo },
+    ],
+  },
+  {
+    group: 'Produktivitas',
+    items: [
+      { href: '/tasks', label: 'Task Saya & Tim', icon: ListTodo, permission: 'tasks:view' },
+      { href: '/tasks/board', label: 'Papan Kanban', icon: SquareKanban, permission: 'tasks:view' },
+      { href: '/tasks/gantt', label: 'Gantt Chart', icon: CalendarRange, permission: 'tasks:view' },
+      { href: '/tasks/projects', label: 'Project', icon: FolderKanban, permission: 'tasks:manage' },
     ],
   },
   {

@@ -84,6 +84,9 @@ export const queryKeys = {
     detail: (id: string) => ['engagement-surveys', 'detail', id] as const,
     results: (id: string) => ['engagement-surveys', 'results', id] as const,
     actionItems: (surveyId: string) => ['engagement-surveys', 'action-items', surveyId] as const,
+    actionItemsAll: (params?: Record<string, unknown>) => ['engagement-surveys', 'action-items-all', params] as const,
+    actionItemsMine: ['engagement-surveys', 'action-items-mine'] as const,
+    actionItemsSummary: (surveyId?: string) => ['engagement-surveys', 'action-items-summary', surveyId] as const,
     enpsTrend: ['engagement-surveys', 'enps-trend'] as const,
   },
   manpowerPlans: {
