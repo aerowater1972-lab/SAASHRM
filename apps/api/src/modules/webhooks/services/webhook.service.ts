@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHmac, createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '@common/prisma/prisma.service';
 import { AuditService } from '@modules/admin/services/audit.service';
+import { WebhookDelivery, WebhookEndpoint } from '@prisma/client';
 import {
   CreateWebhookEndpointDto,
   UpdateWebhookEndpointDto,
@@ -206,66 +207,103 @@ export class WebhookService {
     let failed = 0;
 
     for (const delivery of due) {
-      const endpoint = delivery.endpoint;
-      if (!endpoint || !endpoint.isActive || endpoint.deletedAt) {
-        await this.prisma.webhookDelivery.update({
-          where: { id: delivery.id },
-          data: { status: 'FAILED', errorMsg: 'Endpoint inactive or deleted' },
-        });
-        failed += 1;
-        continue;
-      }
-
-      const rawBody = JSON.stringify(delivery.payload);
-      const signature = this.sign(endpoint.secretHash, rawBody);
-      const attempts = delivery.attempts + 1;
-
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-        const res = await fetch(endpoint.url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-webhook-event': delivery.event,
-            'x-webhook-delivery-id': delivery.id,
-            'x-webhook-signature': `sha256=${signature}`,
-          },
-          body: rawBody,
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-
-        const responseBody = (await res.text().catch(() => '')).slice(0, 2000);
-
-        if (res.ok) {
-          await this.prisma.webhookDelivery.update({
-            where: { id: delivery.id },
-            data: {
-              status: 'DELIVERED',
-              attempts,
-              deliveredAt: now,
-              responseStatus: res.status,
-              responseBody,
-              errorMsg: null,
-            },
-          });
-          delivered += 1;
-        } else {
-          await this.reschedule(delivery.id, attempts, `HTTP ${res.status}`, now, res.status, responseBody);
-          if (attempts >= MAX_ATTEMPTS) failed += 1;
-        }
-      } catch (err: any) {
-        const msg = err?.name === 'AbortError' ? 'Request timeout' : err?.message || 'Network error';
-        await this.reschedule(delivery.id, attempts, msg, now);
-        if (attempts >= MAX_ATTEMPTS) failed += 1;
-      }
+      const outcome = await this.attemptDelivery(delivery, now);
+      if (outcome === 'delivered') delivered += 1;
+      else if (outcome === 'failed') failed += 1;
     }
 
     if (delivered > 0 || failed > 0) {
       this.logger.log(`Webhook delivery sweep: ${delivered} delivered, ${failed} failed`);
     }
     return { delivered, failed };
+  }
+
+  /**
+   * Attempt a single PENDING delivery immediately instead of waiting for the
+   * cron sweep — used by connectors (TC-01 Slack) that want synchronous
+   * feedback. On failure the usual backoff is scheduled, so
+   * `WebhookDeliveryCron` keeps retrying in the background.
+   *
+   * Returns the refreshed delivery row (status reflects the real HTTP outcome).
+   */
+  async deliverOne(deliveryId: string, now: Date = new Date()) {
+    const delivery = await this.prisma.webhookDelivery.findUnique({
+      where: { id: deliveryId },
+      include: { endpoint: true },
+    });
+    if (!delivery) throw new NotFoundException('Webhook delivery not found');
+
+    if (delivery.status === 'PENDING') {
+      await this.attemptDelivery(delivery, now);
+    }
+
+    const updated = await this.prisma.webhookDelivery.findUnique({
+      where: { id: deliveryId },
+    });
+    return updated ?? delivery;
+  }
+
+  /**
+   * Deliver one row over HTTP and persist the outcome.
+   * Returns 'delivered' on 2xx, 'failed' when retries are exhausted or the
+   * endpoint is inactive/deleted, and 'retry' when rescheduled with backoff.
+   */
+  private async attemptDelivery(
+    delivery: WebhookDelivery & { endpoint: WebhookEndpoint | null },
+    now: Date,
+  ): Promise<'delivered' | 'failed' | 'retry'> {
+    const endpoint = delivery.endpoint;
+    if (!endpoint || !endpoint.isActive || endpoint.deletedAt) {
+      await this.prisma.webhookDelivery.update({
+        where: { id: delivery.id },
+        data: { status: 'FAILED', errorMsg: 'Endpoint inactive or deleted' },
+      });
+      return 'failed';
+    }
+
+    const rawBody = JSON.stringify(delivery.payload);
+    const signature = this.sign(endpoint.secretHash, rawBody);
+    const attempts = delivery.attempts + 1;
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const res = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-event': delivery.event,
+          'x-webhook-delivery-id': delivery.id,
+          'x-webhook-signature': `sha256=${signature}`,
+        },
+        body: rawBody,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      const responseBody = (await res.text().catch(() => '')).slice(0, 2000);
+
+      if (res.ok) {
+        await this.prisma.webhookDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: 'DELIVERED',
+            attempts,
+            deliveredAt: now,
+            responseStatus: res.status,
+            responseBody,
+            errorMsg: null,
+          },
+        });
+        return 'delivered';
+      }
+      await this.reschedule(delivery.id, attempts, `HTTP ${res.status}`, now, res.status, responseBody);
+      return attempts >= MAX_ATTEMPTS ? 'failed' : 'retry';
+    } catch (err: any) {
+      const msg = err?.name === 'AbortError' ? 'Request timeout' : err?.message || 'Network error';
+      await this.reschedule(delivery.id, attempts, msg, now);
+      return attempts >= MAX_ATTEMPTS ? 'failed' : 'retry';
+    }
   }
 
   /** Apply exponential backoff or give up after MAX_ATTEMPTS. */

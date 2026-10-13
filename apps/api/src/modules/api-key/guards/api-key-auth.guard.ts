@@ -3,15 +3,21 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ApiKeyService } from '../services/api-key.service';
+import { REQUIRE_API_KEY_SCOPES_KEY } from '../decorators/require-api-key-scopes.decorator';
 
 @Injectable()
 export class ApiKeyAuthGuard implements CanActivate {
   private readonly logger = new Logger(ApiKeyAuthGuard.name);
 
-  constructor(private readonly apiKeyService: ApiKeyService) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly apiKeyService: ApiKeyService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -27,6 +33,30 @@ export class ApiKeyAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid API key');
     }
 
+    // Scope enforcement (UAT OA-02-08): routes decorated with
+    // @RequireApiKeyScopes(...) demand those scopes on the key. A key scoped
+    // '*' satisfies every requirement.
+    const requiredScopes = this.reflector.getAllAndOverride<string[]>(
+      REQUIRE_API_KEY_SCOPES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (requiredScopes && requiredScopes.length > 0) {
+      const keyScopes: string[] = Array.isArray(apiKeyRecord.scopes)
+        ? apiKeyRecord.scopes
+        : [];
+      const missing = requiredScopes.filter(
+        (scope) => !keyScopes.includes('*') && !keyScopes.includes(scope),
+      );
+      if (missing.length > 0) {
+        this.logger.warn(
+          `API key ${apiKeyRecord.keyPrefix}… missing scope(s): ${missing.join(', ')}`,
+        );
+        throw new ForbiddenException(
+          `API key missing required scope(s): ${missing.join(', ')}`,
+        );
+      }
+    }
+
     // Expose the tenant so TenantGuard/@TenantId resolve the API key's tenant
     request.user = {
       ...request.user,
@@ -37,3 +67,4 @@ export class ApiKeyAuthGuard implements CanActivate {
     return true;
   }
 }
+

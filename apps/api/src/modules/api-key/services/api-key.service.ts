@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
@@ -11,6 +12,8 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class ApiKeyService {
+  private readonly logger = new Logger(ApiKeyService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateApiKeyDto, tenantId: string) {
@@ -81,6 +84,12 @@ export class ApiKeyService {
       where: { keyHash, deletedAt: null, isActive: true },
     });
     if (!apiKey) {
+      return null;
+    }
+
+    // UAT OA-02-10: reject keys past their expiry
+    if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
+      this.logger.warn(`Expired API key used: ${apiKey.keyPrefix}…`);
       return null;
     }
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import { WebhookEndpoint, WebhookDelivery } from '@prisma/client';
+import { WebhookEndpoint } from '@prisma/client';
+import { WebhookService } from '../../webhooks/services/webhook.service';
 
 export type SlackPayload = {
   text: string;
@@ -14,7 +15,10 @@ export type SlackPayload = {
 export class SlackEndpointService {
   private readonly logger = new Logger(SlackEndpointService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly webhooks: WebhookService,
+  ) {}
 
   async getActiveEndpoint(tenantId: string): Promise<WebhookEndpoint | null> {
     return this.prisma.webhookEndpoint.findFirst({
@@ -68,16 +72,13 @@ export class SlackEndpointService {
         payload: payload,
         status: 'PENDING',
         attempts: 0,
+        nextRetryAt: new Date(),
       },
     });
 
-    // Simulate async delivery
-    return {
-      ...delivery,
-      status: 'DELIVERED',
-      deliveredAt: new Date(),
-      responseStatus: 200,
-      responseBody: JSON.stringify({ ok: true }),
-    };
+    // Deliver synchronously through the OA-03 engine: real HTTP POST to the
+    // Slack webhook URL with signature + timeout. On failure the engine
+    // schedules exponential backoff and WebhookDeliveryCron keeps retrying.
+    return this.webhooks.deliverOne(delivery.id);
   }
 }

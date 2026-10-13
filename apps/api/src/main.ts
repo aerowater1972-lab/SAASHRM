@@ -15,7 +15,8 @@ async function bootstrap() {
   initOtel();
 
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  // rawBody: keep the exact bytes for Slack signature verification (v0:ts:body HMAC)
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
 
   app.setGlobalPrefix('api/v1');

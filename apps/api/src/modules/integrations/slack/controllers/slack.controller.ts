@@ -4,10 +4,13 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  Req,
   UseGuards,
   Headers,
+  RawBodyRequest,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
 import { Public } from '../../../../common/decorators/public.decorator';
 import { SkipCsrf } from '../../../../common/decorators/skip-csrf.decorator';
@@ -17,6 +20,7 @@ import { TenantGuard } from '../../../../common/guards/tenant.guard';
 import { SlackService } from '../services/slack.service';
 import { SlackNotifyDto, SlackNoticeDto } from '../dto';
 import { ApiKeyAuthGuard } from '../../../api-key/guards/api-key-auth.guard';
+import { RequireApiKeyScopes } from '../../../api-key/decorators/require-api-key-scopes.decorator';
 
 @ApiTags('Slack')
 @Controller('slack')
@@ -26,6 +30,7 @@ export class SlackController {
   @Post('notify')
   @Public()
   @SkipCsrf()
+  @RequireApiKeyScopes('slack:write')
   @UseGuards(ApiKeyAuthGuard, TenantGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a message to a Slack channel' })
@@ -39,6 +44,7 @@ export class SlackController {
   @Post('notice')
   @Public()
   @SkipCsrf()
+  @RequireApiKeyScopes('slack:notice')
   @UseGuards(ApiKeyAuthGuard, TenantGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a system notice to Slack' })
@@ -54,14 +60,27 @@ export class SlackController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Handle Slack slash commands (Slack App)' })
   @ApiResponse({ status: 200, description: 'Slash command processed' })
+  @ApiResponse({ status: 401, description: 'Invalid Slack signature' })
   async slashCommand(
-    @Body() body: { text: string; trigger_id: string },
-    @Headers('X-Slack-Request-Timestamp') timestamp: string,
-    @Headers('X-Slack-Signature') signature: string,
+    @Req() req: RawBodyRequest<Request>,
+    @Headers() headers: Record<string, string | undefined>,
+    @Body() body: { text?: string; trigger_id?: string },
   ) {
-    if (!this.slackService.verifySlashCommandSignature(timestamp, signature, body)) {
+    // Slack signs HMAC-SHA256 over `v0:{timestamp}:{rawBody}`; the raw bytes
+    // are preserved by Nest (rawBody: true in main.ts) — parsed JSON/form
+    // bodies must never be re-serialized for verification.
+    const raw = req.rawBody;
+    const verified = this.slackService.verifySlashCommandSignature(
+      headers['x-slack-request-timestamp'],
+      headers['x-slack-signature'],
+      raw ? raw.toString('utf8') : undefined,
+    );
+    if (!verified) {
       throw new UnauthorizedException('Invalid Slack signature');
     }
-    return this.slackService.handleSlashCommand(body.text, body.trigger_id);
+    return this.slackService.handleSlashCommand(
+      body?.text ?? '',
+      body?.trigger_id ?? '',
+    );
   }
 }
