@@ -268,3 +268,71 @@ describe('AIAnalyticsService', () => {
   });
 });
 
+describe('AIAnalyticsService - AI-05 department health & trend', () => {
+  const buildDept = (id: string, name: string) => ({ id, name });
+
+  const makeSvc = async (employees: any[]) => {
+    const p = buildMockPrisma({ employees });
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AIAnalyticsService, { provide: PrismaService, useValue: p }],
+    }).compile();
+    return module.get<AIAnalyticsService>(AIAnalyticsService);
+  };
+
+  const healthyEmp = () => buildEmployee({
+    attendanceRecords: [buildAttendance({ status: 'PRESENT' }), buildAttendance({ status: 'PRESENT' })],
+    leaveBalances: [{ totalEntitled: 10, totalUsed: 0, totalPending: 0 }],
+    performanceReviews: [{ overallScore: 4.8, createdAt: new Date('2026-08-01') }],
+    disciplinaryCases: [],
+    employments: [{ isActive: true, startDate: new Date('2018-01-01'), department: buildDept('d-eng', 'Engineering') }],
+  });
+
+  const riskyEmp = () => buildEmployee({
+    attendanceRecords: [buildAttendance({ status: 'LATE' }), buildAttendance({ status: 'ABSENT' }), buildAttendance({ status: 'LATE', isSuspicious: true })],
+    leaveBalances: [{ totalEntitled: 10, totalUsed: 10, totalPending: 0 }],
+    performanceReviews: [{ overallScore: 1.5, createdAt: new Date('2026-08-01') }],
+    disciplinaryCases: [{ status: 'APPROVED' }],
+    employments: [{ isActive: true, startDate: new Date('2026-08-01'), department: buildDept('d-sales', 'Sales') }],
+  });
+
+  it('departmentHealth: mengelompokkan per departemen dengan skor & band', async () => {
+    const svc = await makeSvc([healthyEmp(), riskyEmp()]);
+    const rows = await svc.departmentHealth(MOCK_TENANT);
+    expect(rows.length).toBe(2);
+    const byName = Object.fromEntries(rows.map((r) => [r.departmentName, r]));
+    expect(byName['Engineering'].headcount).toBe(1);
+    expect(byName['Sales'].headcount).toBe(1);
+    // healthScore selalu dalam rentang 0-100 dan band valid.
+    for (const r of rows) {
+      expect(r.healthScore).toBeGreaterThanOrEqual(0);
+      expect(r.healthScore).toBeLessThanOrEqual(100);
+      expect(['HEALTHY', 'WATCH', 'AT_RISK']).toContain(r.band);
+    }
+    // Terurut menaik berdasarkan healthScore (paling berisiko dulu).
+    expect(rows[0].healthScore).toBeLessThanOrEqual(rows[1].healthScore);
+  });
+
+  it('departmentHealth: kosong bila tidak ada karyawan', async () => {
+    const svc = await makeSvc([]);
+    expect(await svc.departmentHealth(MOCK_TENANT)).toEqual([]);
+  });
+
+  it('riskTrend: menghasilkan satu titik per bulan dengan field lengkap', async () => {
+    const svc = await makeSvc([healthyEmp(), riskyEmp()]);
+    const trend = await svc.riskTrend(MOCK_TENANT, 3);
+    expect(trend.length).toBe(3);
+    for (const pt of trend) {
+      expect(pt.period).toMatch(/^\d{4}-\d{2}$/);
+      expect(pt.avgRisk).toBeGreaterThanOrEqual(0);
+      expect(pt.highRiskCount).toBeGreaterThanOrEqual(0);
+      expect(pt.headcount).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('riskTrend: dibatasi maksimal 12 bulan', async () => {
+    const svc = await makeSvc([healthyEmp()]);
+    const trend = await svc.riskTrend(MOCK_TENANT, 99);
+    expect(trend.length).toBe(12);
+  });
+});
+

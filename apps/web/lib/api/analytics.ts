@@ -86,6 +86,15 @@ export async function getDrift(filters?: Record<string, unknown>): Promise<Recor
   return api.get<Record<string, unknown>>('/ai/drift', { params: filters });
 }
 
+// --- AI-05: department health score + risk trend ---
+export async function getDepartmentHealth(): Promise<any[]> {
+  return api.get<any[]>('/ai/department-health');
+}
+
+export async function getRiskTrend(months?: number): Promise<any[]> {
+  return api.get<any[]>('/ai/risk-trend', { params: months ? { months } : {} });
+}
+
 export async function notifyHighRisk(): Promise<Record<string, unknown>> {
   return api.post<Record<string, unknown>>('/ai/notify-high-risk', {});
 }

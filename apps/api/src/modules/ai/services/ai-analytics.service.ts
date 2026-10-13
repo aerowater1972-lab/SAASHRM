@@ -45,6 +45,24 @@ export interface DriftResult {
   band: DriftBand;
 }
 
+export interface DepartmentHealth {
+  departmentId: string;
+  departmentName: string;
+  headcount: number;
+  avgRiskScore: number;
+  healthScore: number;
+  criticalCount: number;
+  highCount: number;
+  band: 'HEALTHY' | 'WATCH' | 'AT_RISK';
+}
+
+export interface RiskTrendPoint {
+  period: string;
+  avgRisk: number;
+  highRiskCount: number;
+  headcount: number;
+}
+
 export interface RetrainResult {
   modelVersion: number;
   updatedAt: Date;
@@ -418,6 +436,89 @@ export class AIAnalyticsService {
       results.push({ feature: names[f], psi: Math.round(psi * 1000) / 1000, band });
     }
     return results;
+  }
+
+  /**
+   * AI-05: Department Health Score — agregasi sinyal disengagement per
+   * departemen (employments aktif). healthScore = 100 - avgRisk*100.
+   */
+  async departmentHealth(tenantId: string, limit = 100): Promise<DepartmentHealth[]> {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, status: 'ACTIVE' },
+      include: {
+        attendanceRecords: { where: { isApproved: true }, orderBy: { date: 'desc' }, take: 120 },
+        leaveBalances: { where: { year: CURRENT_YEAR }, orderBy: { id: 'desc' }, take: 5 },
+        performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
+        disciplinaryCases: { where: { status: 'APPROVED' }, take: 5 },
+        employments: { where: { isActive: true }, take: 1, include: { department: { select: { id: true, name: true } } } },
+      },
+      take: Math.min(2000, Math.max(1, limit) * 20),
+    });
+    const rows = await Promise.all(employees.map((e) => this.featureVector(e)));
+    const scores = this.forest.score(rows);
+    const byDept = new Map<string, { name: string; scores: number[]; levels: RiskLevel[] }>();
+    employees.forEach((emp, i) => {
+      const dept = (emp.employments?.[0] as any)?.department;
+      const id = dept?.id ?? 'unknown';
+      const name = dept?.name ?? 'Belum ditentukan';
+      const bucket = byDept.get(id) ?? { name, scores: [] as number[], levels: [] as RiskLevel[] };
+      bucket.scores.push(scores[i]);
+      bucket.levels.push(this.classifyRisk(scores[i]));
+      byDept.set(id, bucket);
+    });
+    return [...byDept.entries()]
+      .map(([departmentId, b]) => {
+        const avg = b.scores.reduce((s, v) => s + v, 0) / (b.scores.length || 1);
+        const healthScore = Math.round((1 - avg) * 100);
+        return {
+          departmentId,
+          departmentName: b.name,
+          headcount: b.scores.length,
+          avgRiskScore: Math.round(avg * 100) / 100,
+          healthScore,
+          criticalCount: b.levels.filter((l) => l === 'CRITICAL').length,
+          highCount: b.levels.filter((l) => l === 'HIGH').length,
+          band: (healthScore >= 75 ? 'HEALTHY' : healthScore >= 50 ? 'WATCH' : 'AT_RISK') as DepartmentHealth['band'],
+        };
+      })
+      .sort((a, b) => a.healthScore - b.healthScore);
+  }
+
+  /**
+   * AI-05: Risk trend — rata-rata skor risiko + jumlah high-risk per bulan
+   * untuk `months` terakhir (window attendance per bulan).
+   */
+  async riskTrend(tenantId: string, months = 6): Promise<RiskTrendPoint[]> {
+    const n = Math.min(12, Math.max(1, months));
+    const now = new Date();
+    const points: RiskTrendPoint[] = [];
+    for (let m = n - 1; m >= 0; m -= 1) {
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m + 1, 1));
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m, 1));
+      const rows = await this.featureVectorsWindow(tenantId, start, end);
+      if (rows.length === 0) {
+        points.push({
+          period: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`,
+          avgRisk: 0,
+          highRiskCount: 0,
+          headcount: 0,
+        });
+        continue;
+      }
+      const scores = this.forest.score(rows);
+      const avg = scores.reduce((s, v) => s + v, 0) / scores.length;
+      const high = scores.filter((s) => {
+        const l = this.classifyRisk(s);
+        return l === 'HIGH' || l === 'CRITICAL';
+      }).length;
+      points.push({
+        period: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`,
+        avgRisk: Math.round(avg * 100) / 100,
+        highRiskCount: high,
+        headcount: rows.length,
+      });
+    }
+    return points;
   }
 
   getModelVersion(): { version: number; updatedAt: Date } {

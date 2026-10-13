@@ -56,6 +56,21 @@ export class AiAnalyticsController {
     return this.ai.explainDisengagement(tenantId, employeeId);
   }
 
+  @Get('department-health')
+  @Permissions('ai:view')
+  @ApiOperation({ summary: 'Department Health Score — agregasi risiko disengagement per departemen (AI-05)' })
+  async departmentHealth(@TenantId() tenantId: string) {
+    return this.ai.departmentHealth(tenantId);
+  }
+
+  @Get('risk-trend')
+  @Permissions('ai:view')
+  @ApiOperation({ summary: 'Risk trend — rata-rata risiko + high-risk count per bulan (AI-05)' })
+  @ApiQuery({ name: 'months', required: false, description: 'Jumlah bulan (1-12)', type: Number })
+  async riskTrend(@TenantId() tenantId: string, @Query('months') months?: string) {
+    return this.ai.riskTrend(tenantId, months ? Number(months) : 6);
+  }
+
   @Get('drift')
   @Permissions('ai:view')
   @ApiOperation({ summary: 'Monitoring drift fitur (PSI 90 vs 180 hari lalu)' })

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Header } from '@nestjs/common';
 import { ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
@@ -69,5 +69,22 @@ export class FlipController {
   @ApiOperation({ summary: 'Rekonsiliasi status langsung ke Flip' })
   refresh(@Param('id') id: string) {
     return this.flip.refreshStatus(id);
+  }
+
+  @Get('disbursements/export.csv')
+  @Permissions('payroll:run:read')
+  @Header('Content-Type', 'text/csv')
+  @ApiOperation({ summary: 'Fallback CSV untuk bank tanpa API (PD-06)' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  exportCsv(
+    @TenantId() tenantId: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+  ): Promise<string> {
+    return this.flip.exportCsv(tenantId, {
+      status,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 }

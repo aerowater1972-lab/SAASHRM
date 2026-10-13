@@ -1,9 +1,10 @@
 /** AI-05: AI Insights Dashboard Widget */
-import { useDisengagement, useReadiness } from '@/lib/hooks/analytics';
+import { useDisengagement, useReadiness, useDepartmentHealth, useRiskTrend } from '@/lib/hooks/analytics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { ErrorState, PageSkeleton } from '@/components/ui/data-states';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface AiSignal {
   employeeId: string;
@@ -48,6 +49,8 @@ function asArray(v: unknown): any[] {
 export function AiInsightsDashboard({ tenantId }: AiInsightsDashboardProps) {
   const { data: signals, isLoading: loading1, error: error1 } = useDisengagement({ tenantId });
   const { data: readiness, isLoading: loading2, error: error2 } = useReadiness({ tenantId });
+  const { data: deptHealth = [] } = useDepartmentHealth();
+  const { data: trend = [] } = useRiskTrend(6);
 
   const hasError = error1 || error2;
   const isLoading = loading1 || loading2;
@@ -98,6 +101,66 @@ export function AiInsightsDashboard({ tenantId }: AiInsightsDashboardProps) {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI-05: Department Health Score */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Department Health Score</CardTitle></CardHeader>
+        <CardContent>
+          {deptHealth.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada data departemen.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Departemen</TableHead>
+                    <TableHead>Health</TableHead>
+                    <TableHead>Avg Risk</TableHead>
+                    <TableHead>Headcount</TableHead>
+                    <TableHead>Critical</TableHead>
+                    <TableHead>High</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(deptHealth as any[]).map((d) => (
+                    <TableRow key={d.departmentId}>
+                      <TableCell>{d.departmentName}</TableCell>
+                      <TableCell>{bandVariant(d.band === 'HEALTHY' ? 'LOW' : d.band === 'AT_RISK' ? 'CRITICAL' : 'MEDIUM')} {d.healthScore}</TableCell>
+                      <TableCell>{typeof d.avgRiskScore === 'number' ? d.avgRiskScore.toFixed(2) : '-'}</TableCell>
+                      <TableCell>{d.headcount}</TableCell>
+                      <TableCell className="text-destructive">{d.criticalCount}</TableCell>
+                      <TableCell>{d.highCount}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI-05: Risk Trend (6 bulan) */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Risk Trend (6 Bulan)</CardTitle></CardHeader>
+        <CardContent>
+          {trend.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada data tren.</p>
+          ) : (
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trend as any[]} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis dataKey="period" fontSize={12} />
+                  <YAxis fontSize={12} domain={[0, 1]} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="avgRisk" name="Avg Risk" stroke="#e74c3c" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="highRiskCount" name="High-risk count" stroke="#f39c12" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           )}
         </CardContent>

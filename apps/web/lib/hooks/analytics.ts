@@ -21,6 +21,8 @@ import {
   getReadiness,
   getExplainDisengagement,
   getDrift,
+  getDepartmentHealth,
+  getRiskTrend,
   retrainJob,
   notifyHighRisk,
 } from '@/lib/api/analytics';
@@ -115,6 +117,14 @@ export function useExplainDisengagement(employeeId: string) {
 
 export function useDrift() {
   return useQuery({ queryKey: ['ai', 'drift'], queryFn: () => getDrift() });
+}
+
+export function useDepartmentHealth() {
+  return useQuery({ queryKey: ['ai', 'department-health'], queryFn: () => getDepartmentHealth() });
+}
+
+export function useRiskTrend(months?: number) {
+  return useQuery({ queryKey: ['ai', 'risk-trend', months ?? 6], queryFn: () => getRiskTrend(months) });
 }
 
 export function useRetrainJob() {

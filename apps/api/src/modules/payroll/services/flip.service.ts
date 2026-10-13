@@ -1,6 +1,8 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { MailService } from '@modules/integrations/services/mail.service';
+import { NotificationService } from '@modules/shared/notification/notification.service';
 import * as crypto from 'crypto';
 
 export interface FlipDisbursementInput {
@@ -36,6 +38,8 @@ export class FlipService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @Optional() private readonly mail?: MailService,
+    @Optional() private readonly notification?: NotificationService,
   ) {
     this.secretKey = this.config.get<string>('FLIP_SECRET_KEY') || undefined;
     this.baseUrl = (this.config.get<string>('FLIP_BASE_URL') || 'https://api.flip.id').replace(/\/$/, '');
@@ -139,10 +143,62 @@ export class FlipService {
     const raw: any = await res.json().catch(() => ({}));
     const map: Record<string, string> = { SUCCESS: 'SUCCESS', DONE: 'SUCCESS', FAILED: 'FAILED', CANCELLED: 'CANCELLED', PENDING: 'PENDING' };
     const status = map[String(raw.status ?? '').toUpperCase()] ?? 'PENDING';
-    return (this.prisma as any).flipDisbursement.update({
+    const updated = await (this.prisma as any).flipDisbursement.update({
       where: { id },
       data: { status: status as any, rawResponse: raw },
     });
+    // PD-05: notifikasi HR + payroll saat transfer mencapai status final.
+    if (status !== 'PENDING' && rec.status !== status) {
+      await this.notifyStatusChange(updated, rec.status);
+    }
+    return updated;
+  }
+
+  /**
+   * PD-05 - Notifikasi email HR + in-app setelah transfer final
+   * (SUCCESS / FAILED / CANCELLED). Best-effort: kegagalan kirim tidak
+   * menggagalkan rekonsiliasi. Idempotensi dijaga penjaga status di pemanggil.
+   */
+  private async notifyStatusChange(rec: any, previous: string) {
+    const amount = Number(rec.amount ?? 0).toLocaleString('id-ID');
+    const ok = rec.status === 'SUCCESS';
+    const subject = ok
+      ? 'Transfer gaji berhasil'
+      : rec.status === 'CANCELLED'
+        ? 'Transfer gaji dibatalkan'
+        : 'Transfer gaji GAGAL';
+    const body =
+      `Rekening ${rec.accountNumber} (${rec.accountName}) - ${String(rec.bankCode).toUpperCase()}\n` +
+      `Nominal: Rp${amount}\n` +
+      `Status: ${previous} -> ${rec.status}`;
+    try {
+      if (this.notification) {
+        const hrUsers = await (this.prisma as any).user.findMany({
+          where: {
+            tenantId: rec.tenantId,
+            userRoles: { some: { role: { rolePermissions: { some: { permission: { module: 'payroll', action: 'manage' } } } } } },
+          },
+          select: { id: true },
+        }).catch(() => []);
+        for (const u of hrUsers as Array<{ id: string }>) {
+          await this.notification.send({
+            tenantId: rec.tenantId,
+            userId: u.id,
+            templateKey: `flip.disbursement.${String(rec.status).toLowerCase()}`,
+            title: subject,
+            body,
+            payload: { disbursementId: rec.id, status: rec.status, amount: rec.amount },
+          });
+        }
+      }
+      const hrEmail = this.config.get<string>('PAYROLL_NOTIFY_EMAIL');
+      if (this.mail && hrEmail) {
+        await this.mail.sendMail({ to: hrEmail, subject: `[Payroll] ${subject}`, text: body });
+      }
+      this.logger.log(`PD-05 notifikasi terkirim: ${subject} (${rec.id})`);
+    } catch (err) {
+      this.logger.warn(`PD-05 notifikasi gagal (${rec.id}): ${(err as Error).message}`);
+    }
   }
 
   /** Disburse satu payroll run: satu Flip transfer per slip bersih. */
@@ -232,6 +288,40 @@ export class FlipService {
   private get maxRetries(): number {
     const raw = Number(this.config.get<string>('FLIP_MAX_RETRIES'));
     return Number.isFinite(raw) && raw >= 0 ? raw : 3;
+  }
+
+  /**
+   * PD-06 - Fallback CSV: ekspor daftar disbursement untuk bank tanpa API.
+   * Kolom generik yang bisa diimpor ke portal/internet banking bank manapun.
+   */
+  async exportCsv(tenantId: string, opts: { status?: string; limit?: number } = {}): Promise<string> {
+    const limit = Math.min(1000, Math.max(1, opts.limit ?? 500));
+    const where: any = { tenantId };
+    if (opts.status) where.status = opts.status.toUpperCase();
+    const items: any[] = await (this.prisma as any).flipDisbursement.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    const header = ['bank_code', 'account_number', 'account_name', 'amount', 'remark', 'status', 'flip_id', 'created_at'];
+    const esc = (v: unknown) => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [header.join(',')];
+    for (const it of items) {
+      lines.push([
+        String(it.bankCode ?? '').toUpperCase(),
+        it.accountNumber,
+        it.accountName,
+        Number(it.amount ?? 0),
+        it.remark ?? '',
+        it.status,
+        it.flipId ?? '',
+        it.createdAt ? new Date(it.createdAt).toISOString() : '',
+      ].map(esc).join(','));
+    }
+    return lines.join('\n');
   }
 
   async retryDisbursement(tenantId: string, id: string) {
