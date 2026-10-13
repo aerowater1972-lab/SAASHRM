@@ -22,6 +22,10 @@ import {
   TICKET_STATUSES,
   TicketActor,
 } from './helpdesk-ticket.service';
+import {
+  BulkAssignTicketsDto,
+  BulkUpdateTicketStatusDto,
+} from './dto/helpdesk-bulk.dto';
 
 @ApiTags('HR Helpdesk')
 @ApiBearerAuth()
@@ -166,6 +170,20 @@ export class HelpdeskController {
     @Body() body: { status: (typeof TICKET_STATUSES)[number] },
   ) {
     return this.helpdesk.updateStatus(req.user.tenantId, id, body.status as any);
+  }
+
+  @Post('tickets/bulk-assign')
+  @Permissions('helpdesk:manage')
+  @ApiOperation({ summary: 'Bulk assign ticket ke satu assignee (admin queue, HD-04)' })
+  bulkAssign(@Req() req: any, @Body() body: BulkAssignTicketsDto) {
+    return this.helpdesk.bulkAssign(req.user.tenantId, body.ids, body.assignedToId);
+  }
+
+  @Post('tickets/bulk-status')
+  @Permissions('helpdesk:manage')
+  @ApiOperation({ summary: 'Bulk ubah status ticket (admin queue, HD-04)' })
+  bulkUpdateStatus(@Req() req: any, @Body() body: BulkUpdateTicketStatusDto) {
+    return this.helpdesk.bulkUpdateStatus(req.user.tenantId, body.ids, body.status as any);
   }
 
   @Get('stats')

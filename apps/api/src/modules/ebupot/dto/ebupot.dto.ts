@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsInt, IsUUID, Min, Max, IsEnum, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsUUID, Min, Max, IsEnum, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { EbupotSubmissionStatus } from '@prisma/client';
 
 // Skema perhitungan PPh 21 sesuai PER-16/PJ/2016 + UU HPP (UU 7/2021).
@@ -133,6 +134,31 @@ export class EbupotCompanyProfileDto {
   @IsOptional()
   @IsString()
   phone?: string;
+}
+
+export class EbupotPeriodDto {
+  @ApiProperty({ description: 'Tahun pajak', example: 2027 })
+  @IsInt()
+  taxYear!: number;
+
+  @ApiProperty({ description: 'Masa pajak (1-12)' })
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  taxMonth!: number;
+}
+
+export class BulkEbupotGenerateDto {
+  @ApiProperty({ description: 'Daftar masa pajak (maks 24)', type: [EbupotPeriodDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EbupotPeriodDto)
+  periods!: EbupotPeriodDto[];
+
+  @ApiPropertyOptional({ description: 'ID Payroll Run sumber (opsional)' })
+  @IsOptional()
+  @IsUUID('4')
+  payrollRunId?: string;
 }
 
 export class BulkEbupotActionDto {

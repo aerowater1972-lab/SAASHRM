@@ -27,6 +27,10 @@ export async function retryEbupot(id: string): Promise<any> {
   return api.post(`/tax/ebupot/${id}/retry`, {});
 }
 
+export async function bulkGenerateEbupot(periods: Array<{ taxYear: number; taxMonth: number }>, payrollRunId?: string): Promise<any> {
+  return api.post('/tax/ebupot/bulk-generate', { periods, payrollRunId });
+}
+
 export async function bulkRetryEbupot(ids: string[]): Promise<any> {
   return api.post('/tax/ebupot/bulk-retry', { ids });
 }

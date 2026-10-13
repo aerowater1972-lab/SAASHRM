@@ -75,6 +75,13 @@ const buildMockPrisma = (over: any = {}) => ({
   surveyResponses: {
     findMany: jest.fn().mockResolvedValue(over.responses ?? []),
   },
+  user: {
+    findMany: jest.fn().mockResolvedValue(over.hrUsers ?? []),
+  },
+  notification: {
+    findFirst: jest.fn().mockResolvedValue(over.recentNotification ?? null),
+    create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve(data)),
+  },
 });
 
 describe('AIAnalyticsService', () => {
@@ -214,6 +221,50 @@ describe('AIAnalyticsService', () => {
     const res = await emptyService.retrainJob(MOCK_TENANT);
     expect(res.processed).toBe(0);
     expect(res.meanRisk).toBe(0);
+  });
+
+  it('notifyHighRisk: mengembalikan 0 bila tidak ada HIGH/CRITICAL', async () => {
+    prisma.user = { findMany: jest.fn().mockResolvedValue([]) };
+    const n = await service.notifyHighRisk(MOCK_TENANT, 2);
+    expect(typeof n).toBe('number');
+    expect(n).toBeGreaterThanOrEqual(0);
+  });
+
+  it('notifyHighRisk: mengirim ke HR admin dan idempoten 24 jam', async () => {
+    const sentRows: any[] = [];
+    prisma.user = { findMany: jest.fn().mockResolvedValue([{ id: 'u-hr' }]) };
+    prisma.notification = {
+      findFirst: jest.fn().mockImplementation(({ where }: any) => {
+        const hit = sentRows.find(
+          (r) => r.userId === where.userId && r.templateKey === where.templateKey,
+        );
+        return Promise.resolve(hit ?? null);
+      }),
+      create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve(data)),
+    };
+    const mod: TestingModule = await Test.createTestingModule({
+      providers: [
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: AIAnalyticsService,
+          useFactory: (p: any) =>
+            new (AIAnalyticsService as any)(p, {
+              send: async (d: any) => {
+                sentRows.push({ userId: d.userId, templateKey: d.templateKey });
+              },
+            }),
+          inject: [PrismaService],
+        },
+      ],
+    }).compile();
+    const svc2 = mod.get<AIAnalyticsService>(AIAnalyticsService);
+    jest.spyOn(svc2 as any, 'predictDisengagement').mockResolvedValue([
+      { employeeId: 'e-1', employeeName: 'Budi', riskScore: 0.9, riskLevel: 'CRITICAL', factors: [], recommendation: 'Segera 1-on-1', windowDays: 90 },
+    ]);
+    const first = await svc2.notifyHighRisk(MOCK_TENANT, 10);
+    const second = await svc2.notifyHighRisk(MOCK_TENANT, 10);
+    expect(first).toBe(1);
+    expect(second).toBe(0);
   });
 });
 

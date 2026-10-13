@@ -70,6 +70,12 @@ export interface CreateTicketDto {
   priority?: (typeof TICKET_PRIORITIES)[number];
 }
 
+export interface BulkTicketResult {
+  id: string;
+  success: boolean;
+  error?: string;
+}
+
 export interface CreateKbArticleDto {
   category?: (typeof TICKET_CATEGORIES)[number];
   title: string;
@@ -397,6 +403,68 @@ export class HelpdeskTicketService {
       },
     });
   }
+
+  /**
+   * Bulk-assign: tetapkan satu assignee ke banyak ticket (HD-04 admin queue).
+   * Per-ticket dilaporkan sukses/gagal agar partial failure terlihat di UAT.
+   */
+  async bulkAssign(
+    tenantId: string,
+    ids: string[],
+    assignedToId: string,
+  ): Promise<{ updated: number; failed: number; results: BulkTicketResult[] }> {
+    const uniqueIds = [...new Set((ids ?? []).filter(Boolean))].slice(0, 100);
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException('Daftar id ticket kosong');
+    }
+    const results: BulkTicketResult[] = [];
+    for (const id of uniqueIds) {
+      try {
+        await this.assignTicket(tenantId, id, assignedToId);
+        results.push({ id, success: true });
+      } catch (err) {
+        results.push({ id, success: false, error: (err as Error).message });
+      }
+    }
+    return {
+      updated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
+  /**
+   * Bulk status: pindahkan banyak ticket ke satu status (HD-04 admin queue).
+   * Validasi status di depan; transisi per-ticket mengikuti STATUS_FLOW.
+   */
+  async bulkUpdateStatus(
+    tenantId: string,
+    ids: string[],
+    status: HelpdeskTicketStatus,
+  ): Promise<{ updated: number; failed: number; results: BulkTicketResult[] }> {
+    if (!(TICKET_STATUSES as readonly string[]).includes(status)) {
+      throw new BadRequestException(`Status tidak valid: ${status}`);
+    }
+    const uniqueIds = [...new Set((ids ?? []).filter(Boolean))].slice(0, 100);
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException('Daftar id ticket kosong');
+    }
+    const results: BulkTicketResult[] = [];
+    for (const id of uniqueIds) {
+      try {
+        await this.updateStatus(tenantId, id, status);
+        results.push({ id, success: true });
+      } catch (err) {
+        results.push({ id, success: false, error: (err as Error).message });
+      }
+    }
+    return {
+      updated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
 
 
   /**

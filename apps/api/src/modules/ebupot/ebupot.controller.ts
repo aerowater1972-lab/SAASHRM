@@ -16,6 +16,7 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { EbupotService } from './services/ebupot.service';
 import {
   BulkEbupotActionDto,
+  BulkEbupotGenerateDto,
   EbupotQueryDto,
   GenerateEbupotDto,
 } from './dto/ebupot.dto';
@@ -33,6 +34,16 @@ export class EbupotController {
   generate(@Req() req: any, @Body() body: GenerateEbupotDto) {
     return this.ebupot.generate(req.user.tenantId, body);
   }
+  @Post('bulk-generate')
+  @Permissions('ebupot:manage')
+  @ApiOperation({ summary: 'Generate e-Bupot massal banyak masa pajak (EB bulk)' })
+  bulkGenerate(
+    @Req() req: any,
+    @Body() body: BulkEbupotGenerateDto,
+  ) {
+    return this.ebupot.bulkGenerate(req.user.tenantId, body.periods, body.payrollRunId);
+  }
+
 
   @Get()
   @Permissions('ebupot:view')

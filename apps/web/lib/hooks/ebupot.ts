@@ -3,6 +3,7 @@ import {
   fetchEbupotSubmissions,
   fetchEbupotStats,
   generateEbupot,
+  bulkGenerateEbupot,
   submitEbupot,
   retryEbupot,
   bulkRetryEbupot,
@@ -24,6 +25,14 @@ export function useGenerateEbupot() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ebupot'] });
     },
+  });
+}
+
+export function useBulkGenerateEbupot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof bulkGenerateEbupot>[0]) => bulkGenerateEbupot(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ebupot'] }),
   });
 }
 

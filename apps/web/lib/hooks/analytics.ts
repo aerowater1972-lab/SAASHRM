@@ -22,6 +22,7 @@ import {
   getExplainDisengagement,
   getDrift,
   retrainJob,
+  notifyHighRisk,
 } from '@/lib/api/analytics';
 
 export function useHeadcount(filters?: Record<string, unknown>) {
@@ -118,4 +119,8 @@ export function useDrift() {
 
 export function useRetrainJob() {
   return useMutation({ mutationFn: (data: Record<string, unknown>) => retrainJob(data) });
+}
+
+export function useNotifyHighRisk() {
+  return useMutation({ mutationFn: () => notifyHighRisk() });
 }

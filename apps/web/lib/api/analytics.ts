@@ -86,6 +86,10 @@ export async function getDrift(filters?: Record<string, unknown>): Promise<Recor
   return api.get<Record<string, unknown>>('/ai/drift', { params: filters });
 }
 
+export async function notifyHighRisk(): Promise<Record<string, unknown>> {
+  return api.post<Record<string, unknown>>('/ai/notify-high-risk', {});
+}
+
 export async function retrainJob(data: Record<string, unknown>): Promise<Record<string, unknown>> {
   return api.post<Record<string, unknown>>('/ai/retrain', data);
 }

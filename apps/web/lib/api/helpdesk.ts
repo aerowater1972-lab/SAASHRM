@@ -59,6 +59,14 @@ export async function updateTicketStatus(id: string, status: TicketStatus): Prom
   return api.patch(`/helpdesk/tickets/${id}/status`, { status });
 }
 
+export async function bulkAssignTickets(ids: string[], assignedToId: string): Promise<any> {
+  return api.post('/helpdesk/tickets/bulk-assign', { ids, assignedToId });
+}
+
+export async function bulkUpdateTicketStatus(ids: string[], status: TicketStatus): Promise<any> {
+  return api.post('/helpdesk/tickets/bulk-status', { ids, status });
+}
+
 export async function fetchHelpdeskStats(): Promise<any> {
   return api.get('/helpdesk/stats');
 }

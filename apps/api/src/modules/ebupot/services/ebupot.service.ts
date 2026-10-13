@@ -273,6 +273,44 @@ export class EbupotService {
     );
     return { taxYear, taxMonth, generated: submissions.length, skipped, submissions };
   }
+  /**
+   * Generate massal untuk banyak masa pajak sekaligus (sisa UAT EB bulk).
+   * Setiap periode dilaporkan sukses/gagal agar partial failure terlihat.
+   */
+  async bulkGenerate(
+    tenantId: string,
+    periods: Array<{ taxYear: number; taxMonth: number }>,
+    payrollRunId?: string,
+  ): Promise<{
+    generated: number;
+    failed: number;
+    results: Array<{ taxYear: number; taxMonth: number; success: boolean; count?: number; error?: string }>;
+  }> {
+    const list = [...(periods ?? [])].slice(0, 24);
+    if (list.length === 0) {
+      throw new BadRequestException('Daftar periode kosong');
+    }
+    const results: Array<{ taxYear: number; taxMonth: number; success: boolean; count?: number; error?: string }> = [];
+    for (const p of list) {
+      try {
+        const r = await this.generate(tenantId, {
+          taxYear: p.taxYear,
+          taxMonth: p.taxMonth,
+          payrollRunId,
+        } as GenerateEbupotDto);
+        results.push({ taxYear: p.taxYear, taxMonth: p.taxMonth, success: true, count: r.generated });
+      } catch (err) {
+        results.push({ taxYear: p.taxYear, taxMonth: p.taxMonth, success: false, error: (err as Error).message });
+      }
+    }
+    return {
+      generated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
+
 
   // â”€â”€ Submit / Retry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

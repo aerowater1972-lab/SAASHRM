@@ -65,6 +65,12 @@ export class AIRetrainScheduler implements OnModuleInit, OnModuleDestroy {
           for (const d of drift.filter((x) => x.band === 'drift')) {
             this.logger.warn(`Drift tenant=${t.id} fitur=${d.feature} PSI=${d.psi}`);
           }
+          try {
+            const sent = await this.ai.notifyHighRisk(t.id);
+            if (sent > 0) this.logger.log(`High-risk alert tenant=${t.id} sent=${sent}`);
+          } catch (err) {
+            this.logger.error(`High-risk alert gagal tenant=${t.id}: ${(err as Error).message}`);
+          }
         } catch (err) {
           this.logger.error(`Retrain gagal untuk tenant=${t.id}: ${(err as Error).message}`);
         }

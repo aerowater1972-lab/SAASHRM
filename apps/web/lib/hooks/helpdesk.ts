@@ -8,6 +8,8 @@ import {
   rateTicket,
   assignTicket,
   updateTicketStatus,
+  bulkAssignTickets,
+  bulkUpdateTicketStatus,
   fetchHelpdeskStats,
   searchKb,
   suggestKb,
@@ -72,6 +74,28 @@ export function useUpdateTicketStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: Parameters<typeof updateTicketStatus>[1] }) =>
       updateTicketStatus(id, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['helpdesk'] });
+    },
+  });
+}
+
+export function useBulkAssignTickets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, assignedToId }: { ids: string[]; assignedToId: string }) =>
+      bulkAssignTickets(ids, assignedToId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['helpdesk', 'queue'] });
+    },
+  });
+}
+
+export function useBulkUpdateTicketStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: Parameters<typeof bulkUpdateTicketStatus>[1] }) =>
+      bulkUpdateTicketStatus(ids, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['helpdesk'] });
     },

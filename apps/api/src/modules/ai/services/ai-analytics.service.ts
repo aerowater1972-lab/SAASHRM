@@ -1,5 +1,6 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Optional, Logger } from '@nestjs/common';
 import { PrismaService } from '@common/prisma/prisma.service';
+import { NotificationService } from '@modules/shared/notification/notification.service';
 import { AiIsolationForestService } from './ai-isolation-forest.service';
 
 /**
@@ -76,11 +77,15 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 @Injectable()
 export class AIAnalyticsService {
+  private readonly logger = new Logger(AIAnalyticsService.name);
   private modelVersion = 0;
   private modelAt = new Date();
   private readonly forest = new AiIsolationForestService();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly notification?: NotificationService,
+  ) {}
 
   private async featureVector(emp: any): Promise<number[]> {
     const f = await this.extractFeatures(emp);
@@ -344,6 +349,56 @@ export class AIAnalyticsService {
     this.modelAt = new Date();
     return { modelVersion: this.modelVersion, updatedAt: this.modelAt, processed: employees.length, meanRisk: Math.round(mean * 100) / 100, highRiskCount: high };
   }
+
+  /**
+   * AI-07: notifikasi high-risk ke HR admin (idempoten 24 jam per karyawan).
+   * Scan top-N sinyal disengagement, kirim ke user ber-role HR Admin /
+   * System Administrator bila level HIGH/CRITICAL dan belum diingatkan hari ini.
+   */
+  async notifyHighRisk(tenantId: string, limit = 100, now: Date = new Date()): Promise<number> {
+    const signals = await this.predictDisengagement(tenantId, Math.min(100, Math.max(1, limit)));
+    const flagged = signals.filter((s) => s.riskLevel === 'HIGH' || s.riskLevel === 'CRITICAL');
+    if (flagged.length === 0) return 0;
+    const hrUsers = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        userRoles: {
+          some: {
+            role: {
+              rolePermissions: {
+                some: { permission: { module: 'ai', action: 'manage' } },
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    }).catch(() => []);
+    let sent = 0;
+    for (const sig of flagged) {
+      const key = `ai.high-risk.${sig.employeeId}`;
+      for (const u of hrUsers as Array<{ id: string }>) {
+        const recent = await this.prisma.notification.findFirst({
+          where: { userId: u.id, templateKey: key, createdAt: { gte: new Date(now.getTime() - 86400000) } },
+        }).catch(() => null);
+        if (recent) continue;
+        if (this.notification) {
+          await this.notification.send({
+            tenantId,
+            userId: u.id,
+            templateKey: key,
+            title: `Risiko disengagement ${sig.riskLevel}: ${sig.employeeName}`,
+            body: `Skor ${(sig.riskScore * 100).toFixed(0)}% — ${sig.recommendation}`,
+            payload: { employeeId: sig.employeeId, riskScore: sig.riskScore, riskLevel: sig.riskLevel },
+          });
+        }
+        sent += 1;
+      }
+    }
+    this.logger.log(`AI high-risk alert: ${sent} notifikasi untuk ${flagged.length} karyawan`);
+    return sent;
+  }
+
 
   async checkDrift(tenantId: string, windowDays = 90): Promise<DriftResult[]> {
     const now = new Date();

@@ -63,6 +63,13 @@ export class AiAnalyticsController {
     return this.ai.checkDrift(tenantId, 90);
   }
 
+  @Post('notify-high-risk')
+  @Permissions('ai:manage')
+  @ApiOperation({ summary: 'AI-07: kirim notifikasi high-risk ke HR admin (idempoten 24 jam)' })
+  async notifyHighRisk(@TenantId() tenantId: string) {
+    return { sent: await this.ai.notifyHighRisk(tenantId) };
+  }
+
   @Post('retrain')
   @Permissions('ai:manage')
   @ApiOperation({ summary: 'Retraining job: re-fit Isolation Forest + ambil modelVersion' })
