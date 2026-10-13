@@ -88,3 +88,27 @@ export async function fetchKbArticle(id: string): Promise<any> {
 export async function rateKbArticle(id: string, helpful: boolean): Promise<any> {
   return api.post(`/helpdesk/kb/articles/${id}/rate`, { helpful });
 }
+
+export interface KbArticlePayload {
+  category?: TicketCategory;
+  title: string;
+  content: string;
+  tags?: string[];
+}
+
+export async function fetchKbArticlesAdmin(category?: string): Promise<any[]> {
+  const res: any = await api.get('/helpdesk/kb/articles', { params: category ? { category } : {} });
+  return Array.isArray(res) ? res : (res?.items ?? res?.data ?? []);
+}
+
+export async function createKbArticle(data: KbArticlePayload): Promise<any> {
+  return api.post('/helpdesk/kb/articles', data);
+}
+
+export async function updateKbArticle(id: string, data: Partial<KbArticlePayload>): Promise<any> {
+  return api.patch(`/helpdesk/kb/articles/${id}`, data);
+}
+
+export async function deleteKbArticle(id: string): Promise<any> {
+  return api.post(`/helpdesk/kb/articles/${id}/delete`);
+}

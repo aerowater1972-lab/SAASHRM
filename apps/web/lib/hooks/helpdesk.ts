@@ -15,6 +15,10 @@ import {
   suggestKb,
   fetchKbArticle,
   rateKbArticle,
+  fetchKbArticlesAdmin,
+  createKbArticle,
+  updateKbArticle,
+  deleteKbArticle,
   type TicketListParams,
 } from '@/lib/api/helpdesk';
 
@@ -127,5 +131,37 @@ export function useRateKbArticle() {
   return useMutation({
     mutationFn: ({ id, helpful }: { id: string; helpful: boolean }) => rateKbArticle(id, helpful),
     onSuccess: (_, { id }) => qc.invalidateQueries({ queryKey: ['helpdesk', 'kb', 'article', id] }),
+  });
+}
+
+export function useKbArticlesAdmin(category?: string) {
+  return useQuery({
+    queryKey: ['helpdesk', 'kb', 'admin', category ?? 'all'],
+    queryFn: () => fetchKbArticlesAdmin(category),
+  });
+}
+
+export function useCreateKbArticle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof createKbArticle>[0]) => createKbArticle(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['helpdesk', 'kb'] }),
+  });
+}
+
+export function useUpdateKbArticle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateKbArticle>[1] }) =>
+      updateKbArticle(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['helpdesk', 'kb'] }),
+  });
+}
+
+export function useDeleteKbArticle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteKbArticle(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['helpdesk', 'kb'] }),
   });
 }
