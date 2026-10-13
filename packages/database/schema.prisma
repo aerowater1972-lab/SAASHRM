@@ -5110,3 +5110,56 @@ model ScheduledReport {
   @@index([isActive, nextRunAt])
 }
 
+
+// =======================================================================
+// OPEN API — Webhook Engine (OA-03, GAP-18)
+// =======================================================================
+
+enum WebhookDeliveryStatus {
+  PENDING // menunggu dikirim
+  DELIVERED // endpoint membalas 2xx
+  FAILED // gagal setelah semua retry habis
+}
+
+model WebhookEndpoint {
+  id          String   @id @default(uuid())
+  tenantId    String
+  url         String // tujuan HTTP POST
+  description String?
+  // Daftar event yang disubscribe (mis. "leave.approved"). Gunakan ["*"] untuk semua.
+  events      String[]
+  // Secret HMAC (disimpan sebagai hash sha256; plaintext hanya ditampilkan sekali saat dibuat).
+  secretHash  String
+  isActive    Boolean  @default(true)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, isActive])
+}
+
+model WebhookDelivery {
+  id          String                @id @default(uuid())
+  tenantId    String
+  endpointId  String
+  event       String // nama domain event
+  payload     Json
+  status      WebhookDeliveryStatus @default(PENDING)
+  attempts    Int                   @default(0)
+  nextRetryAt DateTime?
+  deliveredAt DateTime?
+  responseStatus Int?
+  responseBody   String?
+  errorMsg       String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([endpointId, createdAt])
+  @@index([tenantId, createdAt])
+}

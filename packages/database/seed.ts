@@ -409,6 +409,8 @@ async function main() {
     'feedback360:view',
     'idp:manage',
     'idp:view',
+    'integrations:webhook:manage',
+    'integrations:webhook:read',
     'lms:manage',
     'lms:view',
     'manpower_planning:approve',

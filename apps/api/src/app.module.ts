@@ -36,6 +36,7 @@ import { LmsModule } from './modules/lms/lms.module';
 import { ProvincialWageModule } from './modules/provincial-wage/provincial-wage.module';
 import { DocumentManagementModule } from './modules/document-management/document-management.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
 import { CompensationModule } from './modules/compensation/compensation.module';
 import { SuccessionPlanningModule } from './modules/succession-planning/succession-planning.module';
@@ -113,6 +114,7 @@ import { DeprecationInterceptor } from './common/interceptors/deprecation.interc
     SuccessionPlanningModule,
     OutsourcingModule,
     PdpaModule,
+    WebhooksModule,
   ],
   providers: [
     {
