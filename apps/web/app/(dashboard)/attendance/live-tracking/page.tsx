@@ -297,8 +297,4 @@ function ReportsTab({ reportDate, setReportDate }: { reportDate: string; setRepo
     </div>
   );
 }
-      )}
-    </div>
-  );
-}
 
