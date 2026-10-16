@@ -26,9 +26,19 @@ export class LocationPingDto {
 }
 
 export class CreateFieldTerritoryDto {
-  @ApiProperty({ description: 'Employee ID assigned to this territory' })
+  @ApiPropertyOptional({
+    description: 'Employee ID assigned to this territory. Kosongkan untuk wilayah level department/branch.',
+  })
+  @IsOptional()
   @IsString()
-  employeeId!: string;
+  employeeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Department ID for department-level territory (applies to all employees in department).',
+  })
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
 
   @ApiProperty({ description: 'Territory name/label' })
   @IsString()
@@ -40,6 +50,16 @@ export class CreateFieldTerritoryDto {
 }
 
 export class UpdateFieldTerritoryDto {
+  @ApiPropertyOptional({ description: 'Employee ID assigned to this territory' })
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @ApiPropertyOptional({ description: 'Department ID for department-level territory' })
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
   @ApiPropertyOptional({ description: 'Territory name/label' })
   @IsOptional()
   @IsString()
@@ -49,6 +69,65 @@ export class UpdateFieldTerritoryDto {
   @IsOptional()
   @IsString()
   boundaryGeoJson?: string;
+}
+
+// ── Daily Visit Report (paritas Talenta "Laporan kunjungan harian") ──
+export class DailyVisitReportItemDto {
+  @ApiProperty({ description: 'Employee ID' })
+  employeeId!: string;
+
+  @ApiProperty({ description: 'Employee full name' })
+  employeeName!: string;
+
+  @ApiProperty({ description: 'Visit date (YYYY-MM-DD)' })
+  visitDate!: string;
+
+  @ApiProperty({ description: 'Total location pings recorded' })
+  totalPings!: number;
+
+  @ApiProperty({ description: 'First ping timestamp' })
+  firstPingAt!: string | null;
+
+  @ApiProperty({ description: 'Last ping timestamp' })
+  lastPingAt!: string | null;
+
+  @ApiProperty({ description: 'Earliest ping coordinates' })
+  firstLat!: number | null;
+
+  @ApiProperty({ description: 'Earliest ping coordinates' })
+  firstLng!: number | null;
+
+  @ApiProperty({ description: 'Latest ping coordinates' })
+  lastLat!: number | null;
+
+  @ApiProperty({ description: 'Latest ping coordinates' })
+  lastLng!: number | null;
+
+  @ApiProperty({ description: 'Time spent inside territory (minutes)' })
+  minutesInTerritory!: number;
+
+  @ApiProperty({ description: 'Time spent outside territory (minutes)' })
+  minutesOutsideTerritory!: number;
+
+  @ApiProperty({ description: 'Territory violations count today' })
+  violationsToday!: number;
+
+  @ApiPropertyOptional({ description: 'Territory name assigned' })
+  territoryName?: string | null;
+}
+
+export class DailyVisitReportDto {
+  @ApiProperty({ description: 'Report date (YYYY-MM-DD)' })
+  reportDate!: string;
+
+  @ApiProperty({ description: 'Total field workers' })
+  totalFieldWorkers!: number;
+
+  @ApiProperty({ description: 'Field workers with at least one ping' })
+  activeWorkers!: number;
+
+  @ApiProperty({ description: 'Per-worker visit summary' })
+  items!: DailyVisitReportItemDto[];
 }
 
 export class UpdateLiveTrackingSettingsDto {

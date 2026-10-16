@@ -1,8 +1,8 @@
 'use client';
 import { RequirePermission } from '@/components/require-permission';
 import { useState } from 'react';
-import { useLiveFieldWorkers, useTerritories, useCreateTerritory, useDeleteTerritory, useViolations } from '@/lib/hooks/live-tracking';
-import { mapsLink } from '@/lib/api/live-tracking';
+import { useLiveFieldWorkers, useTerritories, useCreateTerritory, useDeleteTerritory, useViolations, useDailyVisitReport } from '@/lib/hooks/live-tracking';
+import { mapsLink, type DailyVisitReportItem } from '@/lib/api/live-tracking';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,9 @@ export default function LiveTrackingPage() {
 }
 
 function LiveTrackingInner() {
-  const [tab, setTab] = useState<'live' | 'territories' | 'violations'>('live');
+  const [tab, setTab] = useState<'live' | 'territories' | 'violations' | 'reports'>('live');
+  const [reportDate, setReportDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -39,6 +41,7 @@ function LiveTrackingInner() {
           ['live', 'Monitoring Real-time'],
           ['territories', 'Wilayah Kerja'],
           ['violations', 'Pelanggaran'],
+          ['reports', 'Laporan Kunjungan Harian'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key as any)}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
@@ -49,6 +52,7 @@ function LiveTrackingInner() {
       {tab === 'live' && <LiveTab />}
       {tab === 'territories' && <TerritoriesTab />}
       {tab === 'violations' && <ViolationsTab />}
+      {tab === 'reports' && <ReportsTab reportDate={reportDate} setReportDate={setReportDate} />}
     </div>
   );
 }
@@ -225,6 +229,74 @@ function ViolationsTab() {
             </div>
           </CardContent>
         </Card>
+function ReportsTab({ reportDate, setReportDate }: { reportDate: string; setReportDate: (d: string) => void }) {
+  const { data, isLoading, error } = useDailyVisitReport({ date: reportDate });
+  if (isLoading) return <div className="animate-pulse">Memuat laporan…</div>;
+  if (error) return <ErrorState message={(error as Error).message} />;
+  if (!data) return <EmptyState title="Belum ada data" description="Pilih tanggal untuk melihat laporan kunjungan harian." />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <label className="text-sm text-muted-foreground">Tanggal</label>
+        <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="p-3 rounded bg-muted border">
+          <div className="text-xs text-muted-foreground">Total karyawan lapangan</div>
+          <div className="font-semibold">{data.totalFieldWorkers}</div>
+        </div>
+        <div className="p-3 rounded bg-muted border">
+          <div className="text-xs text-muted-foreground">Aktif (mengirim ping)</div>
+          <div className="font-semibold">{data.activeWorkers}</div>
+        </div>
+        <div className="p-3 rounded bg-muted border">
+          <div className="text-xs text-muted-foreground">Total pelanggaran hari ini</div>
+          <div className="font-semibold text-destructive">{data.items.reduce((s: number, i: DailyVisitReportItem) => s + i.violationsToday, 0)}</div>
+        </div>
+      </div>
+      {data.items.length === 0 ? (
+        <EmptyState title="Belum ada data kunjungan" description="Belum ada location ping pada tanggal ini." />
+      ) : (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Rincian per Karyawan ({data.items.length})</CardTitle></CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Karyawan</TableHead>
+                    <TableHead>Wilayah</TableHead>
+                    <TableHead>Total Ping</TableHead>
+                    <TableHead>Pertama</TableHead>
+                    <TableHead>Terakhir</TableHead>
+                    <TableHead>Di Wilayah</TableHead>
+                    <TableHead>Luar Wilayah</TableHead>
+                    <TableHead>Pelanggaran</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.items.map((i: DailyVisitReportItem) => (
+                    <TableRow key={i.employeeId}>
+                      <TableCell>{i.employeeName}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{i.territoryName ?? '-'}</TableCell>
+                      <TableCell className="text-right">{i.totalPings}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{i.firstPingAt ? new Date(i.firstPingAt).toLocaleTimeString('id-ID') : '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{i.lastPingAt ? new Date(i.lastPingAt).toLocaleTimeString('id-ID') : '-'}</TableCell>
+                      <TableCell className="text-right">{i.minutesInTerritory} m</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{i.minutesOutsideTerritory} m</TableCell>
+                      <TableCell className="text-right">{i.violationsToday}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
       )}
     </div>
   );

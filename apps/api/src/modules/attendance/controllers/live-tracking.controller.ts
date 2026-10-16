@@ -18,7 +18,13 @@ import { Permissions } from '@common/decorators/permissions.decorator';
 import { AuthGuard } from '@common/guards/auth.guard';
 import { PermissionGuard } from '@common/guards/permission.guard';
 import { LiveTrackingService } from '../services/live-tracking.service';
-import { LocationPingDto, CreateFieldTerritoryDto, UpdateFieldTerritoryDto, UpdateLiveTrackingSettingsDto } from '../dto/live-tracking.dto';
+import {
+  LocationPingDto,
+  CreateFieldTerritoryDto,
+  UpdateFieldTerritoryDto,
+  UpdateLiveTrackingSettingsDto,
+  DailyVisitReportDto,
+} from '../dto/live-tracking.dto';
 
 @ApiTags('Live Tracking')
 @ApiBearerAuth()
@@ -80,9 +86,24 @@ export class LiveTrackingController {
     return this.service.listViolations(tenantId, filters);
   }
 
+  @Get('reports/daily-visit')
+  @Permissions('attendance:live-tracking:read')
+  @ApiOperation({ summary: 'Laporan kunjungan harian karyawan lapangan (paritas Talenta)' })
+  @ApiQuery({ name: 'date', required: false, description: 'Tanggal laporan (YYYY-MM-DD), default hari ini' })
+  @ApiQuery({ name: 'departmentId', required: false, description: 'Filter per departemen' })
+  @ApiQuery({ name: 'employeeId', required: false, description: 'Filter per karyawan' })
+  dailyVisitReport(
+    @TenantId() tenantId: string,
+    @Query('date') date?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('employeeId') employeeId?: string,
+  ) {
+    return this.service.getDailyVisitReport(tenantId, { date, departmentId, employeeId });
+  }
+
   @Post('territories')
   @Permissions('attendance:territory:create')
-  @ApiOperation({ summary: 'Create field territory for employee' })
+  @ApiOperation({ summary: 'Create field territory (employee or department level)' })
   createTerritory(
     @TenantId() tenantId: string,
     @Body() dto: CreateFieldTerritoryDto,
@@ -94,10 +115,14 @@ export class LiveTrackingController {
   @Get('territories')
   @Permissions('attendance:territory:read')
   @ApiOperation({ summary: 'List all field territories' })
+  @ApiQuery({ name: 'departmentId', required: false, description: 'Filter per departemen' })
+  @ApiQuery({ name: 'employeeId', required: false, description: 'Filter per karyawan' })
   listTerritories(
     @TenantId() tenantId: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('employeeId') employeeId?: string,
   ) {
-    return this.service.listTerritories(tenantId);
+    return this.service.listTerritories(tenantId, { departmentId, employeeId });
   }
 
   @Get('territories/:id')

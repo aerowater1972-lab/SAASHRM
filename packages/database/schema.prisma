@@ -4240,17 +4240,23 @@ model LocationPing {
 model FieldTerritory {
   id              String   @id @default(uuid())
   tenantId        String
-  employeeId      String   @unique
+  // employeeId opsional: null berarti wilayah berlaku di level department/branch (tidak per karyawan)
+  employeeId      String?
+  // departmentId opsional: wilayah berlaku untuk semua karyawan dalam departemen ini
+  departmentId    String?
   territoryName   String
   boundaryGeoJson String // GeoJSON Polygon/MultiPolygon
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  employee            Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee            Employee?            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  department          Department?          @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   territoryViolations TerritoryViolation[]
 
   @@index([tenantId])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, employeeId])
 }
 
 model LiveTrackingSettings {

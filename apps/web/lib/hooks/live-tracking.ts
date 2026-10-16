@@ -6,6 +6,7 @@ import {
   updateTerritory,
   deleteTerritory,
   fetchViolations,
+  fetchDailyVisitReport,
 } from '@/lib/api/live-tracking';
 
 export function useLiveFieldWorkers() {
@@ -27,8 +28,24 @@ export function useCreateTerritory() {
 export function useUpdateTerritory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { territoryName?: string; boundaryGeoJson?: string } }) => updateTerritory(id, data),
+    mutationFn: ({ id, data }: {
+      id: string;
+      data: {
+        employeeId?: string;
+        departmentId?: string;
+        territoryName?: string;
+        boundaryGeoJson?: string;
+      };
+    }) => updateTerritory(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['live-tracking', 'territories'] }),
+  });
+}
+
+export function useDailyVisitReport(params?: { date?: string; departmentId?: string; employeeId?: string }) {
+  return useQuery({
+    queryKey: ['live-tracking', 'daily-visit-report', params ?? {}],
+    queryFn: () => fetchDailyVisitReport(params),
+    enabled: !!params?.date || true,
   });
 }
 

@@ -96,10 +96,26 @@ export class LiveTrackingService {
 
   // Field Territories
   async createTerritory(tenantId: string, dto: CreateFieldTerritoryDto, actorId: string) {
-    const employee = await this.prisma.employee.findFirst({
-      where: { id: dto.employeeId, tenantId, deletedAt: null },
-    });
-    if (!employee) throw new NotFoundException('Employee not found');
+    // Validasi: minimal salah satu dari employeeId atau departmentId harus diisi
+    if (!dto.employeeId && !dto.departmentId) {
+      throw new BadRequestException('employeeId atau departmentId minimal salah satu harus diisi');
+    }
+
+    // Jika employeeId diisi, pastikan karyawan ada
+    if (dto.employeeId) {
+      const employee = await this.prisma.employee.findFirst({
+        where: { id: dto.employeeId, tenantId, deletedAt: null },
+      });
+      if (!employee) throw new NotFoundException('Employee not found');
+    }
+
+    // Jika departmentId diisi, pastikan departemen ada
+    if (dto.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: dto.departmentId, tenantId },
+      });
+      if (!department) throw new NotFoundException('Department not found');
+    }
 
     // Validate GeoJSON
     let geoJson;
@@ -115,7 +131,8 @@ export class LiveTrackingService {
     const territory = await this.prisma.fieldTerritory.create({
       data: {
         tenantId,
-        employeeId: dto.employeeId,
+        employeeId: dto.employeeId ?? null,
+        departmentId: dto.departmentId ?? null,
         territoryName: dto.territoryName,
         boundaryGeoJson: dto.boundaryGeoJson,
       },
@@ -133,10 +150,20 @@ export class LiveTrackingService {
     return territory;
   }
 
-  async listTerritories(tenantId: string) {
+  async listTerritories(
+    tenantId: string,
+    filters?: { departmentId?: string; employeeId?: string },
+  ) {
+    const where: any = { tenantId };
+    if (filters?.departmentId) where.departmentId = filters.departmentId;
+    if (filters?.employeeId) where.employeeId = filters.employeeId;
+
     return this.prisma.fieldTerritory.findMany({
-      where: { tenantId },
-      include: { employee: { select: { id: true, fullName: true, employeeId: true } } },
+      where,
+      include: {
+        employee: { select: { id: true, fullName: true, employeeId: true } },
+        department: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -144,13 +171,33 @@ export class LiveTrackingService {
   async getTerritory(tenantId: string, id: string) {
     return this.prisma.fieldTerritory.findFirst({
       where: { id, tenantId },
-      include: { employee: { select: { id: true, fullName: true, employeeId: true } } },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeId: true } },
+        department: { select: { id: true, name: true } },
+      },
     });
   }
 
   async updateTerritory(tenantId: string, id: string, dto: UpdateFieldTerritoryDto, actorId: string) {
     const territory = await this.prisma.fieldTerritory.findFirst({ where: { id, tenantId } });
     if (!territory) throw new NotFoundException('Territory not found');
+
+    // Validasi: minimal satu identificasi (employee/department) harus tetap ada
+    if (
+      dto.employeeId !== undefined &&
+      dto.departmentId !== undefined &&
+      !dto.employeeId &&
+      !dto.departmentId
+    ) {
+      throw new BadRequestException('employeeId atau departmentId minimal salah satu harus diisi');
+    }
+
+    if (dto.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: dto.departmentId, tenantId },
+      });
+      if (!department) throw new NotFoundException('Department not found');
+    }
 
     if (dto.boundaryGeoJson) {
       try {
@@ -165,7 +212,12 @@ export class LiveTrackingService {
 
     const updated = await this.prisma.fieldTerritory.update({
       where: { id },
-      data: { territoryName: dto.territoryName, boundaryGeoJson: dto.boundaryGeoJson },
+      data: {
+        ...(dto.employeeId !== undefined ? { employeeId: dto.employeeId ?? null } : {}),
+        ...(dto.departmentId !== undefined ? { departmentId: dto.departmentId ?? null } : {}),
+        ...(dto.territoryName !== undefined ? { territoryName: dto.territoryName } : {}),
+        ...(dto.boundaryGeoJson !== undefined ? { boundaryGeoJson: dto.boundaryGeoJson } : {}),
+      },
     });
 
     await this.audit.ingest({
@@ -223,12 +275,49 @@ export class LiveTrackingService {
     return { data, total, page, pageSize: Math.min(200, Math.max(1, limit)) };
   }
 
+  /**
+   * Cari wilayah yang berlaku untuk karyawan: per-karyawan dulu,
+   * fallback ke departemen karyawan (jika ada department-level territory).
+   * Digunakan oleh checkTerritoryViolation dan (publik) getTerritoryForEmployee.
+   */
+  async getTerritoryForEmployee(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId, deletedAt: null },
+      include: {
+        employments: { where: { isActive: true }, take: 1, select: { department: true } },
+      },
+    });
+    if (!employee) return null;
+
+    // 1. Per-employee territory (prioritas tinggi)
+    let territory = await this.prisma.fieldTerritory.findFirst({
+      where: { employeeId, tenantId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeId: true } },
+        department: { select: { id: true, name: true } },
+      },
+    });
+    if (territory) return territory;
+
+    // 2. Department-level territory
+    const deptId = employee.employments?.[0]?.department?.id;
+    if (deptId) {
+      territory = await this.prisma.fieldTerritory.findFirst({
+        where: { departmentId: deptId, tenantId },
+        include: {
+          employee: { select: { id: true, fullName: true, employeeId: true } },
+          department: { select: { id: true, name: true } },
+        },
+      });
+      if (territory) return territory;
+    }
+
+    return null;
+  }
+
   // Territory Violation Check
   private async checkTerritoryViolation(tenantId: string, employeeId: string, lat: number, lng: number) {
-    const territory = await this.prisma.fieldTerritory.findFirst({
-      where: { employeeId, tenantId },
-      include: { employee: { select: { id: true, fullName: true, employeeId: true } } },
-    });
+    const territory = await this.getTerritoryForEmployee(tenantId, employeeId);
 
     if (!territory) return; // No territory assigned
 
@@ -392,5 +481,127 @@ export class LiveTrackingService {
       changedBy: 'system',
       newValue: { deletedCount: result.count, cutoffDate: cutoffDate.toISOString() },
     });
+  }
+
+  // ── Daily Visit Report (paritas Talenta "Laporan kunjungan harian") ──
+  async getDailyVisitReport(
+    tenantId: string,
+    opts?: { date?: string; departmentId?: string; employeeId?: string },
+  ) {
+    const reportDate = opts?.date ? new Date(opts.date) : new Date();
+    reportDate.setHours(0, 0, 0, 0);
+    const nextDay = new Date(reportDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const whereEmployee: any = {
+      tenantId,
+      isFieldWorker: true,
+      status: 'ACTIVE',
+      deletedAt: null,
+    };
+    if (opts?.departmentId) {
+      whereEmployee.employments = {
+        some: { isActive: true, departmentId: opts.departmentId },
+      };
+    }
+    if (opts?.employeeId) {
+      whereEmployee.id = opts.employeeId;
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: whereEmployee,
+      select: {
+        id: true,
+        fullName: true,
+        employeeId: true,
+        employments: {
+          where: { isActive: true },
+          take: 1,
+          select: { department: { select: { name: true } } },
+        },
+      },
+    });
+
+    const pings = await this.prisma.locationPing.findMany({
+      where: {
+        tenantId,
+        recordedAt: { gte: reportDate, lt: nextDay },
+        ...(opts?.employeeId ? { employeeId: opts.employeeId } : {}),
+      },
+      orderBy: { employeeId: true, recordedAt: 'asc' },
+    });
+
+    const violations = await this.prisma.territoryViolation.findMany({
+      where: {
+        tenantId,
+        recordedAt: { gte: reportDate, lt: nextDay },
+        ...(opts?.employeeId ? { employeeId: opts.employeeId } : {}),
+      },
+    });
+
+    const pingByEmployee = new Map<string, typeof pings>();
+    for (const ping of pings) {
+      const list = pingByEmployee.get(ping.employeeId) ?? [];
+      list.push(ping);
+      pingByEmployee.set(ping.employeeId, list);
+    }
+
+    const violationCountByEmployee = new Map<string, number>();
+    for (const v of violations) {
+      violationCountByEmployee.set(
+        v.employeeId,
+        (violationCountByEmployee.get(v.employeeId) ?? 0) + 1,
+      );
+    }
+
+    const items = await Promise.all(
+      employees.map(async (emp) => {
+        const empPings = pingByEmployee.get(emp.id) ?? [];
+        const first = empPings[0];
+        const last = empPings[empPings.length - 1];
+
+        const territory = await this.getTerritoryForEmployee(tenantId, emp.id);
+
+        let minutesIn = 0;
+        let minutesOut = 0;
+        for (let i = 1; i < empPings.length; i++) {
+          const prev = empPings[i - 1];
+          const diffMinutes =
+            (empPings[i].recordedAt.getTime() - prev.recordedAt.getTime()) / 60000;
+          const insidePrev = territory
+            ? this.isPointInPolygon(
+                [prev.lng, prev.lat],
+                JSON.parse(territory.boundaryGeoJson),
+              )
+            : true;
+          if (insidePrev) minutesIn += diffMinutes;
+          else minutesOut += diffMinutes;
+        }
+
+        return {
+          employeeId: emp.id,
+          employeeName: emp.fullName,
+          visitDate: reportDate.toISOString().split('T')[0],
+          totalPings: empPings.length,
+          firstPingAt: first?.recordedAt.toISOString() ?? null,
+          lastPingAt: last?.recordedAt.toISOString() ?? null,
+          firstLat: first?.lat ?? null,
+          firstLng: first?.lng ?? null,
+          lastLat: last?.lat ?? null,
+          lastLng: last?.lng ?? null,
+          minutesInTerritory: Math.round(minutesIn),
+          minutesOutsideTerritory: Math.round(minutesOut),
+          violationsToday: violationCountByEmployee.get(emp.id) ?? 0,
+          territoryName: territory?.territoryName ?? null,
+        };
+      }),
+    );
+
+    return {
+      reportDate: reportDate.toISOString().split('T')[0],
+      totalFieldWorkers: employees.length,
+      activeWorkers: items.filter((i) => i.totalPings > 0).length,
+      items,
+    };
   }
 }
