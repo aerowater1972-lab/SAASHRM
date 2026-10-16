@@ -90,6 +90,11 @@ model Tenant {
   forumReactions             ForumReaction[]
   forumMentions              ForumMention[]
   forumReports               ForumReport[]
+  // Compensation Management Extensions (GAP-06)
+  compAdjustmentMatrices     CompAdjustmentMatrix[]
+  compEligibilityCriterias   CompEligibilityCriteria[]
+  compBonuses                CompBonus[]
+  compChangeLogs             CompChangeLog[]
   compSalaryStructures       CompSalaryStructure[]
   compReviewCycles           CompReviewCycle[]
   compAdjustments            CompAdjustment[]
@@ -121,6 +126,7 @@ model TenantEntity {
   departments      Department[]
   holidayCalendars HolidayCalendar[]
   workLocations    WorkLocation[]
+  compStructures   CompSalaryStructure[]
 
   @@unique([tenantId, code])
 }
@@ -182,6 +188,7 @@ model User {
   compReviewCyclesCreated      CompReviewCycle[]    @relation("comp_cycle_creator")
   compReviewCyclesApproved     CompReviewCycle[]    @relation("comp_cycle_approver")
   compAdjustmentsApproved      CompAdjustment[]     @relation("comp_adjustment_approver")
+  compBonusesApproved          CompBonus[]          @relation("comp_bonus_approver")
 
   @@unique([tenantId, email])
 }
@@ -640,6 +647,7 @@ model Employee {
   finalScores                    FinalScore[]
   movementRequests               MovementRequest[]
   essNotifications               EssNotification[]
+  pushTokens                     DevicePushToken[]
   essOnboardingProgress          EssOnboardingProgress?
   essPreference                  EssPreference?
   essProfileChangeRequests       EssProfileChangeRequest[]
@@ -684,6 +692,7 @@ model Employee {
   forumMentionsReceived        ForumMention[]
   // Compensation Management (GAP-06)
   compAdjustments              CompAdjustment[]
+  compBonuses                  CompBonus[]
   // Timesheet (attendance x tasks) — gap parity Talenta
   timesheetEntries             TimesheetEntry[]
 
@@ -819,6 +828,9 @@ model Department {
   successionPlans         SuccessionPlan[]
   projects                Project[]
   forumThreads              ForumThread[]
+  compStructuresAsBranch  CompSalaryStructure[]   @relation("CompStructureBranch")
+  compStructuresAsDept    CompSalaryStructure[]   @relation("CompStructureDepartment")
+  compEligibilityCriterias CompEligibilityCriteria[]
 
   @@unique([tenantId, code])
 }
@@ -843,6 +855,8 @@ model Position {
   employments                   Employment[]
   movementRequestsAsNewPosition MovementRequest[]
   successionPlans               SuccessionPlan[]
+  compStructures                CompSalaryStructure[]
+  compEligibilityCriterias      CompEligibilityCriteria[]
 
   @@unique([tenantId, code])
 }
@@ -865,6 +879,7 @@ model Grade {
   positions               Position[]
   employments             Employment[]
   benefitEligibilityRules BenefitEligibilityRule[]
+  compEligibilityCriterias CompEligibilityCriteria[]
 
   @@unique([tenantId, code])
 }
@@ -1032,6 +1047,48 @@ model BiometricCredential {
   @@index([tenantId, employeeId])
 }
 
+// P0 server-side face pipeline: registry token liveness single-use yang
+// PERSISTEN (bukan in-memory) sehingga replay lintas instance/restart tertutup.
+// `tokenHash` unik global → pemakaian kedua (instance mana pun) ditolak.
+model LivenessTokenUse {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  tenantId   String
+  employeeId String
+  purpose    String // ENROLL | VERIFY | CLOCK_IN | CLOCK_OUT
+  sessionId  String?
+  expiresAt  DateTime
+  usedAt     DateTime @default(now())
+
+  @@index([tenantId, employeeId])
+  @@index([expiresAt])
+}
+
+// Sesi tangkap frame wajah (pipeline server-side). Klien mengunggah satu atau
+// lebih frame; server menjalankan provider liveness + ekstraksi embedding,
+// lalu menerbitkan token server-verified. `embedding` menyimpan hasil ekstraksi
+// SERVER (bukan klaim klien) — menutup gap "embedding palsu".
+model FaceLivenessSession {
+  id          String    @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  provider    String // nama provider yang menilai (mock/http/...)
+  purpose     String // ENROLL | VERIFY | CLOCK_IN | CLOCK_OUT
+  status      String    @default("PENDING") // PENDING | VERIFIED | FAILED
+  live        Boolean   @default(false)
+  liveScore   Float?
+  embedding   String? // JSON array of floats hasil ekstraksi server (null bila provider tak mengembalikan)
+  frameCount  Int       @default(0)
+  failureReason String?
+  issuedToken String? // token HMAC server-verified yang diterbitkan (bukan token klien)
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  verifiedAt  DateTime?
+
+  @@index([tenantId, employeeId])
+  @@index([expiresAt])
+}
+
 model AttendanceCorrection {
   id               String        @id @default(uuid())
   attendanceId     String
@@ -1058,6 +1115,10 @@ model WorkLocation {
   longitude    Decimal      @db.Decimal(11, 8)
   radiusMeters Int          @default(100)
   isFlexible   Boolean      @default(false)
+  // G1 parity (Talenta "restrict clock-in by office network"): bila list tidak
+  // kosong, clock-in/out non-MANUAL hanya diterima dari IP/SSID yang cocok.
+  allowedIpCidrs   String[] @default([])
+  allowedWifiSsids String[] @default([])
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   employees    Employee[]
@@ -1150,6 +1211,7 @@ model OvertimeRecord {
   dayType           OvertimeDayType @default(HARI_KERJA)
   isRetroactive     Boolean         @default(false)
   isPaid            Boolean         @default(true)
+  convertedToLeave  Boolean         @default(false) // P2(q): true bila menit sudah dikonversi jadi hari cuti (mencegah konversi ganda)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -1179,12 +1241,18 @@ model LeaveType {
   isBalanceDeducting   Boolean  @default(true) // Addendum v1.2: CUTI (true) vs IZIN (false)
   sameDayApproval      Boolean  @default(false) // Addendum v1.2 FR-19: Cuti Haid dapat diajukan hari-H tanpa pre-approval
   isUnionActivity      Boolean  @default(false) // Addendum Serikat Pekerja: izin kegiatan serikat (BR-01: officer only)
+  multiLevelApproval   Boolean  @default(false) // P1(d): aktifkan approval berjenjang (Manager -> Director -> ...) untuk jenis ini
+  annualEntitlementDays Int?    // P1(e): kuota tahunan per jenis (null = non-akrual/tak pakai jatah tahunan)
+  entitlementProrata   Boolean  @default(false) // P1(e): prorata kuota by masa kerja (< 12 bulan -> proporsional)
+  entitlementRounding  String?  // P1(e): kebijakan pembulatan kuota: DOWN | UP | NEAREST (default DOWN)
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   leaveRequests LeaveRequest[]
   leaveBalances LeaveBalance[]
+  approvalLevels LeaveApprovalLevel[]
+  assignments   LeaveTypeAssignment[] // P2(p): pembatasan per department
 }
 
 model LeaveBalance {
@@ -1224,14 +1292,101 @@ model LeaveRequest {
   isUrgent       Boolean       @default(false)
   escalated      Boolean       @default(false)
   eventRef       String?       @map("event_ref") // Addendum v1.2 BR-13: referensi kejadian unik (mis. nama keluarga) untuk izin sekali-pakai per kejadian
+  halfDaySlot    String?       // P2(h): "AM" | "PM" — penanda cuti setengah hari (totalDays 0.5)
+  hoursRequested Int?          // P2(h2): cuti per-jam 1-8 (satu tanggal; totalDays = jam/8)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  approvalRoutes LeaveApprovalRoute[]
 
   @@index([tenantId, status])
   @@index([employeeId, startDate])
+}
+
+// ============================================================================
+// P2(l): Delegasi approval cuti — saat atasan berstatus cuti, ia menunjuk
+// delegate yang menerima (dan memutus) pengajuan bawahan selama periode cuti.
+// ============================================================================
+
+model LeaveApprovalDelegation {
+  id          String    @id @default(uuid())
+  tenantId    String
+  delegatorId String // employeeId atasan yang mendelegasikan
+  delegateId  String // employeeId penerima delegasi
+  startDate   DateTime
+  endDate     DateTime
+  reason      String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, delegatorId, isActive])
+  @@index([tenantId, delegateId, isActive])
+}
+
+// ============================================================================
+// P2(p): Assignment jenis cuti per unit organisasi (department).
+// Bila sebuah leaveType TIDAK punya baris assignment, ia berlaku untuk semua
+// department. Bila ADA baris, hanya department terdaftar yang boleh mengajukan.
+// ============================================================================
+
+model LeaveTypeAssignment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  leaveTypeId String
+  departmentId String
+  createdAt   DateTime @default(now())
+
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([leaveTypeId, departmentId])
+  @@index([tenantId, leaveTypeId])
+}
+
+// ============================================================================
+// P1(d): Multi-level approval cuti (pola cermin OvertimeApprovalLevel/Route).
+// Level approval didefinisikan per tenant + jenis cuti (mis. Manager -> Director
+// -> HR Director). Setiap pengajuan cuti ber-multiLevelApproval membuat satu
+// LeaveApprovalRoute per level; pengajuan baru APPROVED ketika SEMUA level
+// telah menyetujui. `approverId` null = approval oleh posisi/role (bukan user).
+// ============================================================================
+
+model LeaveApprovalLevel {
+  id          String   @id @default(uuid())
+  tenantId    String
+  leaveTypeId String? // null = berlaku untuk semua jenis cuti tenant
+  name        String // Manager | Director | VP | HR Director
+  order       Int      @default(100) // urutan jenjang (makin kecil makin dulu)
+  approverRole String? // opsional: batasi approver ke role tertentu
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leaveType LeaveType?             @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  routes    LeaveApprovalRoute[]
+
+  @@index([tenantId, leaveTypeId])
+}
+
+model LeaveApprovalRoute {
+  id             String   @id @default(uuid())
+  tenantId       String
+  leaveRequestId String
+  levelId        String
+  approverId     String? // null = approver oleh posisi/role (bukan user spesifik)
+  status         String   @default("pending") // pending | approved | skipped | rejected
+  note           String?
+  decidedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  request LeaveRequest        @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  level   LeaveApprovalLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  @@unique([levelId, leaveRequestId])
+  @@index([leaveRequestId])
 }
 
 // =======================================================================
@@ -1921,6 +2076,7 @@ model BiometricDevice {
   deviceId    String // ID unik mesin (SN / device code)
   name        String
   location    String?
+  vendor      DeviceVendor @default(GENERIC) // ZKTECO/HIKVISION/SOLUTION/FINGERSPOT utk push adapter
   apiKeyHash  String // sha256(device api key); raw key hanya terlihat saat registrasi
   isActive    Boolean   @default(true)
   lastSeenAt  DateTime?
@@ -1929,6 +2085,15 @@ model BiometricDevice {
 
   @@unique([tenantId, deviceId])
   @@index([tenantId])
+}
+
+// Vendor mesin absensi (endpoint push & parser berbeda per merek)
+enum DeviceVendor {
+  GENERIC // endpoint generik HMAC (device/clock-in, device/logs)
+  ZKTECO // ADMS /iclock/cdata (ATTLOG tab-separated)
+  HIKVISION // ISAPI HTTP-notify (XML EventNotificationAlert / JSON AcsEvent)
+  SOLUTION // ADMS Function (protokol sama dengan ZK)
+  FINGERSPOT // iFingers / firmware ADMS-ZK
 }
 
 // =======================================================================
@@ -2012,11 +2177,20 @@ model ExpenseClaim {
   approvedAt  DateTime?
   paidAt      DateTime?
   notes       String?
+  departmentId String?
+  entityId    String?
+  paymentMethod ExpensePaymentMethod?
+  paymentReference String?
+  transferToBank String?
+  depositorName String?
+  transferDate DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   items    ExpenseItem[]
+  history  ExpenseClaimHistory[]
+  receipts ReceiptAttachment[]
 }
 
 model ExpenseItem {
@@ -2032,6 +2206,64 @@ model ExpenseItem {
   claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
 }
 
+model ExpenseClaimHistory {
+  id         String   @id @default(uuid())
+  claimId    String
+  changeBy   String
+  action     String // SUBMIT | APPROVE | REJECT | PAY | CANCEL
+  oldStatus  RequestStatus?
+  newStatus  RequestStatus?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  @@index([claimId, createdAt])
+}
+
+model ExpensePolicy {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isValid     Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  effectiveFrom DateTime?
+  effectiveTo DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ExpensePolicyItem[]
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+}
+
+model ExpensePolicyItem {
+  id          String   @id @default(uuid())
+  policyId    String
+  category    ExpenseCategory
+  maxPerClaim Decimal  @db.Decimal(18, 2)
+  maxPerEmployee Decimal @db.Decimal(18, 2)
+  description String?
+  createdAt   DateTime @default(now())
+
+  policy ExpensePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  @@index([policyId, category])
+}
+
+model ReceiptAttachment {
+  id        String   @id @default(uuid())
+  claimId   String
+  fileName  String
+  fileType  String
+  fileSize  Int
+  fileUrl   String
+  uploadedBy String?
+  createdAt DateTime @default(now())
+
+  claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  @@index([claimId])
+}
+
 // =======================================================================
 // VENDOR PPh 23/26 WITHHOLDING (PMK-141/2015, UU PPh 36/2008)
 // =======================================================================
@@ -2044,6 +2276,13 @@ enum VendorTaxType {
   PPH23_BUNGA_ROYALTI // 15%
   PPH23_HADIAH // 15%
   PPH26 // 20% atau tarif P3B/treaty
+}
+
+enum ExpensePaymentMethod {
+  BANK_TRANSFER
+  VOUCHER
+  CASH
+  OTHER
 }
 
 enum VendorInvoiceStatus {
@@ -2212,6 +2451,7 @@ model PerformanceReview {
   cycleId      String
   employeeId   String
   reviewerId   String
+  reviewerType ReviewerType @default(PEER)
   overallScore Decimal?     @db.Decimal(5, 2)
   summary      String?
   strengths    String?
@@ -2232,6 +2472,7 @@ model Rating {
   reviewId    String
   competency  String
   score       Decimal  @db.Decimal(5, 2)
+  weight      Decimal  @default(1) @db.Decimal(3, 2) // bobot kompetensi (default 1.0)
   description String?
   createdAt   DateTime @default(now())
 
@@ -2529,6 +2770,9 @@ model Feedback360 {
   reviewerId    String // the person giving feedback
   reviewerType  FeedbackReviewerType // SELF, MANAGER, PEER, DIRECT_REPORT, CUSTOM
   status        FeedbackStatus       @default(PENDING)
+  score         Decimal?             @db.Decimal(3, 1) // skor akhir dari penilai/HR
+  adminComment  String?              // komentar admin saat review/kalibrasi
+  flagForFollowUp Boolean           @default(false) // tandai untuk ditindaklanjuti
   submittedAt   DateTime?
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
@@ -2539,6 +2783,7 @@ model Feedback360 {
   tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   questions Feedback360Question[]
+  responses Feedback360Response[]
 
   @@unique([reviewCycleId, revieweeId, reviewerId])
 }
@@ -2548,12 +2793,27 @@ model Feedback360Question {
   feedback360Id String
   questionText  String
   questionType  String   @default("LIKERT_5") // LIKERT_5, NA, TEXT
-  rating        Int? // 1-5 for Likert
+  rating        Int? // 1-5 for Likert (nilai referensi soal)
   comment       String?
   order         Int      @default(0)
   createdAt     DateTime @default(now())
 
   feedback360 Feedback360 @relation(fields: [feedback360Id], references: [id], onDelete: Cascade)
+  responses   Feedback360Response[]
+}
+
+model Feedback360Response {
+  id             String   @id @default(uuid())
+  feedback360Id  String
+  questionId     String
+  rating         Int?     // 1-5 jawaban reviewer
+  comment        String?
+  createdAt      DateTime @default(now())
+
+  feedback360 Feedback360 @relation(fields: [feedback360Id], references: [id], onDelete: Cascade)
+  question    Feedback360Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([feedback360Id, questionId])
 }
 
 // Individual Development Plan
@@ -2810,6 +3070,24 @@ model EssNotification {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([employeeId, readStatus])
+}
+
+// G2 parity (Talenta push notification): token Expo Push per perangkat ESS.
+// Dipakai PushNotificationService — kirim via Expo Push API, token dicabut
+// otomatis bila Expo membalas DeviceNotRegistered.
+model DevicePushToken {
+  id         String    @id @default(uuid())
+  employeeId String
+  token      String
+  platform   String    @default("EXPO")
+  lastUsedAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, token])
+  @@index([employeeId])
 }
 
 model EssOnboardingProgress {
@@ -3187,6 +3465,14 @@ enum ReviewStatus {
   PENDING
   IN_PROGRESS
   COMPLETED
+}
+
+enum ReviewerType {
+  SELF
+  MANAGER
+  PEER
+  DIRECT_REPORT
+  CUSTOM
 }
 
 enum GoalStatus {
@@ -4808,11 +5094,16 @@ model TimesheetEntry {
   employeeId  String
   taskId      String?
   projectId   String?
+  // Kunci idempotensi upsert: kolom non-nullable agar UNIQUE benar-benar
+  // ditegakkan Postgres (NULL ≠ NULL membuat unique nullable tidak protektif).
+  // '' berarti "tidak ada task / tidak ada project eksplisit".
+  rowKey      String           @default("")
   workDate    DateTime // date-only (midnight) hari kerja
   hours       Decimal          @db.Decimal(5, 2)
   description String?
   billable    Boolean          @default(true)
   status      TimesheetStatus  @default(DRAFT)
+  rejectedReason String?
   approvedBy  String?
   approvedAt  DateTime?
   createdAt   DateTime         @default(now())
@@ -4823,7 +5114,7 @@ model TimesheetEntry {
   task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
-  @@unique([employeeId, taskId, workDate])
+  @@unique([employeeId, rowKey, workDate])
   @@index([tenantId, workDate])
   @@index([tenantId, employeeId, workDate])
   @@index([tenantId, projectId, workDate])
@@ -5011,6 +5302,13 @@ model CompSalaryStructure {
   tenantId      String
   jobFamily     String
   grade         String
+  // Multi-dimensional organizational structure (Talenta parity: entitas, cabang, organisasi, jabatan, job level, class)
+  entityId      String?
+  branchId      String?
+  departmentId  String?
+  positionId    String?
+  jobLevel      String?
+  employmentClass String? // e.g. KARYAWAN_TETAP, KONTRAK, MAGANG, FREELANCE
   minSalary     Decimal  @db.Decimal(18, 2)
   midSalary     Decimal  @db.Decimal(18, 2)
   maxSalary     Decimal  @db.Decimal(18, 2)
@@ -5021,10 +5319,20 @@ model CompSalaryStructure {
   deletedAt     DateTime?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  entity   TenantEntity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  branch   Department?   @relation("CompStructureBranch", fields: [branchId], references: [id], onDelete: SetNull)
+  department Department?  @relation("CompStructureDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  position Position?     @relation(fields: [positionId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, jobFamily, grade, effectiveDate])
   @@index([tenantId, jobFamily])
   @@index([tenantId, effectiveDate])
+  @@index([tenantId, entityId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, positionId])
+  @@index([tenantId, jobLevel])
+  @@index([tenantId, employmentClass])
 }
 
 model CompReviewCycle {
@@ -5046,6 +5354,7 @@ model CompReviewCycle {
   creator    User          @relation("comp_cycle_creator", fields: [createdBy], references: [id], onDelete: Restrict)
   approver   User?         @relation("comp_cycle_approver", fields: [approvedBy], references: [id], onDelete: SetNull)
   adjustments CompAdjustment[]
+  bonuses    CompBonus[]
 
   @@index([tenantId, status])
   @@index([tenantId, effectiveDate])
@@ -5060,6 +5369,7 @@ model CompAdjustment {
   proposedSalary       Decimal               @db.Decimal(18, 2)
   adjustmentType       CompAdjustmentType    @default(MERIT)
   adjustmentPercentage Decimal?              @db.Decimal(7, 2)
+  performanceRating    Decimal?              @db.Decimal(3, 1) // performance score 1.0-5.0 (Talenta performance-based comp)
   reason               String?               @db.Text
   status               CompAdjustmentStatus  @default(PENDING)
   approvedBy           String?
@@ -5111,6 +5421,156 @@ enum CompAdjustmentStatus {
   REJECTED
   APPLIED
   CANCELLED
+}
+
+// =======================================================================
+// COMPENSATION MANAGEMENT EXTENSIONS (Talenta parity: matrix, eligibility, bonus, audit log)
+// =======================================================================
+
+// Salary adjustment matrix: maps performance rating bands to adjustment % (Talenta "salary adjustment matrix")
+model CompAdjustmentMatrix {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  matrixType     CompMatrixType @default(MERIT)
+  minRating      Decimal  @db.Decimal(3, 1)
+  maxRating      Decimal  @db.Decimal(3, 1)
+  adjustmentPct  Decimal  @db.Decimal(5, 2)
+  isActive       Boolean  @default(true)
+  effectiveDate  DateTime @db.Date
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, matrixType, isActive])
+  @@index([tenantId, effectiveDate])
+}
+
+// Eligibility criteria: defines which employees qualify for compensation adjustments (Talenta "kriteria kelayakan")
+model CompEligibilityCriteria {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  scope          CompEligibilityScope @default(ALL)
+  gradeId        String?
+  jobFamily      String?
+  departmentId   String?
+  positionId     String?
+  employeeId     String?
+  minServiceMonths Int?
+  isActive       Boolean  @default(true)
+  effectiveFrom  DateTime @db.Date
+  effectiveTo    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  grade   Grade?   @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, scope, isActive])
+  @@index([tenantId, effectiveFrom])
+}
+
+// Bonus management: performance/sign-on/retention bonuses (Talenta bonus management)
+model CompBonus {
+  id              String   @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  reviewCycleId   String?
+  bonusType       CompBonusType @default(PERFORMANCE)
+  amount          Decimal  @db.Decimal(18, 2)
+  currency        String   @default("IDR")
+  payoutDate      DateTime? @db.Date
+  status          CompBonusStatus @default(PENDING)
+  approvedBy      String?
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  reason          String?  @db.Text
+  syncedToPayroll Boolean  @default(false)
+  syncedAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee    Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reviewCycle CompReviewCycle? @relation(fields: [reviewCycleId], references: [id], onDelete: SetNull)
+  approver    User?      @relation("comp_bonus_approver", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, bonusType])
+  @@index([reviewCycleId])
+}
+
+// Audit trail: logs every compensation change for compliance (Talenta audit trail)
+model CompChangeLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  employeeId  String?
+  structureId String?
+  cycleId     String?
+  adjustmentId String?
+  bonusId     String?
+  action      CompChangeAction
+  fieldName   String?
+  oldValue    String?
+  newValue    String?
+  changedBy   String
+  changedAt   DateTime  @default(now())
+  reason      String?  @db.Text
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, changedAt(sort: Desc)])
+  @@index([tenantId, employeeId])
+  @@index([tenantId, action])
+}
+
+enum CompMatrixType {
+  MERIT
+  PROMOTION
+  MARKET
+  COLA
+  PERFORMANCE
+}
+
+enum CompBonusType {
+  PERFORMANCE
+  SIGN_ON
+  RETENTION
+  REFERRAL
+  LONG_SERVICE
+  AD_HOC
+}
+
+enum CompBonusStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum CompEligibilityScope {
+  ALL
+  GRADE
+  JOB_FAMILY
+  DEPARTMENT
+  POSITION
+  INDIVIDUAL
+}
+
+enum CompChangeAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SYNC
+  BONUS
 }
 
 // =======================================================================

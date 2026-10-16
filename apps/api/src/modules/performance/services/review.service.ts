@@ -33,6 +33,7 @@ export class ReviewService {
         cycleId: dto.cycleId,
         employeeId: dto.employeeId,
         reviewerId: dto.reviewerId,
+        reviewerType: dto.reviewerType ?? 'PEER',
         status: ReviewStatus.PENDING,
       },
     });
@@ -43,12 +44,31 @@ export class ReviewService {
           reviewId: review.id,
           competency: r.competency,
           score: r.score,
+          weight: r.weight ?? 1,
           description: r.description,
         })),
       });
+
+      const weighted = this.weightedScore(dto.ratings);
+      if (weighted !== null) {
+        await this.prisma.performanceReview.update({
+          where: { id: review.id },
+          data: { overallScore: weighted },
+        });
+      }
     }
 
     return this.findOne(tenantId, review.id);
+  }
+
+  private weightedScore(ratings: Array<{ score: number; weight?: number }>) {
+    const totalWeight = ratings.reduce((s, r) => s + Number(r.weight ?? 1), 0);
+    if (totalWeight <= 0) return null;
+    const weightedSum = ratings.reduce(
+      (s, r) => s + Number(r.score) * Number(r.weight ?? 1),
+      0,
+    );
+    return Math.round((weightedSum / totalWeight) * 100) / 100;
   }
 
   async findAll(
@@ -159,12 +179,15 @@ export class ReviewService {
           reviewId: id,
           competency: r.competency,
           score: r.score,
+          weight: r.weight ?? 1,
           description: r.description,
         })),
       });
 
-      const avgScore = dto.ratings.reduce((sum, r) => sum + r.score, 0) / dto.ratings.length;
-      updateData.overallScore = Math.round(avgScore * 100) / 100;
+      const weighted = this.weightedScore(dto.ratings);
+      if (weighted !== null) {
+        updateData.overallScore = weighted;
+      }
     }
 
     return this.prisma.performanceReview.update({
@@ -199,12 +222,15 @@ export class ReviewService {
           reviewId: id,
           competency: r.competency,
           score: r.score,
+          weight: r.weight ?? 1,
           description: r.description,
         })),
       });
 
-      const avgScore = dto.ratings.reduce((sum, r) => sum + r.score, 0) / dto.ratings.length;
-      updateData.overallScore = Math.round(avgScore * 100) / 100;
+      const weighted = this.weightedScore(dto.ratings);
+      if (weighted !== null) {
+        updateData.overallScore = weighted;
+      }
     }
 
     return this.prisma.performanceReview.update({
